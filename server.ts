@@ -1,0 +1,506 @@
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = 3000;
+
+app.use(express.json({ limit: '60mb' }));
+app.use(express.urlencoded({ extended: true, limit: '60mb' }));
+
+// Lazy GoogleGenAI client accessor
+function getGenAI() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY environment variable is not configured');
+  }
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
+function stripBase64Header(dataStr: string): { cleanData: string; mimeType: string } {
+  const matches = dataStr.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+  if (matches) {
+    return { mimeType: matches[1], cleanData: matches[2] };
+  }
+  return { mimeType: 'image/png', cleanData: dataStr };
+}
+
+// 1. Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    hasApiKey: !!process.env.GEMINI_API_KEY,
+    time: new Date().toISOString(),
+    engine: 'brickOS v5.5 Audio & Video Core',
+  });
+});
+
+// 2. Search Grounding using gemini-3.5-flash with googleSearch tool
+app.post('/api/gemini/search', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter is required' });
+    }
+    const ai = getGenAI();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: `You are an elite music industry research consultant grounded in current Billboard Christian/Gospel chart trends, Nashville Christian audio production benchmarks, and theological scripture reference indexing.\n\nQuery: ${query}`,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const text = response.text || '';
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata || null;
+    const sources: Array<{ title: string; url: string }> = [];
+
+    if (groundingMetadata?.groundingChunks) {
+      for (const chunk of groundingMetadata.groundingChunks) {
+        if (chunk.web?.uri && chunk.web?.title) {
+          sources.push({
+            title: chunk.web.title,
+            url: chunk.web.uri,
+          });
+        }
+      }
+    }
+
+    res.json({
+      answer: text,
+      sources,
+      searchQueries: groundingMetadata?.webSearchQueries || [],
+    });
+  } catch (err: any) {
+    console.error('Search grounding error:', err);
+    res.status(500).json({ error: err.message || 'Search grounding failed' });
+  }
+});
+
+// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-3.5-flash)
+app.post('/api/gemini/audit-lyric', async (req, res) => {
+  try {
+    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.1-pro-preview' } = req.body;
+    const ai = getGenAI();
+
+    const systemPrompt = `You are the Lead Theological & Lyrical Supervisor for brickOS Sovereign Records.
+Your mandate is to strictly audit songs against the 5 Non-Negotiable Guardrails:
+1. The OBI Funnel: Every line must drive toward the chorus payoff; ruthlessly flag wandering thoughts.
+2. The 'Christianese' Filter: Replace tired religious clichés and generic praise phrases with raw, conversational poetics grounded in real, everyday faith journeys.
+3. The Throne Room Pivot: Ensure the song structure pivots from a horizontal focus (human struggle, anxiety, sweat, testimony) to a vertical focus (Creator, Mind of Christ) by the bridge. If it sounds like a TED talk, it fails!
+4. The 'Sonic Scar' Rule: Maintain a 3:1 (Perfect:Imperfect) balance; allow vulnerable flaws and authentic testimony over sterile digital perfection.
+5. The 60-Second Hook Standalone Test: Is there a standalone 30–60s chorus or bridge that works as a high-impact devotional refrain for short-form audio (TikTok/Reels morning hour 6AM–9AM)?
+
+Track Context:
+Title: ${title}
+EP Suite: ${ep}
+Genre: ${genre} (${bpm} BPM)
+Vocal Archetype: ${vocal}
+Thesis: ${thesis}
+
+Audit the provided lyrics thoroughly. Format your response with clear, actionable sections:
+- Overall Verdict & Score (0-100)
+- OBI Funnel & Cohesion Check
+- 'Christianese' Filter Violations & Fresh Poetic Alternatives
+- Throne Room Pivot Audit (Bridge check)
+- 60-Second Standalone Hook Assessment
+- Ready-to-use Rewrite Suggestions for weak sections.`;
+
+    let responseText = '';
+    try {
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`,
+      });
+      responseText = response.text || '';
+    } catch (primaryErr) {
+      console.warn(`Model ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
+      const fallbackResponse = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`,
+      });
+      responseText = fallbackResponse.text || '';
+    }
+
+    res.json({ audit: responseText });
+  } catch (err: any) {
+    console.error('Lyric audit error:', err);
+    res.status(500).json({ error: err.message || 'Lyric audit failed' });
+  }
+});
+
+// 4. Multi-Turn Gemini Chatbot (with custom roles)
+app.post('/api/gemini/chat', async (req, res) => {
+  try {
+    const { messages, systemInstruction, model = 'gemini-3.5-flash' } = req.body;
+    const ai = getGenAI();
+
+    // Map conversation messages to GenAI format
+    const contents = (messages || []).map((m: { role: string; content: string }) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    let responseText = '';
+    try {
+      const response = await ai.models.generateContent({
+        model: model,
+        contents,
+        config: {
+          systemInstruction: systemInstruction || 'You are an elite music producer and theologian inside brickOS Studio.',
+        },
+      });
+      responseText = response.text || '';
+    } catch (primaryErr) {
+      console.warn(`Chat model ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
+      const fallbackResponse = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents,
+        config: {
+          systemInstruction: systemInstruction || 'You are an elite music producer and theologian inside brickOS Studio.',
+        },
+      });
+      responseText = fallbackResponse.text || '';
+    }
+
+    res.json({ reply: responseText });
+  } catch (err: any) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: err.message || 'Chat generation failed' });
+  }
+});
+
+// 5. Create & Edit Images with aspect ratio control (gemini-3.1-flash-image-preview)
+app.post('/api/gemini/generate-image', async (req, res) => {
+  try {
+    const { prompt, aspectRatio = '1:1', mode = 'create', base64Image, mimeType = 'image/png', model = 'gemini-3.1-flash-image-preview' } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+    const ai = getGenAI();
+
+    // Supported aspect ratios
+    const validAspectRatios = ['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9', '1:4', '1:8', '4:1', '8:1'];
+    const chosenAspect = validAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1';
+
+    let parts: any[] = [];
+    if (mode === 'edit' && base64Image) {
+      const { cleanData, mimeType: parsedMime } = stripBase64Header(base64Image);
+      parts = [
+        {
+          inlineData: {
+            data: cleanData,
+            mimeType: mimeType || parsedMime || 'image/png',
+          },
+        },
+        { text: prompt },
+      ];
+    } else {
+      parts = [{ text: prompt }];
+    }
+
+    // Try requested model first, with fallbacks if needed
+    const modelCandidates = [model, 'gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image'];
+    let lastError: any = null;
+    let imageBase64: string | null = null;
+    let outputMimeType = 'image/png';
+    let textDescription = '';
+
+    for (const candidate of modelCandidates) {
+      try {
+        const response = await ai.models.generateContent({
+          model: candidate,
+          contents: { parts },
+          config: {
+            imageConfig: {
+              aspectRatio: chosenAspect as any,
+            },
+          },
+        });
+
+        const returnedParts = response.candidates?.[0]?.content?.parts || [];
+        for (const part of returnedParts) {
+          if (part.inlineData?.data) {
+            imageBase64 = part.inlineData.data;
+            outputMimeType = part.inlineData.mimeType || 'image/png';
+          } else if (part.text) {
+            textDescription += part.text + ' ';
+          }
+        }
+
+        if (imageBase64) {
+          break;
+        }
+      } catch (e) {
+        lastError = e;
+        console.warn(`Model ${candidate} failed for image generation, trying next:`, e);
+      }
+    }
+
+    if (!imageBase64) {
+      throw lastError || new Error('No image was returned by the model');
+    }
+
+    res.json({
+      imageUrl: `data:${outputMimeType};base64,${imageBase64}`,
+      text: textDescription.trim(),
+      aspectRatio: chosenAspect,
+    });
+  } catch (err: any) {
+    console.error('Image generation error:', err);
+    res.status(500).json({ error: err.message || 'Image generation failed' });
+  }
+});
+
+// 6. Analyze Images with Gemini Pro (gemini-3.1-pro-preview)
+app.post('/api/gemini/analyze-image', async (req, res) => {
+  try {
+    const { base64Image, mimeType = 'image/png', prompt } = req.body;
+    if (!base64Image) {
+      return res.status(400).json({ error: 'base64Image is required' });
+    }
+    const ai = getGenAI();
+    const { cleanData, mimeType: parsedMime } = stripBase64Header(base64Image);
+
+    const userPrompt = prompt || 'Analyze this image in detail for album art, video seed frame suitability, color harmony, visual mood, theological symbolism, and short-form hook retention.';
+
+    let responseText = '';
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.5-flash'];
+
+    for (const model of candidates) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  data: cleanData,
+                  mimeType: mimeType || parsedMime || 'image/png',
+                },
+              },
+              { text: userPrompt },
+            ],
+          },
+        });
+        responseText = response.text || '';
+        if (responseText) break;
+      } catch (err) {
+        console.warn(`Model ${model} failed for image analysis:`, err);
+      }
+    }
+
+    res.json({ analysis: responseText });
+  } catch (err: any) {
+    console.error('Image analysis error:', err);
+    res.status(500).json({ error: err.message || 'Image analysis failed' });
+  }
+});
+
+// 7. Veo 3 Video Generation: Generate from text or Animate Image (veo-3.1-fast-generate-preview)
+app.post('/api/gemini/generate-video', async (req, res) => {
+  try {
+    const { prompt, aspectRatio = '16:9', base64Image, mimeType = 'image/png', resolution = '720p' } = req.body;
+    const ai = getGenAI();
+
+    const chosenAspect = (aspectRatio === '9:16' ? '9:16' : '16:9') as '16:9' | '9:16';
+    const chosenRes = (resolution === '1080p' ? '1080p' : '720p') as '720p' | '1080p';
+
+    const videoConfig: any = {
+      model: 'veo-3.1-fast-generate-preview',
+      prompt: prompt || 'Cinematic video shot with dramatic atmospheric lighting and subtle motion',
+      config: {
+        numberOfVideos: 1,
+        resolution: chosenRes,
+        aspectRatio: chosenAspect,
+      },
+    };
+
+    if (base64Image) {
+      const { cleanData, mimeType: parsedMime } = stripBase64Header(base64Image);
+      videoConfig.image = {
+        imageBytes: cleanData,
+        mimeType: mimeType || parsedMime || 'image/png',
+      };
+    }
+
+    let operation: any = null;
+    try {
+      operation = await ai.models.generateVideos(videoConfig);
+    } catch (primaryErr: any) {
+      console.warn('veo-3.1-fast-generate-preview failed, trying veo-3.1-lite-generate-preview:', primaryErr);
+      videoConfig.model = 'veo-3.1-lite-generate-preview';
+      operation = await ai.models.generateVideos(videoConfig);
+    }
+
+    res.json({
+      operationName: operation.name,
+      status: 'pending',
+      modelUsed: videoConfig.model,
+      aspectRatio: chosenAspect,
+    });
+  } catch (err: any) {
+    console.error('Video generation start error:', err);
+    res.status(500).json({ error: err.message || 'Video generation failed' });
+  }
+});
+
+// 8. Poll Veo Video Operation
+app.post('/api/gemini/video-status', async (req, res) => {
+  try {
+    const { operationName } = req.body;
+    if (!operationName) {
+      return res.status(400).json({ error: 'operationName is required' });
+    }
+    const ai = getGenAI();
+    const op = new GenerateVideosOperation();
+    op.name = operationName;
+
+    const updated = await ai.operations.getVideosOperation({ operation: op });
+    res.json({
+      done: !!updated.done,
+      error: updated.error || null,
+      hasVideo: !!updated.response?.generatedVideos?.[0]?.video?.uri,
+    });
+  } catch (err: any) {
+    console.error('Video status polling error:', err);
+    res.status(500).json({ error: err.message || 'Video polling failed' });
+  }
+});
+
+// 9. Download Generated Video (Server-side proxy)
+app.post('/api/gemini/video-download', async (req, res) => {
+  try {
+    const { operationName } = req.body;
+    if (!operationName) {
+      return res.status(400).json({ error: 'operationName is required' });
+    }
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY missing' });
+    }
+    const ai = getGenAI();
+    const op = new GenerateVideosOperation();
+    op.name = operationName;
+
+    const updated = await ai.operations.getVideosOperation({ operation: op });
+    const uri = updated.response?.generatedVideos?.[0]?.video?.uri;
+    if (!uri) {
+      return res.status(404).json({ error: 'Video URI not available in operation response' });
+    }
+
+    const videoRes = await fetch(uri, {
+      headers: { 'x-goog-api-key': apiKey },
+    });
+
+    if (!videoRes.ok) {
+      throw new Error(`Video fetch failed with status ${videoRes.status}`);
+    }
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', 'inline; filename="brickos_veo_render.mp4"');
+
+    if (videoRes.body) {
+      // @ts-ignore
+      const nodeStream = (await import('stream')).Readable.fromWeb(videoRes.body as any);
+      nodeStream.pipe(res);
+    } else {
+      const buffer = Buffer.from(await videoRes.arrayBuffer());
+      res.send(buffer);
+    }
+  } catch (err: any) {
+    console.error('Video download error:', err);
+    res.status(500).json({ error: err.message || 'Video download failed' });
+  }
+});
+
+// 10. Analyze Video Content (gemini-3.1-pro-preview)
+app.post('/api/gemini/analyze-video', async (req, res) => {
+  try {
+    const { prompt, videoBase64, mimeType = 'video/mp4', contextInfo } = req.body;
+    const ai = getGenAI();
+
+    const userPrompt = prompt || `Perform a rigorous retention audit and cinematic critique on this video clip:
+1. 3-Second Hook Velocity: Does it stop the scroll within 0-3 seconds?
+2. Visual Chiaroscuro & Lighting: Does it match the kingdom aesthetic (weathered cedar, rusted steel, golden Kintsugi)?
+3. Completion Likelihood: Estimate if it achieves the 70% threshold needed to trigger a 10s video extension.
+4. Editorial Feedback: Pacing, color grading, and short-form crop safety.`;
+
+    let parts: any[] = [];
+    if (videoBase64) {
+      const { cleanData, mimeType: parsedMime } = stripBase64Header(videoBase64);
+      parts = [
+        {
+          inlineData: {
+            data: cleanData,
+            mimeType: mimeType || parsedMime || 'video/mp4',
+          },
+        },
+        { text: `${userPrompt}\n\nContext:\n${contextInfo || 'brickOS sovereign music promotional asset'}` },
+      ];
+    } else {
+      parts = [
+        { text: `${userPrompt}\n\nVideo Description & Metadata:\n${contextInfo || 'Cinematic video sequence'}` },
+      ];
+    }
+
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.5-flash'];
+    let responseText = '';
+
+    for (const model of candidates) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: { parts },
+        });
+        responseText = response.text || '';
+        if (responseText) break;
+      } catch (err) {
+        console.warn(`Model ${model} failed for video analysis:`, err);
+      }
+    }
+
+    res.json({ analysis: responseText });
+  } catch (err: any) {
+    console.error('Video analysis error:', err);
+    res.status(500).json({ error: err.message || 'Video analysis failed' });
+  }
+});
+
+// Vite middleware integration
+async function startServer() {
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[brickOS Studio] Server running on http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer();

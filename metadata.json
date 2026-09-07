@@ -1,0 +1,6 @@
+{
+  "name": "brickOS Studio",
+  "description": "Sovereign music production workspace & label OS with Suno v5.5 4-Block engine, Mini-DAW mixer, Veo video generation, and Gemini intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
