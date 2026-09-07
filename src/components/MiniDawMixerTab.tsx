@@ -7,7 +7,10 @@ import {
   Scissors,
   Activity,
   HardDrive,
-  Music
+  Music,
+  Download,
+  Check,
+  Sparkles
 } from 'lucide-react';
 import { Track, MixerTrack } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
@@ -27,6 +30,8 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [masterVolume, setMasterVolume] = useState(85);
   const [tracks, setTracks] = useState<MixerTrack[]>(INITIAL_STEMS);
+  const [isExportingWav, setIsExportingWav] = useState(false);
+  const [cropPreset, setCropPreset] = useState<'30s' | '60s' | 'full'>('60s');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -38,6 +43,24 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
     } else {
       audioMiniDaw.startPlayback(tracks, track.bpm);
       setIsPlaying(true);
+    }
+  };
+
+  // Export 24-Bit lossless WAV
+  const handleExportWav = async () => {
+    setIsExportingWav(true);
+    try {
+      const wavBlob = await audioMiniDaw.export24BitWav(tracks, track.bpm, cropPreset === '30s' ? 5 : cropPreset === '60s' ? 8 : 12);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${track.id}_${track.title.replace(/\s+/g, '_')}_24Bit_Lossless_Master.wav`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export WAV:', err);
+    } finally {
+      setIsExportingWav(false);
     }
   };
 
@@ -165,7 +188,32 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+            <span className="text-slate-500 px-1.5 font-mono text-[10px]">CROP:</span>
+            {(['30s', '60s', 'full'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setCropPreset(p)}
+                className={`px-2 py-1 rounded-lg transition ${
+                  cropPreset === p ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {p === '30s' ? '30s Hook' : p === '60s' ? '60s Radio' : 'Full Song'}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={handleExportWav}
+            disabled={isExportingWav}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+            title="Export Lossless 24-Bit / 48kHz WAV Master"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{isExportingWav ? 'Rendering...' : 'Bounce 24-Bit WAV'}</span>
+          </button>
+
           <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
             <Volume2 className="w-4 h-4 text-slate-400" />
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Master</span>
@@ -182,14 +230,14 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
 
           <button
             onClick={handleTogglePlay}
-            className={`px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 shadow-lg transition ${
+            className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-lg transition ${
               isPlaying
                 ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950'
                 : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-950'
             }`}
           >
             {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-            <span>{isPlaying ? 'Stop Master Playback' : 'Play 4-Track Master Sum'}</span>
+            <span>{isPlaying ? 'Stop' : 'Play 4-Track'}</span>
           </button>
         </div>
       </div>

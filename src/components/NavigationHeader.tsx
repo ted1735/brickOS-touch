@@ -8,7 +8,9 @@ import {
   Film,
   Sparkles,
   ShieldCheck,
-  Radio
+  Radio,
+  Database,
+  Layers
 } from 'lucide-react';
 import { Track } from '../types';
 
@@ -20,6 +22,7 @@ interface NavigationHeaderProps {
   onOpenChat: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  selectedEpFilter?: string;
 }
 
 export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
@@ -29,17 +32,28 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   onOpenSearch,
   onOpenChat,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  selectedEpFilter = 'ALL'
 }) => {
   return (
-    <header className="bg-slate-900 border-b border-slate-800 px-6 py-3.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md bg-opacity-95">
+    <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md bg-opacity-95 flex-shrink-0">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">
+        <button
+          onClick={() => setActiveTab('kanban')}
+          className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer"
+          title="Return to Master Kanban Dashboard"
+        >
           b
-        </div>
+        </button>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-black tracking-wider text-white">brickOS MASTER STUDIO</h1>
+            <h1 
+              onClick={() => setActiveTab('kanban')}
+              className="text-base font-black tracking-wider text-white hover:text-indigo-300 transition cursor-pointer"
+              title="Return to Master Kanban Dashboard"
+            >
+              brickOS MASTER STUDIO
+            </h1>
             <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 font-mono text-[10px] font-bold border border-indigo-700/50">
               v5.5 SOVEREIGN
             </span>
@@ -48,18 +62,41 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
               WebDAV Online
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 flex items-center gap-2">
+          <p className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
             <span>Ted Moyer (Primary Artist / OAC)</span>
             <span>•</span>
             <span className="text-indigo-400 font-medium">BRICK Records</span>
             <span>•</span>
-            <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
+            {activeTab === 'kanban' ? (
+              <span className="text-amber-400 font-medium bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <span className="text-indigo-300 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
+                <span>•</span>
+                <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
+              </span>
+            )}
           </p>
         </div>
       </div>
 
       {/* Global Actions Bar */}
       <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+        <button
+          onClick={() => setActiveTab('kanban')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm ${
+            activeTab === 'kanban'
+              ? 'bg-indigo-600 border-indigo-500 text-white'
+              : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+          }`}
+          title="Master Kanban Pipeline Dashboard"
+        >
+          <Layers className="w-3.5 h-3.5 text-indigo-300" />
+          <span>Dashboard</span>
+        </button>
+
         <button
           onClick={onOpenSearch}
           className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
@@ -78,6 +115,15 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
           <span className="hidden md:inline">Studio Co-Producer AI</span>
           <span className="md:hidden">AI Chat</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('database')}
+          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
+          title="Relational SQL & Similarity Matrix"
+        >
+          <Database className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden lg:inline">Relational SQL</span>
         </button>
 
         <button

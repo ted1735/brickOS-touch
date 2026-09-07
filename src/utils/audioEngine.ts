@@ -162,6 +162,122 @@ class MiniDawEngine {
   public getIsPlaying(): boolean {
     return this.isRunning;
   }
+
+  // Lossless 24-Bit / 48kHz WAV Exporter
+  public async export24BitWav(tracks: MixerTrack[], bpm: number = 100, durationSec: number = 8): Promise<Blob> {
+    const sampleRate = 48000;
+    const numChannels = 2;
+    const numFrames = sampleRate * durationSec;
+    const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
+      numChannels,
+      numFrames,
+      sampleRate
+    );
+
+    const masterGain = offlineCtx.createGain();
+    masterGain.gain.value = 0.85;
+    masterGain.connect(offlineCtx.destination);
+
+    const rootNotes = [110, 220, 330, 440];
+    tracks.forEach((t, i) => {
+      if (t.muted) return;
+      const osc = offlineCtx.createOscillator();
+      const gain = offlineCtx.createGain();
+      const panner = offlineCtx.createStereoPanner();
+      const filter = offlineCtx.createBiquadFilter();
+
+      if (t.id === 1) {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(rootNotes[0], 0);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(650, 0);
+      } else if (t.id === 2) {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(rootNotes[1], 0);
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1400, 0);
+      } else if (t.id === 3) {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(rootNotes[2], 0);
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(400, 0);
+      } else {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(rootNotes[3], 0);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1200, 0);
+      }
+
+      panner.pan.setValueAtTime(t.pan / 100, 0);
+      gain.gain.setValueAtTime((t.vol / 100) * 0.22, 0);
+
+      osc.connect(filter);
+      filter.connect(panner);
+      panner.connect(gain);
+      gain.connect(masterGain);
+
+      osc.start(0);
+      osc.stop(durationSec);
+    });
+
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    // 24-Bit Linear PCM RIFF/WAVE Encoder
+    const left = renderedBuffer.getChannelData(0);
+    const right = renderedBuffer.getChannelData(1);
+    const bytesPerSample = 3; // 24-bit
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = numFrames * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    // RIFF chunk descriptor
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+
+    // fmt sub-chunk
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+    view.setUint16(20, 1, true);  // AudioFormat (1 = PCM)
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 24, true); // BitsPerSample = 24
+
+    // data sub-chunk
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // Write 24-bit samples (little endian)
+    let offset = 44;
+    for (let i = 0; i < numFrames; i++) {
+      const sL = Math.max(-1, Math.min(1, left[i]));
+      const sR = Math.max(-1, Math.min(1, right[i]));
+
+      const valL = sL < 0 ? sL * 0x800000 : sL * 0x7fffff;
+      const intL = Math.floor(valL);
+      view.setUint8(offset++, intL & 0xff);
+      view.setUint8(offset++, (intL >> 8) & 0xff);
+      view.setUint8(offset++, (intL >> 16) & 0xff);
+
+      const valR = sR < 0 ? sR * 0x800000 : sR * 0x7fffff;
+      const intR = Math.floor(valR);
+      view.setUint8(offset++, intR & 0xff);
+      view.setUint8(offset++, (intR >> 8) & 0xff);
+      view.setUint8(offset++, (intR >> 16) & 0xff);
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+}
+
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
 }
 
 export const audioMiniDaw = new MiniDawEngine();

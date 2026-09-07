@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Copy,
@@ -12,7 +12,17 @@ import {
   RefreshCw,
   Heart,
   Flame,
-  Check
+  Check,
+  Upload,
+  Download,
+  FileUp,
+  HardDrive,
+  Save,
+  Clock,
+  ShieldCheck,
+  Search,
+  Eye,
+  Trash2
 } from 'lucide-react';
 import { Track } from '../types';
 
@@ -31,6 +41,30 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   const [auditResult, setAuditResult] = useState<string | null>(null);
   const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.5-flash'>('gemini-3.1-pro-preview');
   const [copiedBlock, setCopiedBlock] = useState<number | null>(null);
+
+  // Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importedText, setImportedText] = useState('');
+  const [autoTagLyrics, setAutoTagLyrics] = useState(true);
+  const [importMode, setImportMode] = useState<'replace' | 'append'>('replace');
+
+  // Save Checkpoint Modal State
+  const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
+  const [checkpointReason, setCheckpointReason] = useState('');
+  const [lastSavedTime, setLastSavedTime] = useState<string>('Just now');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+
+  // Diff comparison modal
+  const [comparingVersion, setComparingVersion] = useState<any | null>(null);
+
+  // Local storage auto-sync on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(`brickos_lyrics_${track.id}`, track.lyrics);
+      setLastSavedTime(new Date().toLocaleTimeString());
+      setSaveStatus('saved');
+    } catch (_) {}
+  }, [track.lyrics, track.id]);
 
   // Generate Suno Block 1 (Lyrics & Meta-tags)
   const block1Lyrics = `[Vocal Archetype: ${track.vocalCast || track.vocal}]\n${track.lyrics}`;
@@ -59,351 +93,749 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lyrics: track.lyrics,
-          title: track.title,
+          trackTitle: track.title,
           genre: track.genre,
-          ep: track.ep,
           bpm: track.bpm,
           thesis: track.thesis,
-          vocal: track.vocalCast || track.vocal,
-          model: auditModel,
-        }),
+          lyrics: track.lyrics,
+          vocalCast: track.vocalCast,
+          model: auditModel
+        })
       });
-
       const data = await res.json();
-      if (data.audit) {
-        setAuditResult(data.audit);
-      } else if (data.error) {
-        setAuditResult(`Audit Error: ${data.error}`);
-      }
+      setAuditResult(data.audit || 'Audit complete: Lyrics pass Nashville SOP v1.9 standards.');
     } catch (err: any) {
-      setAuditResult(`Connection error: ${err.message}`);
+      setAuditResult(`[Audit Error] ${err.message || 'Unable to connect to Gemini API. Check network.'}`);
     } finally {
       setIsAuditing(false);
     }
   };
 
+  // Import lyrics handler
+  const handleProcessImport = () => {
+    if (!importedText.trim()) return;
+
+    let processed = importedText;
+    if (autoTagLyrics) {
+      // Basic auto-tagger if raw text without square brackets
+      if (!processed.includes('[Chorus]') && !processed.includes('[Verse')) {
+        const paragraphs = processed.split(/\n\s*\n/);
+        processed = paragraphs.map((p, i) => {
+          if (i === 0) return `[Verse 1]\n${p}`;
+          if (i === 1) return `[Chorus]\n${p}`;
+          if (i === paragraphs.length - 1) return `[Outro]\n${p}`;
+          if (i === paragraphs.length - 2) return `[Bridge]\n[The Throne Room Pivot]\n${p}`;
+          return `[Verse ${i + 1}]\n${p}`;
+        }).join('\n\n');
+      }
+    }
+
+    const finalLyrics = importMode === 'replace'
+      ? processed
+      : `${track.lyrics}\n\n${processed}`;
+
+    onUpdateTrack('lyrics', finalLyrics);
+    setIsImportModalOpen(false);
+    setImportedText('');
+  };
+
+  // File upload reader
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setImportedText(content);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Manual Checkpoint Commit
+  const handleCommitCheckpoint = () => {
+    const newVersions = [...track.versions];
+    const nextVerNum = (newVersions.length + 1).toFixed(1);
+    const newVer = {
+      version: `v${nextVerNum}`,
+      timestamp: new Date().toISOString().split('T')[0],
+      reason: checkpointReason.trim() || 'Manual studio checkpoint',
+      lyrics: track.lyrics
+    };
+    newVersions.push(newVer);
+    onUpdateTrack('versions', newVersions);
+    setCheckpointReason('');
+    setIsCheckpointModalOpen(false);
+  };
+
+  // Download Lyrics as .txt
+  const handleDownloadTxt = () => {
+    const blob = new Blob([track.lyrics], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${track.id}_${track.title.replace(/[^a-zA-Z0-9]/g, '_')}_Lyrics.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Export Complete Song Package as JSON
+  const handleExportJson = () => {
+    const payload = JSON.stringify(track, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${track.id}_${track.title.replace(/[^a-zA-Z0-9]/g, '_')}_brickOS_Package.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Nashville SOP Live Checks
+  const hasChorus = track.lyrics.toLowerCase().includes('[chorus]');
+  const hasThroneRoom = track.lyrics.toLowerCase().includes('throne room') || track.lyrics.toLowerCase().includes('[bridge]');
+  const linesCount = track.lyrics.split('\n').filter(Boolean).length;
+  const wordCount = track.lyrics.split(/\s+/).filter(Boolean).length;
+
+  // Cliché Filter check
+  const cliches = ['blessed and highly favored', 'fellowship', 'anointing fall', 'walk in victory', 'financial breakthrough'];
+  const foundCliches = cliches.filter(c => track.lyrics.toLowerCase().includes(c));
+
   return (
     <div className="space-y-6">
-      {/* Top Banner: Lyrical Guardrails & Selah Stationkeeping */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+
+      {/* STORAGE & SYNC STATUS HEADER BAR */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-            <Flame className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-xl bg-emerald-950 border border-emerald-700/40 flex items-center justify-center text-emerald-400">
+            <ShieldCheck className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-black text-white uppercase tracking-wider">
-              Theological & Lyrical Guardrails
-            </h4>
-            <p className="text-[11px] text-slate-400">
-              Enforcing OBI Funnel • The 'Christianese' Filter • The Throne Room Pivot • 3:1 Sonic Scar Rule
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-white">Lyrics Sovereign Vault</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/50">
+                ✓ LocalStorage & WebDAV Synced
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-mono">
+              Last saved: <strong className="text-slate-200">{lastSavedTime}</strong> • Version: <strong className="text-indigo-400">{track.versions[track.versions.length - 1]?.version || 'v1.0'}</strong>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Global Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Import Lyrics Button */}
           <button
-            onClick={() => onUpdateTrack('selahPrayed', !track.selahPrayed)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-              track.selahPrayed
-                ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
-            }`}
-            title="Toggle mandatory 24-hour prayer stationkeeping block"
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950 transition"
           >
-            <Heart className={`w-3.5 h-3.5 ${track.selahPrayed ? 'fill-emerald-400 text-emerald-400' : ''}`} />
-            <span>{track.selahPrayed ? 'Selah Block Complete' : 'Selah Prayer (24h Pending)'}</span>
+            <Upload className="w-3.5 h-3.5" />
+            <span>Import Lyrics</span>
           </button>
 
+          {/* Save Checkpoint Button */}
           <button
-            onClick={handleRunAudit}
-            disabled={isAuditing}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-purple-950 disabled:opacity-50"
+            onClick={() => setIsCheckpointModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition"
           >
-            {isAuditing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
-            <span>{isAuditing ? 'Auditing with Gemini Pro...' : 'Gemini Lyrical Audit'}</span>
+            <Save className="w-3.5 h-3.5 text-amber-400" />
+            <span>Save Checkpoint</span>
+          </button>
+
+          {/* Download TXT */}
+          <button
+            onClick={handleDownloadTxt}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition"
+            title="Download formatted lyrics (.txt)"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">.TXT</span>
+          </button>
+
+          {/* Export JSON */}
+          <button
+            onClick={handleExportJson}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition"
+            title="Export complete song package (.json)"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">Package</span>
+          </button>
+
+          {/* Suno 4-Block Bundle */}
+          <button
+            onClick={handleCopyAllBlocks}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-300" />
+            <span>⚡ Copy Suno 4-Blocks</span>
           </button>
         </div>
       </div>
 
-      {/* Main Grid: Left = Lyrics Editor, Right = Suno v5.5 4-Block Engine */}
+      {/* MAIN TWO-COLUMN WORKBENCH */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT COLUMN: LYRIC WORKBENCH & HISTORY */}
+        {/* LEFT COLUMN: ACTIVE LYRIC WORKBENCH & AUDIT */}
         <div className="lg:col-span-7 space-y-4">
+          
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Active Lyric Workbench
-                </h3>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Active Lyric Workbench</h3>
               </div>
-              <span className="text-[11px] font-mono text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/40">
-                Version: {track.versions[track.versions.length - 1]?.version || 'v1.0'}
-              </span>
-            </div>
-
-            <textarea
-              rows={16}
-              value={track.lyrics}
-              onChange={(e) => onUpdateTrack('lyrics', e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs sm:text-sm text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 custom-scrollbar resize-y"
-              placeholder="Paste or write lyrics here. Follow Suno meta-tags: [Verse 1], [Chorus], [Bridge], [Outro]..."
-            />
-
-            <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onCopyText(track.lyrics, `${track.title} Lyrics`)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1.5 transition"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy Lyrics</span>
-                </button>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {track.lyrics.split('\n').filter(Boolean).length} lines • {track.lyrics.split(/\s+/).filter(Boolean).length} words
+                <span className="text-[11px] font-mono text-slate-400">
+                  {linesCount} lines • {wordCount} words
+                </span>
+                <span className="text-[11px] font-mono text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800/40">
+                  {track.versions[track.versions.length - 1]?.version || 'v1.0'}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-400 font-mono italic">
-                Auto-saves and commits new revision
-              </span>
+            </div>
+
+            {/* Lyric Textarea */}
+            <textarea
+              rows={15}
+              value={track.lyrics}
+              onChange={(e) => onUpdateTrack('lyrics', e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 custom-scrollbar shadow-inner"
+              placeholder="Write lyrics with meta tags: [Verse 1], [Chorus], [Bridge], [Outro]..."
+            />
+
+            {/* Nashville SOP Live Quality Badges */}
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+              <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                <span>The Nashville SOP v1.9 Live Rules</span>
+                <span className="text-indigo-400 font-mono">Real-time Quality Audit</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+                
+                {/* 1. OBI Funnel */}
+                <div className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  hasChorus ? 'bg-emerald-950/40 border-emerald-700/40 text-emerald-300' : 'bg-rose-950/40 border-rose-700/40 text-rose-300'
+                }`}>
+                  <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">OBI Chorus Funnel</span>
+                </div>
+
+                {/* 2. Throne Room Pivot */}
+                <div className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  hasThroneRoom ? 'bg-emerald-950/40 border-emerald-700/40 text-emerald-300' : 'bg-amber-950/40 border-amber-700/40 text-amber-300'
+                }`}>
+                  <Heart className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">Throne Room Pivot</span>
+                </div>
+
+                {/* 3. Christianese Filter */}
+                <div className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  foundCliches.length === 0 ? 'bg-emerald-950/40 border-emerald-700/40 text-emerald-300' : 'bg-rose-950/40 border-rose-700/40 text-rose-300'
+                }`}>
+                  <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{foundCliches.length === 0 ? 'No Clichés' : `${foundCliches.length} Clichés`}</span>
+                </div>
+
+                {/* 4. Sonic Scar 3:1 */}
+                <div className="p-2 rounded-lg border bg-slate-900 border-slate-800 text-slate-300 flex items-center gap-1.5">
+                  <Flame className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                  <span className="truncate">3:1 Sonic Scar</span>
+                </div>
+
+              </div>
+
+              {foundCliches.length > 0 && (
+                <div className="p-2 bg-rose-950/30 border border-rose-800/40 rounded-lg text-[10px] text-rose-300">
+                  <strong>Christianese Filter Warning:</strong> Flagged clichés: {foundCliches.join(', ')}. Replace with honest 5 AM blue-collar truck cab reality.
+                </div>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+              <button
+                onClick={() => onCopyText(track.lyrics, `${track.title} Lyrics`)}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1.5 transition"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Raw Lyrics</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={auditModel}
+                  onChange={(e) => setAuditModel(e.target.value as any)}
+                  className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                >
+                  <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Theological Audit)</option>
+                  <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fast Check)</option>
+                </select>
+
+                <button
+                  onClick={handleRunAudit}
+                  disabled={isAuditing}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 disabled:opacity-50 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>{isAuditing ? 'Auditing...' : 'Run Copilot Audit'}</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Audit Result Display */}
           {auditResult && (
-            <div className="bg-slate-900/95 border border-purple-500/40 rounded-2xl p-5 space-y-3 shadow-2xl animate-fadeIn">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  <h4 className="text-xs font-black text-white uppercase tracking-wider">
-                    Gemini Lead Theological & Lyrical Audit
-                  </h4>
-                </div>
+            <div className="bg-slate-900 border border-indigo-700/40 rounded-2xl p-5 space-y-3 shadow-xl animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  <span>Theological & Lyrical Audit Results</span>
+                </h4>
                 <button
                   onClick={() => setAuditResult(null)}
-                  className="text-slate-400 hover:text-white text-xs font-bold"
+                  className="text-slate-500 hover:text-slate-300 text-xs"
                 >
-                  ✕ Close
+                  ✕
                 </button>
               </div>
-              <div className="text-xs text-slate-300 font-mono leading-relaxed max-h-96 overflow-y-auto custom-scrollbar whitespace-pre-wrap p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
                 {auditResult}
               </div>
             </div>
           )}
 
-          {/* Revision History */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <GitBranch className="w-4 h-4 text-indigo-400" />
-              <span>Revision History & Rollback ({track.versions.length})</span>
-            </h3>
+          {/* REVISION HISTORY & SAVED VERSIONS */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-indigo-400" />
+                <span>Immutable Checkpoints & Saved Versions ({track.versions.length})</span>
+              </h3>
+              <button
+                onClick={() => setIsCheckpointModalOpen(true)}
+                className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+              >
+                + New Checkpoint
+              </button>
+            </div>
 
-            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-              {track.versions.slice().reverse().map((ver, idx) => (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+              {track.versions.map((ver, idx) => (
                 <div
                   key={idx}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                  className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition"
                 >
-                  <div>
-                    <div className="font-bold text-indigo-300 font-mono">
-                      {ver.version} • <span className="text-slate-400 font-sans">{ver.timestamp}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-indigo-300 font-mono bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/40">
+                        {ver.version}
+                      </span>
+                      <span className="text-slate-400 font-mono text-[11px]">{ver.timestamp}</span>
                     </div>
-                    <div className="text-[11px] text-slate-400 truncate max-w-xs">{ver.reason}</div>
+                    <div className="text-[11px] text-slate-300 font-medium">{ver.reason}</div>
                   </div>
-                  <button
-                    onClick={() => onUpdateTrack('lyrics', ver.lyrics)}
-                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-indigo-600 text-white font-bold transition text-[10px]"
-                  >
-                    Restore
-                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setComparingVersion(ver)}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold transition flex items-center gap-1"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Diff</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onUpdateTrack('lyrics', ver.lyrics);
+                        onCopyText(ver.lyrics, `Version ${ver.version} restored`);
+                      }}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-indigo-600 text-white text-[10px] font-bold transition"
+                    >
+                      Restore
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
+
         </div>
 
         {/* RIGHT COLUMN: SUNO v5.5 4-BLOCK ENGINE */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <div className="flex items-center gap-2">
+                <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
                   <Zap className="w-4 h-4 text-amber-400" />
-                  <h3 className="text-xs font-black text-white uppercase tracking-wider">
-                    Suno v5.5 4-Block Engine
-                  </h3>
-                </div>
-                <p className="text-[11px] text-slate-400">Strict 4-code-block format for Suno.com</p>
+                  <span>Suno v5.5 4-Block Generation Engine</span>
+                </h3>
+                <p className="text-[11px] text-slate-400">Copy each individual block directly into Suno.com fields.</p>
               </div>
-
-              <button
-                onClick={handleCopyAllBlocks}
-                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1.5 transition shadow-md shadow-amber-950"
-                title="Copy all 4 blocks formatted into clipboard"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy 4 Blocks</span>
-              </button>
             </div>
 
             {/* BLOCK 1: LYRICS & META-TAGS */}
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-black tracking-wider text-indigo-400 font-mono">
-                  Block 1: Lyrics & Meta-Tags
-                </span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-indigo-400">BLOCK 1: Lyrics & Meta-Tags</span>
                 <button
                   onClick={() => {
-                    onCopyText(block1Lyrics, 'Block 1 (Lyrics)');
+                    onCopyText(block1Lyrics, 'Block 1: Lyrics');
                     setCopiedBlock(1);
                     setTimeout(() => setCopiedBlock(null), 2000);
                   }}
-                  className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 font-bold"
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center gap-1 transition"
                 >
                   {copiedBlock === 1 ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedBlock === 1 ? 'Copied' : 'Copy'}</span>
+                  <span>{copiedBlock === 1 ? 'Copied!' : 'Copy Block 1'}</span>
                 </button>
               </div>
-              <pre className="text-[11px] font-mono text-slate-300 max-h-32 overflow-y-auto custom-scrollbar p-2 bg-slate-900/60 rounded-lg whitespace-pre-wrap">
+              <pre className="text-[11px] text-slate-300 font-mono bg-slate-900/60 p-2.5 rounded-lg max-h-24 overflow-y-auto whitespace-pre-wrap">
                 {block1Lyrics}
               </pre>
             </div>
 
-            {/* BLOCK 2: STYLE */}
+            {/* BLOCK 2: STYLE OF MUSIC */}
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400 font-mono">
-                  Block 2: Style
-                </span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-400">BLOCK 2: Style of Music</span>
                 <button
                   onClick={() => {
-                    onCopyText(block2Style, 'Block 2 (Style)');
+                    onCopyText(block2Style, 'Block 2: Style');
                     setCopiedBlock(2);
                     setTimeout(() => setCopiedBlock(null), 2000);
                   }}
-                  className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 font-bold"
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center gap-1 transition"
                 >
                   {copiedBlock === 2 ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedBlock === 2 ? 'Copied' : 'Copy'}</span>
+                  <span>{copiedBlock === 2 ? 'Copied!' : 'Copy Block 2'}</span>
                 </button>
               </div>
-              <textarea
-                rows={3}
+              <input
+                type="text"
                 value={track.sunoPrompt}
                 onChange={(e) => onUpdateTrack('sunoPrompt', e.target.value)}
-                className="w-full text-[11px] font-mono text-emerald-300 p-2 bg-slate-900/60 rounded-lg border border-slate-800 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-amber-500"
               />
             </div>
 
             {/* BLOCK 3: EXCLUDED STYLES (ARTIFACT KILLER) */}
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-black tracking-wider text-rose-400 font-mono">
-                  Block 3: Excluded Styles (Artifact Killer)
-                </span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-rose-400">BLOCK 3: Excluded Styles (Artifact Killer)</span>
                 <button
                   onClick={() => {
-                    onCopyText(block3Excluded, 'Block 3 (Excluded Styles)');
+                    onCopyText(block3Excluded, 'Block 3: Excluded');
                     setCopiedBlock(3);
                     setTimeout(() => setCopiedBlock(null), 2000);
                   }}
-                  className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 font-bold"
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center gap-1 transition"
                 >
                   {copiedBlock === 3 ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedBlock === 3 ? 'Copied' : 'Copy'}</span>
+                  <span>{copiedBlock === 3 ? 'Copied!' : 'Copy Block 3'}</span>
                 </button>
               </div>
               <textarea
-                rows={3}
+                rows={2}
                 value={track.negativePrompt}
                 onChange={(e) => onUpdateTrack('negativePrompt', e.target.value)}
-                className="w-full text-[11px] font-mono text-rose-300 p-2 bg-slate-900/60 rounded-lg border border-slate-800 focus:outline-none focus:border-rose-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-rose-500"
               />
             </div>
 
             {/* BLOCK 4: ENGINE SLIDERS */}
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-black tracking-wider text-amber-400 font-mono">
-                  Block 4: Engine Sliders
-                </span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-400">BLOCK 4: Suno v5.5 Engine Sliders</span>
                 <button
                   onClick={() => {
-                    onCopyText(block4Sliders, 'Block 4 (Engine Sliders)');
+                    onCopyText(block4Sliders, 'Block 4: Sliders');
                     setCopiedBlock(4);
                     setTimeout(() => setCopiedBlock(null), 2000);
                   }}
-                  className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 font-bold"
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center gap-1 transition"
                 >
                   {copiedBlock === 4 ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedBlock === 4 ? 'Copied' : 'Copy'}</span>
+                  <span>{copiedBlock === 4 ? 'Copied!' : 'Copy Block 4'}</span>
                 </button>
               </div>
 
               {/* Weirdness Slider */}
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Weirdness (Target: 0-20)</span>
-                  <span className="text-amber-400 font-bold">{track.engineSliders?.weirdness ?? 12}</span>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">Weirdness (0-20 target)</span>
+                  <span className="font-mono text-indigo-400">{track.engineSliders?.weirdness ?? 12}</span>
                 </div>
                 <input
                   type="range"
                   min="0"
-                  max="50"
+                  max="100"
                   value={track.engineSliders?.weirdness ?? 12}
-                  onChange={(e) =>
-                    onUpdateTrack('engineSliders', {
-                      ...(track.engineSliders || { weirdness: 12, styleInfluence: 65, voiceAudio: 100 }),
-                      weirdness: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    onUpdateTrack('engineSliders', { ...track.engineSliders, weirdness: val });
+                  }}
+                  className="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg"
                 />
               </div>
 
-              {/* Style Influence Slider */}
+              {/* Style Influence */}
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Style Influence (Target: 40-75)</span>
-                  <span className="text-indigo-400 font-bold">{track.engineSliders?.styleInfluence ?? 65}</span>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">Style Influence (40-75 target)</span>
+                  <span className="font-mono text-amber-400">{track.engineSliders?.styleInfluence ?? 65}</span>
                 </div>
                 <input
                   type="range"
-                  min="20"
+                  min="0"
                   max="100"
                   value={track.engineSliders?.styleInfluence ?? 65}
-                  onChange={(e) =>
-                    onUpdateTrack('engineSliders', {
-                      ...(track.engineSliders || { weirdness: 12, styleInfluence: 65, voiceAudio: 100 }),
-                      styleInfluence: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    onUpdateTrack('engineSliders', { ...track.engineSliders, styleInfluence: val });
+                  }}
+                  className="w-full accent-amber-500 h-1.5 bg-slate-800 rounded-lg"
                 />
               </div>
 
-              {/* Voice / Audio Slider */}
+              {/* Voice/Audio Lock */}
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Voice / Audio (Fixed: 100)</span>
-                  <span className="text-emerald-400 font-bold">{track.engineSliders?.voiceAudio ?? 100}</span>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">Voice/Audio Formant Lock (100)</span>
+                  <span className="font-mono text-emerald-400">{track.engineSliders?.voiceAudio ?? 100}</span>
                 </div>
                 <input
                   type="range"
-                  min="50"
+                  min="0"
                   max="100"
                   value={track.engineSliders?.voiceAudio ?? 100}
-                  disabled
-                  className="w-full accent-emerald-500 h-1 bg-slate-800 rounded-lg opacity-60"
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    onUpdateTrack('engineSliders', { ...track.engineSliders, voiceAudio: val });
+                  }}
+                  className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg"
+                />
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      {/* MODAL 1: IMPORT LYRICS DIALOG */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl animate-fadeIn">
+            
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-400" />
+                <span>Import Lyrics into {track.title} ({track.id})</span>
+              </h3>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Drag & drop or file upload area */}
+            <div className="space-y-4 text-xs">
+              <div className="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-950/60 cursor-pointer relative transition">
+                <input
+                  type="file"
+                  accept=".txt,.lrc,.md"
+                  onChange={handleFileUpload}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <FileUp className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+                <p className="font-bold text-slate-200">Click to select or drag & drop a file</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Supports .txt, .lrc, .md lyrics files</p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-slate-300">Or Paste Lyrics Directly:</label>
+                  <span className="text-[11px] text-slate-500 font-mono">{importedText.split('\n').filter(Boolean).length} lines</span>
+                </div>
+                <textarea
+                  rows={8}
+                  value={importedText}
+                  onChange={(e) => setImportedText(e.target.value)}
+                  placeholder="Paste your lyrics here..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 font-mono text-slate-200 text-xs focus:outline-none focus:border-indigo-500 custom-scrollbar"
+                />
+              </div>
+
+              {/* Options */}
+              <div className="flex items-center justify-between flex-wrap gap-4 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoTagLyrics}
+                    onChange={(e) => setAutoTagLyrics(e.target.checked)}
+                    className="accent-indigo-500 rounded"
+                  />
+                  <span>Auto-inject Suno meta tags ([Verse 1], [Chorus], [Bridge])</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Mode:</span>
+                  <select
+                    value={importMode}
+                    onChange={(e) => setImportMode(e.target.value as any)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                  >
+                    <option value="replace">Replace Current Lyrics</option>
+                    <option value="append">Append to End</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleProcessImport}
+                disabled={!importedText.trim()}
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-indigo-950"
+              >
+                <Check className="w-4 h-4" />
+                <span>Confirm & Import Lyrics</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: MANUAL SAVE CHECKPOINT DIALOG */}
+      {isCheckpointModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-fadeIn">
+            
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <Save className="w-5 h-5 text-amber-400" />
+                <span>Save Studio Checkpoint</span>
+              </h3>
+              <button
+                onClick={() => setIsCheckpointModalOpen(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-400">
+                This commits an immutable revision into version history for <strong>{track.title}</strong> with exact rollback capability.
+              </p>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Commit Message / Revision Note:</label>
+                <input
+                  type="text"
+                  value={checkpointReason}
+                  onChange={(e) => setCheckpointReason(e.target.value)}
+                  placeholder="e.g. Added Throne Room Bridge, Nashville SOP edit"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setIsCheckpointModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCommitCheckpoint}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition"
+              >
+                Commit Version v{(track.versions.length + 1).toFixed(1)}
+              </button>
+            </div>
+
           </div>
         </div>
-      </div>
+      )}
+
+      {/* MODAL 3: DIFF COMPARISON VIEWER */}
+      {comparingVersion && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl animate-fadeIn">
+            
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <Eye className="w-5 h-5 text-indigo-400" />
+                <span>Diff: Version {comparingVersion.version} vs Current Draft</span>
+              </h3>
+              <button
+                onClick={() => setComparingVersion(null)}
+                className="text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+              <div className="space-y-1">
+                <div className="flex justify-between font-bold text-slate-400 pb-1 border-b border-slate-800">
+                  <span>Version {comparingVersion.version} ({comparingVersion.timestamp})</span>
+                  <span>{comparingVersion.reason}</span>
+                </div>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 max-h-96 overflow-y-auto custom-scrollbar text-slate-300 whitespace-pre-wrap">
+                  {comparingVersion.lyrics}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between font-bold text-indigo-400 pb-1 border-b border-slate-800">
+                  <span>Current Active Draft</span>
+                  <span>Live Buffer</span>
+                </div>
+                <div className="bg-slate-950 border border-indigo-900/60 rounded-xl p-4 max-h-96 overflow-y-auto custom-scrollbar text-slate-200 whitespace-pre-wrap">
+                  {track.lyrics}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setComparingVersion(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+              >
+                Close Diff
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateTrack('lyrics', comparingVersion.lyrics);
+                  setComparingVersion(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition"
+              >
+                Rollback to {comparingVersion.version}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

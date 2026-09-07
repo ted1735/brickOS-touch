@@ -43,20 +43,51 @@ import {
   ExternalLink,
   ChevronRight,
   Info,
-  Maximize2
+  Maximize2,
+  Database
 } from 'lucide-react';
-import { Track, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage } from './types';
+import { Track, TrackStatus, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage } from './types';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { audioMiniDaw } from './utils/audioEngine';
-
-// Live Nextcloud WebDAV Root Endpoint
-const PRODUCTION_NEXTCLOUD_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS';
+import { KanbanDashboardTab } from './components/KanbanDashboardTab';
+import { LyricsAndSunoTab } from './components/LyricsAndSunoTab';
+import { MiniDawMixerTab } from './components/MiniDawMixerTab';
+import { YouTubeSEOTab } from './components/YouTubeSEOTab';
+import { OmniPostTab } from './components/OmniPostTab';
+import { LiveMinistryChartsTab } from './components/LiveMinistryChartsTab';
+import { RelationalDatabaseAndMatrixTab } from './components/RelationalDatabaseAndMatrixTab';
+import {
+  PRODUCTION_NEXTCLOUD_WEBDAV,
+  PRODUCTION_NEXTCLOUD_BASE,
+  DEFAULT_WEBDAV_USER,
+  generateCurlStemUploadCommand,
+  generateRcloneConfigBlock,
+  generateRcloneSyncCommand,
+  generateWindowsDriveMountCommand,
+  generatePostgreSqlRelationalMigration
+} from './data/relationalCatalogBridge';
 
 export default function BrickOSMusicStudioWorkspace() {
   const [tracks, setTracks] = useState<Track[]>(CANONICAL_TRACKS);
   const [selectedTrack, setSelectedTrack] = useState<Track>(CANONICAL_TRACKS[0]);
-  const [activeTab, setActiveTab] = useState<'lyrics' | 'mixer' | 'mastering' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search'>('lyrics');
+  const [activeTab, setActiveTab] = useState<
+    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database'
+  >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
+
+  // Update track status from Kanban
+  const handleUpdateTrackStatus = (trackId: string, newStatus: TrackStatus) => {
+    setTracks(prev => prev.map(t => (t.id === trackId ? { ...t, status: newStatus } : t)));
+    if (selectedTrack.id === trackId) {
+      setSelectedTrack(prev => ({ ...prev, status: newStatus }));
+    }
+  };
+
+  // Add new track from Kanban
+  const handleAddNewTrack = (newTrack: Track) => {
+    setTracks(prev => [...prev, newTrack]);
+    setSelectedTrack(newTrack);
+  };
 
   // Catalog filtering & search
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -545,14 +576,24 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       )}
 
       {/* TOP NAVIGATION HEADER */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md bg-opacity-95">
+      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md bg-opacity-95 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">
+          <button
+            onClick={() => setActiveTab('kanban')}
+            className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer"
+            title="Return to Master Kanban Dashboard"
+          >
             b
-          </div>
+          </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-black tracking-wider text-white">brickOS MASTER STUDIO</h1>
+              <h1 
+                onClick={() => setActiveTab('kanban')}
+                className="text-base font-black tracking-wider text-white hover:text-indigo-300 transition cursor-pointer"
+                title="Return to Master Kanban Dashboard"
+              >
+                brickOS MASTER STUDIO
+              </h1>
               <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 font-mono text-[10px] font-bold border border-indigo-700/50">
                 v5.5 SOVEREIGN
               </span>
@@ -561,18 +602,41 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 WebDAV Online
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 flex items-center gap-2">
+            <p className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
               <span>Ted Moyer (Primary Artist / OAC)</span>
               <span>•</span>
               <span className="text-indigo-400 font-medium">BRICK Records</span>
               <span>•</span>
-              <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
+              {activeTab === 'kanban' ? (
+                <span className="text-amber-400 font-medium bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                  {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <span className="text-indigo-300 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
+                  <span>•</span>
+                  <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
+                </span>
+              )}
             </p>
           </div>
         </div>
 
         {/* Global Nav Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+          <button
+            onClick={() => setActiveTab('kanban')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm ${
+              activeTab === 'kanban'
+                ? 'bg-indigo-600 border-indigo-500 text-white'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+            title="Master Kanban Pipeline Dashboard"
+          >
+            <Layers className="w-3.5 h-3.5 text-indigo-300" />
+            <span>Dashboard</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('search')}
             className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
@@ -610,209 +674,233 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       </header>
 
       {/* MAIN LAYOUT */}
-      <div className="flex-1 flex flex-col lg:flex-row">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
-        {/* LEFT SIDEBAR: TRACK & EP CATALOG */}
-        <aside className="w-full lg:w-80 bg-slate-900/70 border-r border-slate-800 flex flex-col p-4 space-y-3.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
-              Catalog Roster ({filteredCatalogTracks.length}/{tracks.length})
-            </span>
-            <button
-              onClick={() => {
-                const newTrk: Track = {
-                  id: `TRK-${(tracks.length + 1).toString().padStart(2, '0')}`,
-                  ep: "EP 1: Restoration",
-                  title: "New Sovereign Track",
-                  status: "Idea / Concept",
-                  genre: "Christian Hip Hop / Worship",
-                  bpm: 100,
-                  key: "D Minor",
-                  vocal: "Ted Moyer",
-                  vocalCast: "Silas Thorne (Aged Oak)",
-                  thesis: "New kingdom thesis statement.",
-                  sunoPrompt: "High fidelity Nashville master, 100 BPM, D Minor, warm acoustic flatpicking, raw vocal rasp",
-                  negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts, muddy bass",
-                  engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
-                  lyrics: "[Vocal Archetype: Silas Thorne]\n[Verse 1]\nNew draft lyrics here...",
-                  versions: [{ version: "v1.0", timestamp: new Date().toISOString().split('T')[0], reason: "Created track", lyrics: "New draft lyrics here..." }]
-                };
-                setTracks([newTrk, ...tracks]);
-                setSelectedTrack(newTrk);
-              }}
-              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 text-xs font-bold"
-              title="Add New Track"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New</span>
-            </button>
-          </div>
-
-          {/* Search box */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search track, genre, vocal..."
-              value={catalogSearch}
-              onChange={(e) => setCatalogSearch(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          {/* EP Filter chips */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar text-[10px] font-bold">
-            <button
-              onClick={() => setSelectedEpFilter('ALL')}
-              className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
-                selectedEpFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              All
-            </button>
-            {EP_COLLECTIONS.map((ep, idx) => (
+        {/* LEFT SIDEBAR: TRACK & EP CATALOG (Hidden on Kanban Dashboard as requested) */}
+        {activeTab !== 'kanban' && (
+          <aside className="w-full lg:w-80 bg-slate-900/70 border-r border-slate-800 flex flex-col p-4 space-y-3.5 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
+                Catalog Roster ({filteredCatalogTracks.length}/{tracks.length})
+              </span>
               <button
-                key={ep.id}
-                onClick={() => setSelectedEpFilter(`EP ${idx + 1}`)}
-                className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
-                  selectedEpFilter === `EP ${idx + 1}` ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+                onClick={() => {
+                  const newTrk: Track = {
+                    id: `TRK-${(tracks.length + 1).toString().padStart(2, '0')}`,
+                    ep: "EP 1: Restoration",
+                    title: "New Sovereign Track",
+                    status: "Idea / Concept",
+                    genre: "Christian Hip Hop / Worship",
+                    bpm: 100,
+                    key: "D Minor",
+                    vocal: "Ted Moyer",
+                    vocalCast: "Silas Thorne (Aged Oak)",
+                    thesis: "New kingdom thesis statement.",
+                    sunoPrompt: "High fidelity Nashville master, 100 BPM, D Minor, warm acoustic flatpicking, raw vocal rasp",
+                    negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts, muddy bass",
+                    engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
+                    lyrics: "[Vocal Archetype: Silas Thorne]\n[Verse 1]\nNew draft lyrics here...",
+                    versions: [{ version: "v1.0", timestamp: new Date().toISOString().split('T')[0], reason: "Created track", lyrics: "New draft lyrics here..." }]
+                  };
+                  setTracks([newTrk, ...tracks]);
+                  setSelectedTrack(newTrk);
+                }}
+                className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 text-xs font-bold"
+                title="Add New Track"
               >
-                EP {idx + 1}
+                <Plus className="w-3.5 h-3.5" />
+                <span>New</span>
               </button>
-            ))}
-          </div>
+            </div>
 
-          {/* Scrollable Track list */}
-          <div className="space-y-2 flex-1 overflow-y-auto max-h-[calc(100vh-250px)] custom-scrollbar pr-1">
-            {filteredCatalogTracks.map(trk => (
-              <div
-                key={trk.id}
-                onClick={() => setSelectedTrack(trk)}
-                className={`p-3.5 rounded-xl border transition cursor-pointer flex flex-col gap-1.5 ${
-                  selectedTrack.id === trk.id
-                    ? 'bg-indigo-950/50 border-indigo-500/80 shadow-lg shadow-indigo-950 ring-1 ring-indigo-500/30'
-                    : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+            {/* Search box */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search track, genre, vocal..."
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {/* EP Filter chips */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar text-[10px] font-bold">
+              <button
+                onClick={() => setSelectedEpFilter('ALL')}
+                className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
+                  selectedEpFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-indigo-400">{trk.id}</span>
-                    {trk.selahPrayed && (
-                      <Heart className="w-3 h-3 text-amber-400 fill-amber-400/40" title="24h Selah Block Completed" />
-                    )}
+                All
+              </button>
+              {EP_COLLECTIONS.map((ep, idx) => (
+                <button
+                  key={ep.id}
+                  onClick={() => setSelectedEpFilter(`EP ${idx + 1}`)}
+                  className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
+                    selectedEpFilter === `EP ${idx + 1}` ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  EP {idx + 1}
+                </button>
+              ))}
+            </div>
+
+            {/* Scrollable Track list */}
+            <div className="space-y-2 flex-1 overflow-y-auto max-h-[calc(100vh-250px)] custom-scrollbar pr-1">
+              {filteredCatalogTracks.map(trk => (
+                <div
+                  key={trk.id}
+                  onClick={() => setSelectedTrack(trk)}
+                  className={`p-3.5 rounded-xl border transition cursor-pointer flex flex-col gap-1.5 ${
+                    selectedTrack.id === trk.id
+                      ? 'bg-indigo-950/50 border-indigo-500/80 shadow-lg shadow-indigo-950 ring-1 ring-indigo-500/30'
+                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-indigo-400">{trk.id}</span>
+                      {trk.selahPrayed && (
+                        <Heart className="w-3 h-3 text-amber-400 fill-amber-400/40" title="24h Selah Block Completed" />
+                      )}
+                    </div>
+                    <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${
+                      trk.status === 'Sent for Distribution' || trk.status === 'Released'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
+                        : trk.status === 'Audio Master'
+                        ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
+                        : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {trk.status}
+                    </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${
-                    trk.status === 'Sent for Distribution' || trk.status === 'Released'
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
-                      : trk.status === 'Audio Master'
-                      ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
-                      : 'bg-slate-800 text-slate-300'
-                  }`}>
-                    {trk.status}
-                  </span>
+                  <h3 className="text-sm font-bold text-white line-clamp-1">{trk.title}</h3>
+                  <p className="text-[11px] text-slate-400 line-clamp-1">{trk.genre} • {trk.bpm} BPM • {trk.key}</p>
+                  <div className="text-[10px] text-slate-400 truncate pt-0.5 border-t border-slate-800/50 font-mono">
+                    {trk.vocalCast}
+                  </div>
                 </div>
-                <h3 className="text-sm font-bold text-white line-clamp-1">{trk.title}</h3>
-                <p className="text-[11px] text-slate-400 line-clamp-1">{trk.genre} • {trk.bpm} BPM • {trk.key}</p>
-                <div className="text-[10px] text-slate-400 truncate pt-0.5 border-t border-slate-800/50 font-mono">
-                  {trk.vocalCast}
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+              ))}
+            </div>
+          </aside>
+        )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto">
+        <main className={`flex-1 flex flex-col ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5 bg-slate-950' : 'p-6 space-y-6 overflow-y-auto'}`}>
           
-          {/* TRACK HEADER BANNER */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-indigo-900 text-indigo-300 font-mono text-xs font-bold">
-                  {selectedTrack.id}
-                </span>
-                <span className="text-xs text-slate-400">{selectedTrack.ep}</span>
-                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-xs">
-                  {selectedTrack.bpm} BPM • {selectedTrack.key}
-                </span>
+          {/* TRACK HEADER BANNER (Shown only on single-track workbench views) */}
+          {activeTab !== 'kanban' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-indigo-900 text-indigo-300 font-mono text-xs font-bold">
+                    {selectedTrack.id}
+                  </span>
+                  <span className="text-xs text-slate-400">{selectedTrack.ep}</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-xs">
+                    {selectedTrack.bpm} BPM • {selectedTrack.key}
+                  </span>
+                </div>
+                <h2 className="text-2xl font-black text-white">{selectedTrack.title}</h2>
+                <p className="text-xs text-slate-300 italic max-w-2xl">"{selectedTrack.thesis}"</p>
               </div>
-              <h2 className="text-2xl font-black text-white">{selectedTrack.title}</h2>
-              <p className="text-xs text-slate-300 italic max-w-2xl">"{selectedTrack.thesis}"</p>
+
+              {/* Status & Vocal Cast Selector */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Production Status</label>
+                  <select
+                    value={selectedTrack.status}
+                    onChange={(e) => handleTrackUpdate('status', e.target.value as any)}
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="Idea / Concept">Idea / Concept</option>
+                    <option value="Lyrics Finalized">Lyrics Finalized</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="UVR5 Stem Prep">UVR5 Stem Prep</option>
+                    <option value="Audio Master">Audio Master</option>
+                    <option value="Sent for Distribution">Sent for Distribution</option>
+                    <option value="Released">Released</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vocal Formant Cast</label>
+                  <input
+                    type="text"
+                    value={selectedTrack.vocalCast}
+                    onChange={(e) => handleTrackUpdate('vocalCast', e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    placeholder="e.g. Silas Thorne (Aged Oak)"
+                  />
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    onClick={() => handleTrackUpdate('selahPrayed', !selectedTrack.selahPrayed)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                      selectedTrack.selahPrayed
+                        ? 'bg-emerald-950 border-emerald-600 text-emerald-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                    }`}
+                    title="Mandatory 24h prayer & stationkeeping before master release"
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${selectedTrack.selahPrayed ? 'fill-emerald-400 text-emerald-400' : ''}`} />
+                    <span>{selectedTrack.selahPrayed ? 'Selah Done' : 'Selah Prayer'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
-
-            {/* Status & Vocal Cast Selector */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Production Status</label>
-                <select
-                  value={selectedTrack.status}
-                  onChange={(e) => handleTrackUpdate('status', e.target.value as any)}
-                  className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="Idea / Concept">Idea / Concept</option>
-                  <option value="Lyrics Finalized">Lyrics Finalized</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="UVR5 Stem Prep">UVR5 Stem Prep</option>
-                  <option value="Audio Master">Audio Master</option>
-                  <option value="Sent for Distribution">Sent for Distribution</option>
-                  <option value="Released">Released</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vocal Formant Cast</label>
-                <input
-                  type="text"
-                  value={selectedTrack.vocalCast}
-                  onChange={(e) => handleTrackUpdate('vocalCast', e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-                  placeholder="e.g. Silas Thorne (Aged Oak)"
-                />
-              </div>
-
-              <div className="pt-4">
-                <button
-                  onClick={() => handleTrackUpdate('selahPrayed', !selectedTrack.selahPrayed)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-                    selectedTrack.selahPrayed
-                      ? 'bg-emerald-950 border-emerald-600 text-emerald-300'
-                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-                  }`}
-                  title="Mandatory 24h prayer & stationkeeping before master release"
-                >
-                  <Heart className={`w-3.5 h-3.5 ${selectedTrack.selahPrayed ? 'fill-emerald-400 text-emerald-400' : ''}`} />
-                  <span>{selectedTrack.selahPrayed ? 'Selah Done' : 'Selah Prayer'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* WORKBENCH TABS */}
           <div className="flex items-center gap-2 border-b border-slate-800 pb-0 overflow-x-auto custom-scrollbar">
             <button
+              onClick={() => setActiveTab('kanban')}
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
+                activeTab === 'kanban' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Kanban & Dashboard</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('lyrics')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'lyrics' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-3.5 h-3.5 text-blue-400" />
               <span>Lyrics & Suno 4-Block</span>
             </button>
 
             <button
+              onClick={() => setActiveTab('database')}
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
+                activeTab === 'database' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Relational SQL & Similarity Matrix</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('mixer')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'mixer' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
               <Scissors className="w-3.5 h-3.5 text-amber-400" />
-              <span>4-Track Mini-DAW & Trimmer</span>
+              <span>4-Track Mini-DAW</span>
             </button>
 
             <button
               onClick={() => setActiveTab('mastering')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'mastering' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -821,38 +909,68 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </button>
 
             <button
+              onClick={() => setActiveTab('youtube')}
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
+                activeTab === 'youtube' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Film className="w-3.5 h-3.5 text-rose-500" />
+              <span>YouTube SEO Lens</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('omnipost')}
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
+                activeTab === 'omnipost' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Share2 className="w-3.5 h-3.5 text-purple-400" />
+              <span>OmniPost Social</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ministry')}
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
+                activeTab === 'ministry' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Music className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Live Ministry Charts</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('veo_visuals')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'veo_visuals' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Film className="w-3.5 h-3.5 text-rose-400" />
-              <span>Visuals & Veo 3 Video Studio</span>
+              <Clapperboard className="w-3.5 h-3.5 text-amber-400" />
+              <span>Visuals & Veo 3 Video</span>
             </button>
 
             <button
               onClick={() => setActiveTab('nightcafe')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'nightcafe' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Clapperboard className="w-3.5 h-3.5 text-blue-400" />
+              <Zap className="w-3.5 h-3.5 text-blue-400" />
               <span>NightCafe Queue Runner</span>
             </button>
 
             <button
               onClick={() => setActiveTab('telemetry')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'telemetry' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>1h Telemetry & Survival Loop</span>
+              <span>1h Telemetry</span>
             </button>
 
             <button
               onClick={() => setActiveTab('coproducer')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'coproducer' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -862,7 +980,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
             <button
               onClick={() => setActiveTab('search')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2 ${
+              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
                 activeTab === 'search' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -871,335 +989,71 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </button>
           </div>
 
-          {/* TAB 1: LYRICS & SUNO 4-BLOCK ENGINE */}
+          {/* TAB: KANBAN & PRODUCTION DASHBOARD */}
+          {activeTab === 'kanban' && (
+            <KanbanDashboardTab
+              tracks={tracks}
+              onSelectTrack={(t) => {
+                setSelectedTrack(t);
+                setActiveTab('lyrics');
+              }}
+              onUpdateTrackStatus={handleUpdateTrackStatus}
+              onAddNewTrack={handleAddNewTrack}
+              onNavigateToTab={setActiveTab}
+              epCollections={EP_COLLECTIONS}
+              selectedEpFilter={selectedEpFilter}
+              onSelectEpFilter={setSelectedEpFilter}
+            />
+          )}
+
+          {/* TAB 1: LYRICS & SUNO 4-BLOCK ENGINE (WITH IMPORT, SAVED VAULT & NASHVILLE SOP) */}
           {activeTab === 'lyrics' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
-                {/* Left: Editor & Audit */}
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-indigo-400" />
-                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Active Lyric Workbench</h3>
-                      </div>
-                      <span className="text-[11px] font-mono text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800/40">
-                        Version: {selectedTrack.versions[selectedTrack.versions.length - 1]?.version || 'v1.0'}
-                      </span>
-                    </div>
-
-                    <textarea
-                      rows={14}
-                      value={selectedTrack.lyrics}
-                      onChange={(e) => handleTrackUpdate('lyrics', e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 custom-scrollbar"
-                      placeholder="Write lyrics with meta tags: [Verse 1], [Chorus], [Bridge], [Outro]..."
-                    />
-
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <button
-                        onClick={() => copyToClipboard(selectedTrack.lyrics, `${selectedTrack.title} Lyrics`)}
-                        className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1.5 transition"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Lyrics</span>
-                      </button>
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        {selectedTrack.lyrics.split('\n').filter(Boolean).length} lines • Auto-commits on change
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Revision History */}
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <GitBranch className="w-4 h-4 text-indigo-400" />
-                      <span>Revision History & Rollback ({selectedTrack.versions.length})</span>
-                    </h3>
-
-                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                      {selectedTrack.versions.slice().reverse().map((ver, idx) => (
-                        <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                          <div>
-                            <div className="font-bold text-indigo-300 font-mono">{ver.version} • <span className="text-slate-400">{ver.timestamp}</span></div>
-                            <div className="text-[11px] text-slate-400">{ver.reason}</div>
-                          </div>
-                          <button
-                            onClick={() => handleTrackUpdate('lyrics', ver.lyrics)}
-                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-indigo-600 text-white font-bold transition text-[10px]"
-                          >
-                            Restore
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Suno v5.5 4-Block Engine */}
-                <div className="lg:col-span-5 space-y-4">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Zap className="w-4 h-4 text-amber-400" />
-                          <h3 className="text-xs font-black text-white uppercase tracking-wider">
-                            Suno v5.5 4-Block Engine
-                          </h3>
-                        </div>
-                        <p className="text-[11px] text-slate-400">Strict 4-code-block format for Suno generation</p>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          const bundle = `=== BLOCK 1: LYRICS & META-TAGS ===\n[Vocal Archetype: ${selectedTrack.vocalCast || selectedTrack.vocal}]\n${selectedTrack.lyrics}\n\n=== BLOCK 2: STYLE ===\n${selectedTrack.genre}, ${selectedTrack.bpm} BPM, Key of ${selectedTrack.key}, ${selectedTrack.sunoPrompt}\n\n=== BLOCK 3: EXCLUDED STYLES ===\n${selectedTrack.negativePrompt}\n\n=== BLOCK 4: ENGINE SLIDERS ===\nWeirdness: ${selectedTrack.engineSliders?.weirdness ?? 12} | Style Influence: ${selectedTrack.engineSliders?.styleInfluence ?? 65} | Voice/Audio: 100`;
-                          copyToClipboard(bundle, 'Suno v5.5 4-Block Bundle');
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1.5 transition shadow-md shadow-amber-950"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy 4 Blocks</span>
-                      </button>
-                    </div>
-
-                    {/* BLOCK 1 */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-mono font-bold text-indigo-400">Block 1: Lyrics & Meta-Tags</span>
-                        <button
-                          onClick={() => copyToClipboard(`[Vocal Archetype: ${selectedTrack.vocalCast}]\n${selectedTrack.lyrics}`, 'Block 1')}
-                          className="text-[10px] text-slate-400 hover:text-white font-bold flex items-center gap-1"
-                        >
-                          <Copy className="w-3 h-3" /> Copy
-                        </button>
-                      </div>
-                      <pre className="text-[11px] font-mono text-slate-300 max-h-24 overflow-y-auto custom-scrollbar p-2 bg-slate-900/60 rounded whitespace-pre-wrap">
-                        {`[Vocal Archetype: ${selectedTrack.vocalCast}]\n${selectedTrack.lyrics}`}
-                      </pre>
-                    </div>
-
-                    {/* BLOCK 2 */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-mono font-bold text-emerald-400">Block 2: Style</span>
-                        <button
-                          onClick={() => copyToClipboard(`${selectedTrack.genre}, ${selectedTrack.bpm} BPM, Key of ${selectedTrack.key}, ${selectedTrack.sunoPrompt}`, 'Block 2')}
-                          className="text-[10px] text-slate-400 hover:text-white font-bold flex items-center gap-1"
-                        >
-                          <Copy className="w-3 h-3" /> Copy
-                        </button>
-                      </div>
-                      <textarea
-                        rows={2}
-                        value={selectedTrack.sunoPrompt}
-                        onChange={(e) => handleTrackUpdate('sunoPrompt', e.target.value)}
-                        className="w-full text-[11px] font-mono text-emerald-300 p-2 bg-slate-900/60 rounded border border-slate-800 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* BLOCK 3 */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-mono font-bold text-rose-400">Block 3: Excluded Styles</span>
-                        <button
-                          onClick={() => copyToClipboard(selectedTrack.negativePrompt, 'Block 3')}
-                          className="text-[10px] text-slate-400 hover:text-white font-bold flex items-center gap-1"
-                        >
-                          <Copy className="w-3 h-3" /> Copy
-                        </button>
-                      </div>
-                      <textarea
-                        rows={2}
-                        value={selectedTrack.negativePrompt}
-                        onChange={(e) => handleTrackUpdate('negativePrompt', e.target.value)}
-                        className="w-full text-[11px] font-mono text-rose-300 p-2 bg-slate-900/60 rounded border border-slate-800 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* BLOCK 4 */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-                      <span className="text-[10px] uppercase font-mono font-bold text-amber-400 block">
-                        Block 4: Engine Sliders
-                      </span>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-mono">
-                          <span className="text-slate-400">Weirdness (Target: 0-20)</span>
-                          <span className="text-amber-400 font-bold">{selectedTrack.engineSliders?.weirdness ?? 12}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="50"
-                          value={selectedTrack.engineSliders?.weirdness ?? 12}
-                          onChange={(e) =>
-                            handleTrackUpdate('engineSliders', {
-                              ...(selectedTrack.engineSliders || { weirdness: 12, styleInfluence: 65, voiceAudio: 100 }),
-                              weirdness: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-mono">
-                          <span className="text-slate-400">Style Influence (Target: 40-75)</span>
-                          <span className="text-indigo-400 font-bold">{selectedTrack.engineSliders?.styleInfluence ?? 65}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="20"
-                          max="100"
-                          value={selectedTrack.engineSliders?.styleInfluence ?? 65}
-                          onChange={(e) =>
-                            handleTrackUpdate('engineSliders', {
-                              ...(selectedTrack.engineSliders || { weirdness: 12, styleInfluence: 65, voiceAudio: 100 }),
-                              styleInfluence: parseInt(e.target.value),
-                            })
-                          }
-                          className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                        />
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-              </div>
-            </div>
+            <LyricsAndSunoTab
+              track={selectedTrack}
+              onUpdateTrack={handleTrackUpdate}
+              onCopyText={copyToClipboard}
+            />
           )}
 
           {/* TAB 2: MINI-DAW MIXER & TRIMMER */}
           {activeTab === 'mixer' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <span>4-Track Lossless Waveform Mixer & Trimmer (Mini-DAW)</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
-                      24-Bit / 48kHz PCM Lossless
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400">Stream stems directly from Nextcloud WebDAV and mix with zero fidelity loss.</p>
-                </div>
+            <MiniDawMixerTab
+              track={selectedTrack}
+            />
+          )}
 
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                    <Volume2 className="w-4 h-4 text-slate-400" />
-                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Master</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={masterVolume}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setMasterVolume(val);
-                        audioMiniDaw.setMasterVolume(val);
-                      }}
-                      className="w-20 accent-indigo-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                    />
-                    <span className="text-xs font-mono font-bold text-indigo-300 w-8 text-right">{masterVolume}%</span>
-                  </div>
+          {/* TAB: YOUTUBE SEO LENS & WOODWORKING BAN */}
+          {activeTab === 'youtube' && (
+            <YouTubeSEOTab
+              track={selectedTrack}
+              onCopyText={copyToClipboard}
+            />
+          )}
 
-                  <button
-                    onClick={handleTogglePlayback}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition ${
-                      isPlaying ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                    }`}
-                  >
-                    {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                    <span>{isPlaying ? 'Stop Playback' : 'Play Master Sum'}</span>
-                  </button>
-                </div>
-              </div>
+          {/* TAB: OMNIPOST SOCIAL DISPATCHER */}
+          {activeTab === 'omnipost' && (
+            <OmniPostTab
+              track={selectedTrack}
+              onCopyText={copyToClipboard}
+            />
+          )}
 
-              {/* Visualizer Canvas */}
-              <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative shadow-inner">
-                <canvas ref={canvasRef} width={900} height={130} className="w-full h-32 block" />
-                <div className="absolute top-2 right-3 flex items-center gap-3 text-[10px] font-mono text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`}></span>
-                    {isPlaying ? 'LIVE PCM AUDIO SUM' : 'STANDBY'}
-                  </span>
-                  <span>48,000 Hz / 24-bit</span>
-                </div>
-              </div>
+          {/* TAB: LIVE MINISTRY CHARTS & STAGE STEMS */}
+          {activeTab === 'ministry' && (
+            <LiveMinistryChartsTab
+              track={selectedTrack}
+              onCopyText={copyToClipboard}
+            />
+          )}
 
-              {/* 4 Track Strips */}
-              <div className="space-y-3">
-                {trackStates.map((trk, i) => (
-                  <div key={trk.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-950 border border-indigo-700/40 flex items-center justify-center font-mono font-bold text-indigo-300 text-xs">
-                        {i + 1}
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-white">{trk.name}</h4>
-                        <span className="text-[10px] font-mono text-slate-500">
-                          WebDAV: {PRODUCTION_NEXTCLOUD_WEBDAV}/{selectedTrack.id}/stems/
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Faders & Controls */}
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => {
-                            const updated = [...trackStates];
-                            updated[i].muted = !updated[i].muted;
-                            setTrackStates(updated);
-                            audioMiniDaw.updateTrackControls(trk.id, updated[i].vol, updated[i].pan, updated[i].muted, updated.some(t => t.solo), updated[i].solo);
-                          }}
-                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
-                            trk.muted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          }`}
-                        >
-                          M
-                        </button>
-                        <button
-                          onClick={() => {
-                            const updated = [...trackStates];
-                            updated[i].solo = !updated[i].solo;
-                            setTrackStates(updated);
-                            audioMiniDaw.updateTrackControls(trk.id, updated[i].vol, updated[i].pan, updated[i].muted, updated.some(t => t.solo), updated[i].solo);
-                          }}
-                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
-                            trk.solo ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          }`}
-                        >
-                          S
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={trk.vol}
-                          onChange={(e) => {
-                            const updated = [...trackStates];
-                            updated[i].vol = parseInt(e.target.value);
-                            setTrackStates(updated);
-                            audioMiniDaw.updateTrackControls(trk.id, updated[i].vol, updated[i].pan, updated[i].muted, updated.some(t => t.solo), updated[i].solo);
-                          }}
-                          className="w-24 accent-indigo-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                        />
-                        <span className="text-[10px] font-mono text-slate-400 w-8">{trk.vol}%</span>
-                      </div>
-
-                      <div className="flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                        <Scissors className="w-3 h-3 text-slate-400" />
-                        <span>0s–60s Hook</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* TAB: RELATIONAL DATABASE & INTERCHANGEABLE ASSET SIMILARITY MATRIX */}
+          {activeTab === 'database' && (
+            <RelationalDatabaseAndMatrixTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              onSelectTrack={setSelectedTrack}
+              onCopyText={copyToClipboard}
+            />
           )}
 
           {/* TAB 3: SENIOR MASTERING & A/B BUS */}
@@ -1828,47 +1682,202 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
       {/* NEXTCLOUD WEBDAV STORAGE MODAL */}
       {isStorageModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <HardDrive className="w-5 h-5 text-indigo-400" />
-                <span>Nextcloud Sovereign WebDAV Hub</span>
-              </h3>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-950 border border-indigo-700/50">
+                  <HardDrive className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <span>Nextcloud Sovereign WebDAV Hub</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-mono text-[10px] border border-emerald-700/40">
+                      Live Production
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Direct self-hosted storage layer for 24-bit/48kHz master WAV stems, visual assets, and project data.
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setIsStorageModalOpen(false)}
-                className="text-slate-400 hover:text-white text-xs font-bold"
+                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg bg-slate-800"
               >
                 ✕ Close
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-300">
-              <p>Your studio connects directly to your private self-hosted Nextcloud instance with zero reliance on third-party clouds.</p>
-              
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-indigo-300 text-[11px] select-all">
-                {PRODUCTION_NEXTCLOUD_WEBDAV}
+            <div className="space-y-4 text-xs text-slate-300">
+              {/* WebDAV Endpoint Info */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-400 font-mono uppercase">
+                    Root WebDAV URL ({DEFAULT_WEBDAV_USER}):
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(PRODUCTION_NEXTCLOUD_WEBDAV, 'WebDAV Root URL')}
+                    className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-mono"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy Root</span>
+                  </button>
+                </div>
+                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl font-mono text-indigo-300 text-[11px] select-all truncate">
+                  {PRODUCTION_NEXTCLOUD_WEBDAV}
+                </div>
               </div>
 
-              <div className="space-y-2 pt-2">
-                <strong className="text-white block">DAW & DAW Workstation Mount (Windows / macOS / Linux):</strong>
-                <pre className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-mono text-slate-300 overflow-x-auto">
-{`# Mount WebDAV as Z: Drive on Windows DAW
-net use Z: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS /user:ncted
+              {/* Active Track Folder */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-400 font-mono uppercase">
+                    {selectedTrack.id} WebDAV Folder:
+                  </span>
+                  <button
+                    onClick={() =>
+                      copyToClipboard(
+                        `${PRODUCTION_NEXTCLOUD_WEBDAV}/${selectedTrack.id}/`,
+                        `${selectedTrack.id} WebDAV Folder`
+                      )
+                    }
+                    className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-mono"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy Track Folder</span>
+                  </button>
+                </div>
+                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl font-mono text-emerald-300 text-[11px] select-all truncate">
+                  {PRODUCTION_NEXTCLOUD_WEBDAV}/{selectedTrack.id}/
+                </div>
+              </div>
 
-# rclone sync command for Cakewalk / DaVinci Resolve stems
-rclone sync Z:/ brickos_local_cache/ --transfers 4 --checkers 8`}
-                </pre>
+              {/* Live CLI Snippets */}
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <strong className="text-white text-xs block">
+                    DAW & Network Integration Snippets (Cakewalk / Resolve / Windows / macOS):
+                  </strong>
+                </div>
+
+                {/* cURL Stem Upload */}
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-pink-400 font-bold uppercase">
+                      1. cURL Direct Stem Upload ({selectedTrack.id}):
+                    </span>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(
+                          generateCurlStemUploadCommand(
+                            selectedTrack.id,
+                            `${selectedTrack.id}_BS-Roformer_Vocal_24bit_48k.wav`
+                          ),
+                          'cURL Upload Command'
+                        )
+                      }
+                      className="text-[10px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                  <pre className="text-[10px] font-mono text-pink-300 select-all overflow-x-auto whitespace-pre">
+                    {generateCurlStemUploadCommand(
+                      selectedTrack.id,
+                      `${selectedTrack.id}_BS-Roformer_Vocal_24bit_48k.wav`
+                    )}
+                  </pre>
+                </div>
+
+                {/* rclone Sync */}
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-indigo-400 font-bold uppercase">
+                      2. rclone Background Sync Block:
+                    </span>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(
+                          `${generateRcloneConfigBlock()}\n\n${generateRcloneSyncCommand(selectedTrack.id)}`,
+                          'rclone Sync Block'
+                        )
+                      }
+                      className="text-[10px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                  <pre className="text-[10px] font-mono text-indigo-300 select-all overflow-x-auto max-h-24 leading-relaxed">
+                    {generateRcloneSyncCommand(selectedTrack.id)}
+                  </pre>
+                </div>
+
+                {/* Windows Net Use */}
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase">
+                      3. Mount WebDAV as Windows Z: Drive:
+                    </span>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(generateWindowsDriveMountCommand(), 'Windows net use Command')
+                      }
+                      className="text-[10px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                  <pre className="text-[10px] font-mono text-emerald-300 select-all overflow-x-auto whitespace-pre">
+                    {generateWindowsDriveMountCommand()}
+                  </pre>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            {/* Footer Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800">
               <button
-                onClick={() => setIsStorageModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition"
+                onClick={() => {
+                  const sql = generatePostgreSqlRelationalMigration(tracks);
+                  const blob = new Blob([sql], { type: 'text/plain;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = 'brickos_relational_seed.sql';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                  copyToClipboard('Downloaded brickos_relational_seed.sql', 'PostgreSQL Schema');
+                }}
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center justify-center gap-2 transition"
               >
-                Done
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Export Relational SQL Seed (.sql)</span>
               </button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => {
+                    setIsStorageModalOpen(false);
+                    setActiveTab('database');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950"
+                >
+                  <Database className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Open Database & Matrix Tab</span>
+                </button>
+                <button
+                  onClick={() => setIsStorageModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
