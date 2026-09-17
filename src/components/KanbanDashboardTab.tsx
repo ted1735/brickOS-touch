@@ -30,6 +30,7 @@ interface KanbanDashboardTabProps {
   epCollections: EPCollection[];
   selectedEpFilter?: string;
   onSelectEpFilter?: (ep: string) => void;
+  onOpenCreateProject?: () => void;
 }
 
 const STATUS_COLUMNS: { id: TrackStatus; title: string; color: string; bgBadge: string; border: string }[] = [
@@ -50,7 +51,8 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
   onNavigateToTab,
   epCollections,
   selectedEpFilter = 'ALL',
-  onSelectEpFilter
+  onSelectEpFilter,
+  onOpenCreateProject
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [localEpFilter, setLocalEpFilter] = useState<string>(selectedEpFilter);
@@ -210,28 +212,32 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
 
             <button
               onClick={() => {
-                const newIdNum = tracks.length + 1;
-                const newTrk: Track = {
-                  id: `TRK-${String(newIdNum).padStart(2, '0')}`,
-                  ep: activeEp !== 'ALL' ? (activeEp.includes('EP 1') ? 'EP 1: Restoration' : activeEp.includes('EP 2') ? 'EP 2: Conflict Suite' : activeEp.includes('EP 3') ? 'EP 3: War Room Anthems' : 'EP 4: Surrender Sessions') : 'EP 1: Restoration',
-                  title: `New Song ${newIdNum}`,
-                  status: "Idea / Concept",
-                  genre: "Christian Hip Hop / Worship",
-                  bpm: 96,
-                  key: "D Minor",
-                  vocal: "The Architect",
-                  vocalCast: "The Architect (Sub-Sonic Quarry)",
-                  thesis: "New theological thesis statement for BRICK Records.",
-                  sunoPrompt: "High fidelity master, 96 BPM, Key of D Minor",
-                  negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts",
-                  engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
-                  lyrics: "[Verse 1]\nNew kingdom lyrics here...",
-                  versions: [{ version: "v1.0", timestamp: new Date().toISOString().split('T')[0], reason: "Initial sketch", lyrics: "New kingdom lyrics here..." }],
-                  selahPrayed: false
-                };
-                onAddNewTrack(newTrk);
+                if (onOpenCreateProject) {
+                  onOpenCreateProject();
+                } else {
+                  const newIdNum = tracks.length + 1;
+                  const newTrk: Track = {
+                    id: `TRK-${String(newIdNum).padStart(2, '0')}`,
+                    ep: activeEp !== 'ALL' ? (activeEp.includes('EP 1') ? 'EP 1: Restoration' : activeEp.includes('EP 2') ? 'EP 2: Conflict Suite' : activeEp.includes('EP 3') ? 'EP 3: War Room Anthems' : 'EP 4: Surrender Sessions') : 'EP 1: Restoration',
+                    title: `New Song ${newIdNum}`,
+                    status: "Idea / Concept",
+                    genre: "Christian Hip Hop / Worship",
+                    bpm: 96,
+                    key: "D Minor",
+                    vocal: "The Architect",
+                    vocalCast: "The Architect (Sub-Sonic Quarry)",
+                    thesis: "New theological thesis statement for BRICK Records.",
+                    sunoPrompt: "High fidelity master, 96 BPM, Key of D Minor",
+                    negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts",
+                    engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
+                    lyrics: "[Verse 1]\nNew kingdom lyrics here...",
+                    versions: [{ version: "v1.0", timestamp: new Date().toISOString().split('T')[0], reason: "Initial sketch", lyrics: "New kingdom lyrics here..." }],
+                    selahPrayed: false
+                  };
+                  onAddNewTrack(newTrk);
+                }
               }}
-              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 shadow transition"
+              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 shadow transition cursor-pointer"
               title="Add New Track to Active Pipeline"
             >
               <Plus className="w-3.5 h-3.5" />

@@ -44,10 +44,16 @@ import {
   ChevronRight,
   Info,
   Maximize2,
-  Database
+  Database,
+  Disc,
+  Cloud,
+  FolderKanban,
+  Save,
+  RefreshCcw
 } from 'lucide-react';
-import { Track, TrackStatus, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage } from './types';
+import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession } from './types';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
+import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
 import { audioMiniDaw } from './utils/audioEngine';
 import { KanbanDashboardTab } from './components/KanbanDashboardTab';
 import { LyricsAndSunoTab } from './components/LyricsAndSunoTab';
@@ -56,6 +62,23 @@ import { YouTubeSEOTab } from './components/YouTubeSEOTab';
 import { OmniPostTab } from './components/OmniPostTab';
 import { LiveMinistryChartsTab } from './components/LiveMinistryChartsTab';
 import { RelationalDatabaseAndMatrixTab } from './components/RelationalDatabaseAndMatrixTab';
+import { CreateProjectModal } from './components/CreateProjectModal';
+import { CatalogSidebar } from './components/CatalogSidebar';
+import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
+import {
+  loadTracksFromFirestore,
+  subscribeToFirestoreTracks,
+  saveTrackToFirestore,
+  deleteTrackFromFirestore,
+  getLocalCachedTracks,
+  isFirebaseConfigured,
+  seedInitialCatalog,
+  loadSessionsFromFirestore,
+  subscribeToFirestoreSessions,
+  saveSessionToFirestore,
+  deleteSessionFromFirestore,
+  getLocalCachedSessions
+} from './lib/firebase';
 import {
   PRODUCTION_NEXTCLOUD_WEBDAV,
   PRODUCTION_NEXTCLOUD_BASE,
@@ -68,25 +91,374 @@ import {
 } from './data/relationalCatalogBridge';
 
 export default function BrickOSMusicStudioWorkspace() {
-  const [tracks, setTracks] = useState<Track[]>(CANONICAL_TRACKS);
-  const [selectedTrack, setSelectedTrack] = useState<Track>(CANONICAL_TRACKS[0]);
+  const [tracks, setTracks] = useState<Track[]>(() => {
+    const cached = getLocalCachedTracks();
+    return cached && cached.length > 0 ? cached : CANONICAL_TRACKS;
+  });
+  const [selectedTrack, setSelectedTrack] = useState<Track>(() => {
+    const cached = getLocalCachedTracks();
+    return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
+  });
   const [activeTab, setActiveTab] = useState<
     'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
 
-  // Update track status from Kanban
-  const handleUpdateTrackStatus = (trackId: string, newStatus: TrackStatus) => {
-    setTracks(prev => prev.map(t => (t.id === trackId ? { ...t, status: newStatus } : t)));
-    if (selectedTrack.id === trackId) {
-      setSelectedTrack(prev => ({ ...prev, status: newStatus }));
+  // Firestore persistent cloud database synchronization state
+  const [isDbConnected, setIsDbConnected] = useState<boolean>(isFirebaseConfigured());
+  const [isDbSyncing, setIsDbSyncing] = useState<boolean>(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>('');
+
+  // Composition Sessions State
+  const [sessions, setSessions] = useState<CompositionSession[]>(() => {
+    const cached = getLocalCachedSessions();
+    return cached && cached.length > 0 ? cached : INITIAL_COMPOSITION_SESSIONS;
+  });
+  const [activeSessionId, setActiveSessionId] = useState<string | null>('SES-01');
+  const [sidebarMode, setSidebarMode] = useState<'sessions' | 'catalog'>('sessions');
+
+  // Initialize and synchronize with Firestore Database
+  useEffect(() => {
+    let unsubscribeTracks: (() => void) | null = null;
+    let unsubscribeSessions: (() => void) | null = null;
+    let isMounted = true;
+
+    async function initCloudDatabase() {
+      try {
+        setIsDbSyncing(true);
+        // Load cloud catalog from Firestore (seeds if empty)
+        const cloudTracks = await loadTracksFromFirestore(CANONICAL_TRACKS);
+        if (isMounted && cloudTracks && cloudTracks.length > 0) {
+          setTracks(cloudTracks);
+          setIsDbConnected(true);
+          setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          setSelectedTrack(prev => {
+            const found = cloudTracks.find(t => t.id === prev?.id);
+            return found || cloudTracks[0];
+          });
+        }
+
+        // Load composition sessions from Firestore (seeds if empty)
+        const cloudSessions = await loadSessionsFromFirestore(INITIAL_COMPOSITION_SESSIONS);
+        if (isMounted && cloudSessions && cloudSessions.length > 0) {
+          setSessions(cloudSessions);
+        }
+
+        // Subscribe to real-time track updates across browser windows and sessions
+        unsubscribeTracks = subscribeToFirestoreTracks(
+          (realtimeTracks) => {
+            if (isMounted && realtimeTracks && realtimeTracks.length > 0) {
+              setTracks(realtimeTracks);
+              setIsDbConnected(true);
+              setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+              setSelectedTrack(prev => {
+                const found = realtimeTracks.find(t => t.id === prev?.id);
+                return found || prev;
+              });
+            }
+          },
+          (err) => {
+            console.warn('Firestore real-time subscription error:', err);
+          }
+        );
+
+        // Subscribe to real-time session changes across browser windows
+        unsubscribeSessions = subscribeToFirestoreSessions(
+          (realtimeSessions) => {
+            if (isMounted && realtimeSessions && realtimeSessions.length > 0) {
+              setSessions(realtimeSessions);
+            }
+          },
+          (err) => {
+            console.warn('Firestore sessions subscription error:', err);
+          }
+        );
+      } catch (err) {
+        console.error('Failed to initialize Firestore cloud catalog:', err);
+      } finally {
+        if (isMounted) setIsDbSyncing(false);
+      }
+    }
+
+    initCloudDatabase();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribeTracks) unsubscribeTracks();
+      if (unsubscribeSessions) unsubscribeSessions();
+    };
+  }, []);
+
+  // Switch to a composition session
+  const handleSelectSession = (session: CompositionSession) => {
+    setActiveSessionId(session.id);
+    
+    // Find track or update selected track with snapshot
+    const existingTrack = tracks.find(t => t.id === session.trackId);
+    if (existingTrack) {
+      // Apply snapshot properties so workbench immediately matches session
+      const trackWithSnapshot: Track = {
+        ...existingTrack,
+        lyrics: session.snapshot.lyrics || existingTrack.lyrics,
+        sunoPrompt: session.snapshot.sunoPrompt || existingTrack.sunoPrompt,
+        negativePrompt: session.snapshot.negativePrompt || existingTrack.negativePrompt,
+        engineSliders: session.snapshot.engineSliders || existingTrack.engineSliders,
+        bpm: session.snapshot.bpm || existingTrack.bpm,
+        key: session.snapshot.key || existingTrack.key,
+        status: session.snapshot.status || existingTrack.status,
+        notes: session.snapshot.notes || existingTrack.notes
+      };
+      setSelectedTrack(trackWithSnapshot);
+    }
+
+    if (session.activeTab && session.activeTab !== 'kanban') {
+      setActiveTab(session.activeTab as any);
+    } else if (activeTab === 'kanban') {
+      setActiveTab('lyrics');
+    }
+
+    setCopiedNotification(`Switched to session: "${session.name}"`);
+    setTimeout(() => setCopiedNotification(''), 3500);
+
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsCatalogDrawerOpen(false);
     }
   };
 
-  // Add new track from Kanban
-  const handleAddNewTrack = (newTrack: Track) => {
-    setTracks(prev => [...prev, newTrack]);
+  // Save current workspace state as new composition session
+  const handleSaveCurrentSession = async (
+    name: string,
+    description: string,
+    tags: string[],
+    isPinned: boolean
+  ) => {
+    const newSessionId = `SES-${Date.now().toString().slice(-4)}`;
+    const newSession: CompositionSession = {
+      id: newSessionId,
+      name,
+      trackId: selectedTrack.id,
+      trackTitle: selectedTrack.title,
+      ep: selectedTrack.ep,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      activeTab: activeTab,
+      description,
+      tags: tags.length > 0 ? tags : ['Composition'],
+      isPinned,
+      color: '#6366f1',
+      snapshot: {
+        lyrics: selectedTrack.lyrics,
+        sunoPrompt: selectedTrack.sunoPrompt,
+        negativePrompt: selectedTrack.negativePrompt,
+        engineSliders: selectedTrack.engineSliders,
+        bpm: selectedTrack.bpm,
+        key: selectedTrack.key,
+        genre: selectedTrack.genre,
+        vocal: selectedTrack.vocal,
+        vocalCast: selectedTrack.vocalCast,
+        thesis: selectedTrack.thesis,
+        selahPrayed: selectedTrack.selahPrayed,
+        status: selectedTrack.status,
+        notes: selectedTrack.notes,
+        versionsCount: selectedTrack.versions?.length || 1,
+        latestVersionTag: selectedTrack.versions[selectedTrack.versions.length - 1]?.version || 'v1.0'
+      }
+    };
+
+    setSessions(prev => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
+
+    try {
+      setIsDbSyncing(true);
+      await saveSessionToFirestore(newSession);
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setCopiedNotification(`Saved composition session "${newSession.name}" to Cloud!`);
+      setTimeout(() => setCopiedNotification(''), 4000);
+    } catch (err) {
+      console.error('Failed to save session to Firestore:', err);
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
+
+  // Update existing session snapshot with latest workspace edits
+  const handleUpdateSessionSnapshot = async (sessionId: string) => {
+    let updatedSession: CompositionSession | null = null;
+    setSessions(prev =>
+      prev.map(s => {
+        if (s.id === sessionId) {
+          updatedSession = {
+            ...s,
+            updatedAt: new Date().toISOString(),
+            activeTab: activeTab,
+            snapshot: {
+              ...s.snapshot,
+              lyrics: selectedTrack.lyrics,
+              sunoPrompt: selectedTrack.sunoPrompt,
+              negativePrompt: selectedTrack.negativePrompt,
+              engineSliders: selectedTrack.engineSliders,
+              bpm: selectedTrack.bpm,
+              key: selectedTrack.key,
+              status: selectedTrack.status,
+              notes: selectedTrack.notes,
+              versionsCount: selectedTrack.versions?.length || 1,
+              latestVersionTag: selectedTrack.versions[selectedTrack.versions.length - 1]?.version || 'v1.0'
+            }
+          };
+          return updatedSession;
+        }
+        return s;
+      })
+    );
+
+    if (updatedSession) {
+      try {
+        setIsDbSyncing(true);
+        await saveSessionToFirestore(updatedSession);
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        setCopiedNotification(`Updated session snapshot for "${(updatedSession as CompositionSession).name}"!`);
+        setTimeout(() => setCopiedNotification(''), 3500);
+      } catch (err) {
+        console.error('Failed to update session in Firestore:', err);
+      } finally {
+        setIsDbSyncing(false);
+      }
+    }
+  };
+
+  // Fork / Duplicate session
+  const handleDuplicateSession = async (session: CompositionSession) => {
+    const forkedId = `SES-${Date.now().toString().slice(-4)}`;
+    const forkedSession: CompositionSession = {
+      ...session,
+      id: forkedId,
+      name: `${session.name} (Fork)`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isPinned: false
+    };
+
+    setSessions(prev => [forkedSession, ...prev]);
+    setActiveSessionId(forkedId);
+
+    try {
+      setIsDbSyncing(true);
+      await saveSessionToFirestore(forkedSession);
+      setCopiedNotification(`Forked session: "${forkedSession.name}"`);
+      setTimeout(() => setCopiedNotification(''), 3500);
+    } catch (err) {
+      console.error('Failed to fork session:', err);
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
+
+  // Delete session
+  const handleDeleteSession = async (sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(null);
+    }
+
+    try {
+      setIsDbSyncing(true);
+      await deleteSessionFromFirestore(sessionId);
+      setCopiedNotification('Session removed from cloud.');
+      setTimeout(() => setCopiedNotification(''), 3000);
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
+
+  // Toggle Pin session
+  const handleTogglePinSession = async (session: CompositionSession) => {
+    const updated: CompositionSession = {
+      ...session,
+      isPinned: !session.isPinned,
+      updatedAt: new Date().toISOString()
+    };
+    setSessions(prev => {
+      const next = prev.map(s => (s.id === session.id ? updated : s));
+      next.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+      });
+      return next;
+    });
+
+    try {
+      await saveSessionToFirestore(updated);
+    } catch (err) {
+      console.error('Failed to update session pin status:', err);
+    }
+  };
+
+  // Update track status from Kanban and persist to Firestore
+  const handleUpdateTrackStatus = async (trackId: string, newStatus: TrackStatus) => {
+    let targetTrack: Track | undefined;
+    setTracks(prev => prev.map(t => {
+      if (t.id === trackId) {
+        targetTrack = { ...t, status: newStatus };
+        return targetTrack;
+      }
+      return t;
+    }));
+    if (selectedTrack.id === trackId) {
+      setSelectedTrack(prev => ({ ...prev, status: newStatus }));
+    }
+    if (targetTrack) {
+      try {
+        setIsDbSyncing(true);
+        await saveTrackToFirestore(targetTrack);
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      } catch (err) {
+        console.warn('Could not save status change to Firestore:', err);
+      } finally {
+        setIsDbSyncing(false);
+      }
+    }
+  };
+
+  // Modal for new track project creation
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCatalogDrawerOpen, setIsCatalogDrawerOpen] = useState(false);
+
+  // Add new track from Modal or Kanban and permanently persist to Firestore
+  const handleAddNewTrack = async (newTrack: Track, openLyricEngine = true) => {
+    setTracks(prev => [newTrack, ...prev]);
     setSelectedTrack(newTrack);
+    if (openLyricEngine) {
+      setActiveTab('lyrics');
+    }
+    try {
+      setIsDbSyncing(true);
+      await saveTrackToFirestore(newTrack);
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setCopiedNotification(`Created & saved "${newTrack.title}" (${newTrack.id}) to Cloud Firestore!`);
+      setTimeout(() => setCopiedNotification(''), 4000);
+    } catch (err) {
+      console.error('Failed to save new track to cloud Firestore:', err);
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
+
+  // Manual Re-sync / Backup catalog to Firestore
+  const handleManualSyncDatabase = async () => {
+    try {
+      setIsDbSyncing(true);
+      await seedInitialCatalog(tracks);
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setCopiedNotification(`Successfully synced all ${tracks.length} tracks to Cloud Firestore!`);
+      setTimeout(() => setCopiedNotification(''), 4000);
+    } catch (err: any) {
+      alert(`Cloud sync error: ${err.message || 'Check connection'}`);
+    } finally {
+      setIsDbSyncing(false);
+    }
   };
 
   // Catalog filtering & search
@@ -189,27 +561,55 @@ export default function BrickOSMusicStudioWorkspace() {
     setTimeout(() => setCopiedNotification(''), 3000);
   };
 
-  // Commit Song Changes & Version Increment
-  const handleTrackUpdate = (field: keyof Track, value: any) => {
+  // Commit Song Changes & Updates and persist to Firestore
+  const handleTrackUpdate = async (field: keyof Track | 'version_commit' | 'batch_update', value: any) => {
+    let modifiedTrackToPersist: Track | null = null;
     const updated = tracks.map(t => {
       if (t.id === selectedTrack.id) {
-        const newVersions = [...t.versions];
-        if (field === 'lyrics' && value !== t.lyrics) {
-          const nextVerNum = (newVersions.length + 1).toFixed(1);
-          newVersions.push({
-            version: `v${nextVerNum}`,
-            timestamp: new Date().toISOString().split('T')[0],
-            reason: `Updated ${field}`,
-            lyrics: value
-          });
+        if (field === 'version_commit') {
+          const nextVerNum = (t.versions.length + 1).toFixed(1);
+          const versionLabel = value?.version || `v${nextVerNum}`;
+          const versionLyrics = value?.lyrics !== undefined ? value.lyrics : t.lyrics;
+          const newVersion: TrackVersion = {
+            version: versionLabel,
+            timestamp: value?.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19),
+            reason: value?.reason || 'Manual snapshot checkpoint',
+            lyrics: versionLyrics
+          };
+          const newVersions = [...t.versions, newVersion];
+          const modified = { 
+            ...t, 
+            versions: newVersions,
+            ...(value?.lyrics !== undefined ? { lyrics: value.lyrics } : {}),
+            ...(value?.auditHistory !== undefined ? { auditHistory: value.auditHistory } : {})
+          };
+          setSelectedTrack(modified);
+          modifiedTrackToPersist = modified;
+          return modified;
         }
-        const modified = { ...t, [field]: value, versions: newVersions };
+        if (field === 'batch_update') {
+          const modified = { ...t, ...value };
+          setSelectedTrack(modified);
+          modifiedTrackToPersist = modified;
+          return modified;
+        }
+        const modified = { ...t, [field]: value };
         setSelectedTrack(modified);
+        modifiedTrackToPersist = modified;
         return modified;
       }
       return t;
     });
     setTracks(updated);
+
+    if (modifiedTrackToPersist) {
+      try {
+        await saveTrackToFirestore(modifiedTrackToPersist);
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      } catch (err) {
+        console.warn('Failed to persist track modification to Firestore:', err);
+      }
+    }
   };
 
   // Playback toggle
@@ -601,6 +1001,20 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 WebDAV Online
               </span>
+              <button
+                type="button"
+                onClick={handleManualSyncDatabase}
+                className={`hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border transition cursor-pointer ${
+                  isDbConnected
+                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-700/40 hover:bg-cyan-900/80'
+                    : 'bg-amber-950/80 text-amber-300 border-amber-700/40 hover:bg-amber-900/80'
+                }`}
+                title={`Firestore Cloud Database: ${isDbConnected ? 'Connected & Auto-Saving' : 'Connecting...'} • Click to trigger cloud re-sync`}
+              >
+                <Database className={`w-3 h-3 ${isDbSyncing ? 'animate-spin text-amber-400' : 'text-cyan-400'}`} />
+                <span>{isDbSyncing ? 'Syncing...' : isDbConnected ? 'Firestore Online' : 'Connecting...'}</span>
+                {lastSyncedAt && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
+              </button>
             </div>
             <p className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
               <span>Ted Moyer (Primary Artist / OAC)</span>
@@ -663,6 +1077,37 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <span className="hidden lg:inline">Nextcloud Hub</span>
           </button>
 
+          {/* Project Composition Sessions Toggle */}
+          <button
+            onClick={() => {
+              if (isCatalogDrawerOpen && sidebarMode === 'sessions') {
+                setIsCatalogDrawerOpen(false);
+              } else {
+                setSidebarMode('sessions');
+                setIsCatalogDrawerOpen(true);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isCatalogDrawerOpen && sidebarMode === 'sessions'
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-indigo-950/60 shadow-md'
+                : 'bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white border-slate-700'
+            }`}
+            title="Open Project Composition Sessions Manager"
+          >
+            <FolderKanban className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Sessions ({sessions.length})</span>
+            <span className="sm:hidden">Sessions</span>
+          </button>
+
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
+            title="Create New Sovereign Track"
+          >
+            <Plus className="w-3.5 h-3.5 text-white" />
+            <span>+ New Project</span>
+          </button>
+
           <button
             onClick={() => setIsSunoBridgeOpen(true)}
             className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30"
@@ -674,138 +1119,162 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       </header>
 
       {/* MAIN LAYOUT */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         
-        {/* LEFT SIDEBAR: TRACK & EP CATALOG (Hidden on Kanban Dashboard as requested) */}
-        {activeTab !== 'kanban' && (
-          <aside className="w-full lg:w-80 bg-slate-900/70 border-r border-slate-800 flex flex-col p-4 space-y-3.5 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
-                Catalog Roster ({filteredCatalogTracks.length}/{tracks.length})
-              </span>
-              <button
-                onClick={() => {
-                  const newTrk: Track = {
-                    id: `TRK-${(tracks.length + 1).toString().padStart(2, '0')}`,
-                    ep: "EP 1: Restoration",
-                    title: "New Sovereign Track",
-                    status: "Idea / Concept",
-                    genre: "Christian Hip Hop / Worship",
-                    bpm: 100,
-                    key: "D Minor",
-                    vocal: "Ted Moyer",
-                    vocalCast: "Silas Thorne (Aged Oak)",
-                    thesis: "New kingdom thesis statement.",
-                    sunoPrompt: "High fidelity Nashville master, 100 BPM, D Minor, warm acoustic flatpicking, raw vocal rasp",
-                    negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts, muddy bass",
-                    engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
-                    lyrics: "[Vocal Archetype: Silas Thorne]\n[Verse 1]\nNew draft lyrics here...",
-                    versions: [{ version: "v1.0", timestamp: new Date().toISOString().split('T')[0], reason: "Created track", lyrics: "New draft lyrics here..." }]
-                  };
-                  setTracks([newTrk, ...tracks]);
-                  setSelectedTrack(newTrk);
-                }}
-                className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 text-xs font-bold"
-                title="Add New Track"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>New</span>
-              </button>
+        {/* COLLAPSIBLE PROJECT SESSIONS & CATALOG DRAWER / SIDEBAR */}
+        {isCatalogDrawerOpen && (
+          <>
+            {/* Backdrop on mobile screens */}
+            <div 
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
+              onClick={() => setIsCatalogDrawerOpen(false)}
+            />
+            <div className="fixed lg:static inset-y-0 left-0 z-40 lg:z-auto h-full flex-shrink-0 animate-in slide-in-from-left duration-200">
+              {sidebarMode === 'sessions' ? (
+                <ProjectSessionsSidebar
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  selectedTrack={selectedTrack}
+                  activeTab={activeTab}
+                  isDbSyncing={isDbSyncing}
+                  onSelectSession={handleSelectSession}
+                  onSaveCurrentSession={handleSaveCurrentSession}
+                  onUpdateSessionSnapshot={handleUpdateSessionSnapshot}
+                  onDuplicateSession={handleDuplicateSession}
+                  onDeleteSession={handleDeleteSession}
+                  onTogglePinSession={handleTogglePinSession}
+                  onClose={() => setIsCatalogDrawerOpen(false)}
+                  onSwitchToCatalogTab={() => setSidebarMode('catalog')}
+                  catalogTracksCount={tracks.length}
+                />
+              ) : (
+                <CatalogSidebar
+                  tracks={tracks}
+                  selectedTrack={selectedTrack}
+                  onSelectTrack={(trk) => {
+                    setSelectedTrack(trk);
+                    setActiveTab('lyrics');
+                    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                      setIsCatalogDrawerOpen(false);
+                    }
+                  }}
+                  onAddTrack={() => setIsCreateModalOpen(true)}
+                  onClose={() => setIsCatalogDrawerOpen(false)}
+                  onSwitchToSessionsTab={() => setSidebarMode('sessions')}
+                  sessionsCount={sessions.length}
+                />
+              )}
             </div>
-
-            {/* Search box */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search track, genre, vocal..."
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            {/* EP Filter chips */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar text-[10px] font-bold">
-              <button
-                onClick={() => setSelectedEpFilter('ALL')}
-                className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
-                  selectedEpFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                All
-              </button>
-              {EP_COLLECTIONS.map((ep, idx) => (
-                <button
-                  key={ep.id}
-                  onClick={() => setSelectedEpFilter(`EP ${idx + 1}`)}
-                  className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
-                    selectedEpFilter === `EP ${idx + 1}` ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  EP {idx + 1}
-                </button>
-              ))}
-            </div>
-
-            {/* Scrollable Track list */}
-            <div className="space-y-2 flex-1 overflow-y-auto max-h-[calc(100vh-250px)] custom-scrollbar pr-1">
-              {filteredCatalogTracks.map(trk => (
-                <div
-                  key={trk.id}
-                  onClick={() => setSelectedTrack(trk)}
-                  className={`p-3.5 rounded-xl border transition cursor-pointer flex flex-col gap-1.5 ${
-                    selectedTrack.id === trk.id
-                      ? 'bg-indigo-950/50 border-indigo-500/80 shadow-lg shadow-indigo-950 ring-1 ring-indigo-500/30'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-[11px]">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-bold text-indigo-400">{trk.id}</span>
-                      {trk.selahPrayed && (
-                        <Heart className="w-3 h-3 text-amber-400 fill-amber-400/40" title="24h Selah Block Completed" />
-                      )}
-                    </div>
-                    <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${
-                      trk.status === 'Sent for Distribution' || trk.status === 'Released'
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
-                        : trk.status === 'Audio Master'
-                        ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
-                        : 'bg-slate-800 text-slate-300'
-                    }`}>
-                      {trk.status}
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-bold text-white line-clamp-1">{trk.title}</h3>
-                  <p className="text-[11px] text-slate-400 line-clamp-1">{trk.genre} • {trk.bpm} BPM • {trk.key}</p>
-                  <div className="text-[10px] text-slate-400 truncate pt-0.5 border-t border-slate-800/50 font-mono">
-                    {trk.vocalCast}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          </>
         )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5 bg-slate-950' : 'p-6 space-y-6 overflow-y-auto'}`}>
+        <main className={`flex-1 flex flex-col min-w-0 ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5 bg-slate-950' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
           
           {/* TRACK HEADER BANNER (Shown only on single-track workbench views) */}
           {activeTab !== 'kanban' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 rounded bg-indigo-900 text-indigo-300 font-mono text-xs font-bold">
                     {selectedTrack.id}
                   </span>
-                  <span className="text-xs text-slate-400">{selectedTrack.ep}</span>
-                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-xs">
-                    {selectedTrack.bpm} BPM • {selectedTrack.key}
-                  </span>
+
+                  {/* Quick Track Switcher Dropdown */}
+                  <select
+                    value={selectedTrack.id}
+                    onChange={(e) => {
+                      const found = tracks.find(t => t.id === e.target.value);
+                      if (found) {
+                        setSelectedTrack(found);
+                        setActiveTab('lyrics');
+                      }
+                    }}
+                    className="bg-slate-950 border border-slate-700 hover:border-indigo-500 rounded-xl px-2.5 py-1 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 max-w-[220px] truncate cursor-pointer shadow-sm"
+                    title="Quick Switch Track"
+                  >
+                    {tracks.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.id}: {t.title}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Toggle Sessions Sidebar Button */}
+                  <button
+                    onClick={() => {
+                      if (isCatalogDrawerOpen && sidebarMode === 'sessions') {
+                        setIsCatalogDrawerOpen(false);
+                      } else {
+                        setSidebarMode('sessions');
+                        setIsCatalogDrawerOpen(true);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+                      isCatalogDrawerOpen && sidebarMode === 'sessions'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-md shadow-indigo-950/60'
+                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-indigo-300 hover:text-white'
+                    }`}
+                    title="Manage Composition Sessions"
+                  >
+                    <FolderKanban className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Sessions ({sessions.filter(s => s.trackId === selectedTrack.id).length})</span>
+                  </button>
+
+                  {/* Toggle Catalog Roster Button */}
+                  <button
+                    onClick={() => {
+                      if (isCatalogDrawerOpen && sidebarMode === 'catalog') {
+                        setIsCatalogDrawerOpen(false);
+                      } else {
+                        setSidebarMode('catalog');
+                        setIsCatalogDrawerOpen(true);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+                      isCatalogDrawerOpen && sidebarMode === 'catalog'
+                        ? 'bg-indigo-600 border-indigo-500 text-white'
+                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                    title="Toggle Track Catalog Roster"
+                  >
+                    <Disc className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>{isCatalogDrawerOpen && sidebarMode === 'catalog' ? 'Close Roster' : `Catalog Roster (${tracks.length})`}</span>
+                  </button>
+
+                  {/* + New Song Button */}
+                  <button
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 border border-emerald-400/30 transition cursor-pointer shadow-sm"
+                    title="Create New Project Track"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ New Song</span>
+                  </button>
+
+                  {/* Return to Kanban */}
+                  <button
+                    onClick={() => setActiveTab('kanban')}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                    title="Return to Master Kanban Dashboard"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Kanban</span>
+                  </button>
                 </div>
-                <h2 className="text-2xl font-black text-white">{selectedTrack.title}</h2>
-                <p className="text-xs text-slate-300 italic max-w-2xl">"{selectedTrack.thesis}"</p>
+
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2 flex-wrap">
+                    <span>{selectedTrack.title}</span>
+                    <span className="text-xs px-2 py-0.5 rounded font-normal text-slate-400 bg-slate-800 font-mono">
+                      {selectedTrack.bpm} BPM • {selectedTrack.key}
+                    </span>
+                    <span className="text-xs text-indigo-400 font-medium font-mono">
+                      {selectedTrack.ep}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-300 italic max-w-2xl mt-0.5">"{selectedTrack.thesis}"</p>
+                </div>
               </div>
 
               {/* Status & Vocal Cast Selector */}
@@ -815,7 +1284,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                   <select
                     value={selectedTrack.status}
                     onChange={(e) => handleTrackUpdate('status', e.target.value as any)}
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500"
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
                     <option value="Idea / Concept">Idea / Concept</option>
                     <option value="Lyrics Finalized">Lyrics Finalized</option>
@@ -841,7 +1310,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 <div className="pt-4">
                   <button
                     onClick={() => handleTrackUpdate('selahPrayed', !selectedTrack.selahPrayed)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
                       selectedTrack.selahPrayed
                         ? 'bg-emerald-950 border-emerald-600 text-emerald-300'
                         : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
@@ -1003,6 +1472,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               epCollections={EP_COLLECTIONS}
               selectedEpFilter={selectedEpFilter}
               onSelectEpFilter={setSelectedEpFilter}
+              onOpenCreateProject={() => setIsCreateModalOpen(true)}
             />
           )}
 
@@ -1053,6 +1523,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               selectedTrack={selectedTrack}
               onSelectTrack={setSelectedTrack}
               onCopyText={copyToClipboard}
+              isDbConnected={isDbConnected}
+              isDbSyncing={isDbSyncing}
+              onSyncDatabase={handleManualSyncDatabase}
             />
           )}
 
@@ -1932,6 +2405,16 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           </div>
         </div>
       )}
+
+      {/* CREATE PROJECT MODAL */}
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreateProject={(newTrack) => handleAddNewTrack(newTrack, true)}
+        existingTracksCount={tracks.length}
+        existingTracks={tracks}
+        defaultEp={selectedTrack.ep}
+      />
 
     </div>
   );

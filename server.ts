@@ -144,6 +144,71 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
   }
 });
 
+// 3b. Automated Lyric Rewrite Engine incorporating approved audit feedback
+app.post('/api/gemini/rewrite-lyrics', async (req, res) => {
+  try {
+    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.1-pro-preview' } = req.body;
+    if (!lyrics) {
+      return res.status(400).json({ error: 'Original lyrics are required' });
+    }
+    if (!auditFeedback) {
+      return res.status(400).json({ error: 'Audit feedback is required to perform guided rewrite' });
+    }
+
+    const ai = getGenAI();
+    const systemPrompt = `You are the Lead Master Lyricist & Theological Supervisor for brickOS Sovereign Records.
+Your mandate is to rewrite and elevate the provided song lyrics strictly incorporating the approved critique and audit directives.
+
+Strict Guardrails to Enforce:
+1. Preserve the artist's raw authenticity, vocal persona (${vocal || 'Primary Vocal'}), and blue-collar storytelling while eliminating flagged religious cliches.
+2. Sharpen the OBI funnel so every stanza drives directly toward the chorus payoff.
+3. Ensure the Throne Room Pivot in the bridge clearly pivots vertically from human struggle to the Creator's sovereignty.
+4. Maintain proper Suno structural meta-tags: [Verse 1], [Chorus], [Verse 2], [Bridge], [The Throne Room Pivot], [Outro], etc.
+5. Output ONLY the complete, ready-to-sing rewritten lyrics with structural tags. Do not wrap in conversational preamble or extra explanations.`;
+
+    const prompt = `${systemPrompt}
+
+Track Context:
+Title: ${title || 'Untitled Track'}
+EP Suite: ${ep || 'Sovereign Release'}
+Genre: ${genre || 'Christian Hip Hop / Worship'} (${bpm || 96} BPM)
+Vocal Archetype: ${vocal || 'The Architect'}
+Theological Thesis: ${thesis || 'Brokenness Redeemed In Christ'}
+
+APPROVED AUDIT FEEDBACK & REVISION DIRECTIVES:
+${auditFeedback}
+
+ORIGINAL LYRICS:
+${lyrics}
+
+Output the full rewritten lyrics now:`;
+
+    let responseText = '';
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+      responseText = response.text || '';
+    } catch (primaryErr) {
+      console.warn(`Rewrite with ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
+      const fallback = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+      });
+      responseText = fallback.text || '';
+    }
+
+    // Strip any markdown code blocks if the model wrapped output
+    responseText = responseText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '').trim();
+
+    res.json({ rewrittenLyrics: responseText });
+  } catch (err: any) {
+    console.error('Lyric rewrite error:', err);
+    res.status(500).json({ error: err.message || 'Lyric rewrite failed' });
+  }
+});
+
 // 4. Multi-Turn Gemini Chatbot (with custom roles)
 app.post('/api/gemini/chat', async (req, res) => {
   try {

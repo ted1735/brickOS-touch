@@ -22,9 +22,16 @@ import {
   ShieldCheck,
   Search,
   Eye,
-  Trash2
+  Trash2,
+  History,
+  CheckCheck,
+  ChevronDown,
+  ChevronUp,
+  BookmarkCheck,
+  ArrowRight,
+  RotateCcw
 } from 'lucide-react';
-import { Track } from '../types';
+import { Track, AuditFeedbackRecord, TrackVersion } from '../types';
 
 interface LyricsAndSunoTabProps {
   track: Track;
@@ -39,8 +46,23 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 }) => {
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditResult, setAuditResult] = useState<string | null>(null);
+  const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.5-flash'>('gemini-3.1-pro-preview');
   const [copiedBlock, setCopiedBlock] = useState<number | null>(null);
+  const [isFeedbackCopied, setIsFeedbackCopied] = useState(false);
+
+  // Automated Re-write & Dual-Version Commitment Pipeline
+  const [isApplyingChanges, setIsApplyingChanges] = useState(false);
+  const [applyStageMessage, setApplyStageMessage] = useState<string | null>(null);
+  const [successCommitNotification, setSuccessCommitNotification] = useState<{
+    message: string;
+    preVer: string;
+    postVer: string;
+  } | null>(null);
+
+  // Stored Feedback History & Review Vault State
+  const [showFeedbackVault, setShowFeedbackVault] = useState(false);
+  const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null);
 
   // Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -56,6 +78,47 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
   // Diff comparison modal
   const [comparingVersion, setComparingVersion] = useState<any | null>(null);
+
+  // Sync feedback history from track or localStorage on track selection
+  useEffect(() => {
+    if (!track.auditHistory || track.auditHistory.length === 0) {
+      try {
+        const saved = localStorage.getItem(`brickos_audit_${track.id}`);
+        if (saved) {
+          const parsed: AuditFeedbackRecord[] = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            onUpdateTrack('auditHistory', parsed);
+            if (!auditResult) {
+              setAuditResult(parsed[0].feedback);
+              setActiveFeedbackId(parsed[0].id);
+            }
+          }
+        }
+      } catch (_) {}
+    } else if (track.auditHistory && track.auditHistory.length > 0 && !auditResult) {
+      setAuditResult(track.auditHistory[0].feedback);
+      setActiveFeedbackId(track.auditHistory[0].id);
+    }
+  }, [track.id]);
+
+  // Direct Paste from Clipboard helper
+  const handlePasteToLyrics = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        onUpdateTrack('lyrics', text);
+      } else {
+        setIsImportModalOpen(true);
+      }
+    } catch {
+      setIsImportModalOpen(true);
+    }
+  };
+
+  const handleInsertTag = (tag: string) => {
+    const newLyrics = track.lyrics ? `${track.lyrics}\n\n${tag}\n` : `${tag}\n`;
+    onUpdateTrack('lyrics', newLyrics);
+  };
 
   // Local storage auto-sync on change
   useEffect(() => {
@@ -84,30 +147,168 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
     onCopyText(bundle, 'Suno v5.5 4-Block Generation Bundle');
   };
 
-  // Run Gemini Lyrical & Theological Audit
+  // Run Gemini Lyrical & Theological Audit and store in review archive
   const handleRunAudit = async () => {
+    if (!track.lyrics || !track.lyrics.trim()) {
+      setAuditResult('Please paste or write lyrics first before running the theological audit.');
+      return;
+    }
     setIsAuditing(true);
     setAuditResult(null);
+    setSuccessCommitNotification(null);
     try {
       const res = await fetch('/api/gemini/audit-lyric', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          title: track.title,
           trackTitle: track.title,
           genre: track.genre,
           bpm: track.bpm,
           thesis: track.thesis,
           lyrics: track.lyrics,
-          vocalCast: track.vocalCast,
+          vocal: track.vocalCast || track.vocal,
+          vocalCast: track.vocalCast || track.vocal,
+          ep: track.ep,
           model: auditModel
         })
       });
       const data = await res.json();
-      setAuditResult(data.audit || 'Audit complete: Lyrics pass Nashville SOP v1.9 standards.');
+      const feedbackText = data.audit || 'Audit complete: Lyrics pass Nashville SOP v1.9 standards.';
+      setAuditResult(feedbackText);
+
+      // Storing feedback for review later in the Review Vault
+      const newRecord: AuditFeedbackRecord = {
+        id: `fb-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date().toLocaleDateString(),
+        model: auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.5 Flash',
+        feedback: feedbackText,
+        status: 'pending'
+      };
+
+      const updatedHistory = [newRecord, ...(track.auditHistory || [])];
+      onUpdateTrack('auditHistory', updatedHistory);
+      setActiveFeedbackId(newRecord.id);
+
+      try {
+        localStorage.setItem(`brickos_audit_${track.id}`, JSON.stringify(updatedHistory));
+      } catch (_) {}
+
     } catch (err: any) {
       setAuditResult(`[Audit Error] ${err.message || 'Unable to connect to Gemini API. Check network.'}`);
     } finally {
       setIsAuditing(false);
+    }
+  };
+
+  // Quick Copy button for audit feedback
+  const handleCopyFeedbackText = (textToCopy?: string) => {
+    const text = textToCopy || auditResult;
+    if (!text) return;
+    onCopyText(text, 'Gemini Audit Feedback');
+    setIsFeedbackCopied(true);
+    setTimeout(() => setIsFeedbackCopied(false), 2500);
+  };
+
+  // "Yes, I Agree — Apply Changes" automated workflow
+  // 1. Instant version commitment before any changes
+  // 2. Gemini rewrites lyrics with feedback
+  // 3. Screen updates live with new lyrics
+  // 4. Instant version commitment after changes finished
+  const handleApplyFeedbackChanges = async (targetFeedback?: AuditFeedbackRecord) => {
+    const feedbackText = targetFeedback ? targetFeedback.feedback : auditResult;
+    if (!feedbackText || !track.lyrics.trim() || isApplyingChanges) return;
+
+    setIsApplyingChanges(true);
+    setSuccessCommitNotification(null);
+
+    try {
+      // STEP 1: INSTANT VERSION COMMITMENT BEFORE ANY CHANGES
+      const currentVerCount = track.versions.length;
+      const preVersionLabel = `v${(currentVerCount + 0.1).toFixed(1)} (Pre-AI Snapshot)`;
+      setApplyStageMessage(`Step 1/3: Instant version ${preVersionLabel} committed before changes...`);
+
+      onUpdateTrack('version_commit', {
+        version: preVersionLabel,
+        reason: 'Pre-Gemini Revision snapshot before applying audit critique',
+        lyrics: track.lyrics,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      });
+
+      // UX pause for visual confirmation
+      await new Promise(r => setTimeout(r, 600));
+
+      // STEP 2: GEMINI REWRITES THE LYRICS BASED ON AUDIT FEEDBACK
+      setApplyStageMessage('Step 2/3: Gemini is rewriting lyrics live to resolve all audit directives...');
+
+      const res = await fetch('/api/gemini/rewrite-lyrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: track.title,
+          genre: track.genre,
+          bpm: track.bpm,
+          thesis: track.thesis,
+          lyrics: track.lyrics,
+          vocal: track.vocalCast || track.vocal,
+          ep: track.ep,
+          auditFeedback: feedbackText,
+          model: auditModel
+        })
+      });
+
+      const data = await res.json();
+      if (!data.rewrittenLyrics) {
+        throw new Error(data.error || 'Gemini did not return rewritten lyrics');
+      }
+
+      const rewrittenLyrics = data.rewrittenLyrics;
+
+      // STEP 3: LIVE SCREEN UPDATE OF REWRITTEN LYRICS
+      setApplyStageMessage('Step 3/3: Updating lyrics live & committing post-revision version...');
+      onUpdateTrack('lyrics', rewrittenLyrics);
+
+      // STEP 4: INSTANT VERSION COMMITMENT AFTER CHANGES FINISHED
+      const postVersionLabel = `v${(currentVerCount + 1).toFixed(1)} (Post-AI Revision)`;
+
+      // Update feedback item status to 'applied'
+      const targetId = targetFeedback ? targetFeedback.id : activeFeedbackId;
+      const updatedAuditHistory = (track.auditHistory || []).map(item => {
+        if (item.id === targetId || (item.feedback === feedbackText && item.status === 'pending')) {
+          return {
+            ...item,
+            status: 'applied' as const,
+            preRevisionVersion: preVersionLabel,
+            postRevisionVersion: postVersionLabel
+          };
+        }
+        return item;
+      });
+
+      onUpdateTrack('version_commit', {
+        version: postVersionLabel,
+        reason: `Applied Gemini audit revisions (${auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.5 Flash'})`,
+        lyrics: rewrittenLyrics,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        auditHistory: updatedAuditHistory
+      });
+
+      try {
+        localStorage.setItem(`brickos_audit_${track.id}`, JSON.stringify(updatedAuditHistory));
+      } catch (_) {}
+
+      setSuccessCommitNotification({
+        message: 'Revisions successfully applied and updated live on screen!',
+        preVer: preVersionLabel,
+        postVer: postVersionLabel
+      });
+
+    } catch (err: any) {
+      console.error('Failed to apply audit changes:', err);
+      alert(`Error applying Gemini revisions: ${err.message || 'Server error'}`);
+    } finally {
+      setIsApplyingChanges(false);
+      setApplyStageMessage(null);
     }
   };
 
@@ -298,13 +499,80 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
               </div>
             </div>
 
+            {/* Quick Lyric Actions Toolbar */}
+            <div className="flex items-center justify-between gap-2 flex-wrap bg-slate-950 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handlePasteToLyrics}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] flex items-center gap-1 shadow transition cursor-pointer"
+                  title="Paste lyrics directly from your clipboard"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Paste Clipboard</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-medium border border-slate-700 transition cursor-pointer"
+                  title="Open Import / Upload Modal"
+                >
+                  <span>Import / TXT</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onUpdateTrack('lyrics', '')}
+                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 text-[11px] font-medium border border-slate-800 hover:border-rose-800/40 transition cursor-pointer"
+                  title="Clear all lyrics"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              </div>
+
+              {/* Quick section tag buttons */}
+              <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-mono">
+                <span className="text-slate-500 mr-1 text-[9px] uppercase font-sans">Insert:</span>
+                <button
+                  type="button"
+                  onClick={() => handleInsertTag('[Verse 1]')}
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800"
+                >
+                  +Verse
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertTag('[Chorus]')}
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white border border-indigo-900/40"
+                >
+                  +Chorus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertTag('[Bridge]\n[The Throne Room Pivot]')}
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-white border border-amber-900/40"
+                >
+                  +Bridge
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertTag('[Outro]')}
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800"
+                >
+                  +Outro
+                </button>
+              </div>
+            </div>
+
             {/* Lyric Textarea */}
             <textarea
               rows={15}
               value={track.lyrics}
               onChange={(e) => onUpdateTrack('lyrics', e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 custom-scrollbar shadow-inner"
-              placeholder="Write lyrics with meta tags: [Verse 1], [Chorus], [Bridge], [Outro]..."
+              placeholder="Write or paste lyrics with meta tags: [Verse 1], [Chorus], [Bridge], [Outro]..."
             />
 
             {/* Nashville SOP Live Quality Badges */}
@@ -387,24 +655,303 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
             </div>
           </div>
 
-          {/* Audit Result Display */}
-          {auditResult && (
-            <div className="bg-slate-900 border border-indigo-700/40 rounded-2xl p-5 space-y-3 shadow-xl animate-fadeIn">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Theological & Lyrical Audit Results</span>
-                </h4>
+          {/* Success Notification Banner after applying changes */}
+          {successCommitNotification && (
+            <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-2xl p-4 shadow-xl flex items-center justify-between gap-4 animate-fadeIn">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+                  <CheckCheck className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-300">{successCommitNotification.message}</h4>
+                  <p className="text-[11px] text-emerald-400/80 font-mono mt-0.5">
+                    Pre-change snapshot: <span className="text-white font-bold">{successCommitNotification.preVer}</span> • Post-change version: <span className="text-white font-bold">{successCommitNotification.postVer}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setAuditResult(null)}
-                  className="text-slate-500 hover:text-slate-300 text-xs"
+                  type="button"
+                  onClick={() => {
+                    const postVer = track.versions.find(v => v.version.includes('Post-AI'));
+                    if (postVer) setComparingVersion(postVer);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-900/70 hover:bg-emerald-800 text-white text-[11px] font-bold border border-emerald-700/50 transition cursor-pointer"
+                >
+                  Inspect Diff
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSuccessCommitNotification(null)}
+                  className="p-1 rounded text-emerald-400 hover:text-white"
+                  title="Dismiss notification"
                 >
                   ✕
                 </button>
               </div>
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
+            </div>
+          )}
+
+          {/* Active Audit Result & Action Deck */}
+          {auditResult && (
+            <div className="bg-slate-900 border border-indigo-600/40 rounded-2xl p-5 space-y-4 shadow-2xl animate-fadeIn">
+              
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-950 border border-indigo-700/60 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      <span>brickOS Gemini Theological & Lyrical Audit</span>
+                    </h4>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                      <span className="font-mono text-indigo-300 font-semibold">{auditModel}</span>
+                      <span>•</span>
+                      {track.auditHistory?.find(a => a.id === activeFeedbackId)?.status === 'applied' ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Changes Applied
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 font-bold">Review & Action Required</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowFeedbackVault(!showFeedbackVault)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
+                    title="View stored feedback archive"
+                  >
+                    <History className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Review Vault ({(track.auditHistory || []).length})</span>
+                    {showFeedbackVault ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAuditResult(null)}
+                    className="p-1 rounded text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                    title="Close active feedback card"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback Content Monospace Viewer */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-slate-200 font-mono leading-relaxed whitespace-pre-wrap max-h-72 overflow-y-auto custom-scrollbar shadow-inner">
                 {auditResult}
               </div>
+
+              {/* Live Stage Progress Indicator during Dual Version Commit & Rewrite */}
+              {isApplyingChanges && (
+                <div className="bg-indigo-950/70 border border-indigo-700/50 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-indigo-200">
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                      <span>{applyStageMessage || 'Executing automated revision pipeline...'}</span>
+                    </span>
+                    <span className="font-mono text-[11px] text-amber-400 animate-pulse">LIVE PIPELINE</span>
+                  </div>
+                  <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 h-full w-full animate-pulse"></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[10px] font-mono pt-1 text-slate-400">
+                    <span className="text-emerald-300">1. Instant Pre-Version ✓</span>
+                    <span className="text-amber-300">2. Gemini Rewrite ⚡</span>
+                    <span className="text-slate-400">3. Post-Version Commit</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Bar: Quick Copy & Yes I Agree Make The Changes */}
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                
+                {/* Left: Quick Copy Button */}
+                <button
+                  type="button"
+                  onClick={() => handleCopyFeedbackText()}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-2 border border-slate-700 transition shadow-sm cursor-pointer"
+                  title="Copy full theological feedback text to clipboard"
+                >
+                  {isFeedbackCopied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-300 font-bold">Feedback Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-indigo-400" />
+                      <span>Copy Feedback</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Right: "Yes, I Agree — Apply Changes" Button */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyFeedbackChanges()}
+                    disabled={isApplyingChanges || isAuditing}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/60 transition disabled:opacity-50 cursor-pointer active:scale-95"
+                    title="1. Commits pre-change version snapshot -> 2. Gemini rewrites lyrics -> 3. Updates screen live -> 4. Commits post-change version"
+                  >
+                    {isApplyingChanges ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                        <span>Applying Revisions & Committing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-white" />
+                        <span>Yes, I Agree — Apply Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* Feedback Review Vault & History (Stored for review later) */}
+          {((track.auditHistory && track.auditHistory.length > 0) || showFeedbackVault) && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-purple-400" />
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Feedback Review Vault ({track.auditHistory?.length || 0} Stored)
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFeedbackVault(!showFeedbackVault)}
+                  className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                >
+                  <span>{showFeedbackVault ? 'Collapse' : 'Expand Review Vault'}</span>
+                  {showFeedbackVault ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {(!track.auditHistory || track.auditHistory.length === 0) ? (
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
+                  No feedback stored yet for this track. Click "Run Copilot Audit" above to analyze and store reviews here.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(showFeedbackVault ? track.auditHistory : track.auditHistory.slice(0, 2)).map((fb) => (
+                    <div
+                      key={fb.id}
+                      className={`p-3.5 rounded-xl border transition space-y-2.5 ${
+                        activeFeedbackId === fb.id
+                          ? 'bg-slate-950 border-indigo-600/60 shadow-md shadow-indigo-950/40'
+                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Top row: Timestamp, Model, Status */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-indigo-300 font-mono bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/40 text-[11px]">
+                            {fb.model}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[11px]">{fb.timestamp}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {fb.status === 'applied' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/50 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              <span>Applied ({fb.postRevisionVersion || 'Committed'})</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 font-mono text-[10px] font-bold border border-amber-700/50">
+                              Pending Review
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Snippet / Full Text */}
+                      <div className="text-xs text-slate-300 font-mono bg-slate-900/60 p-2.5 rounded-lg whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto custom-scrollbar">
+                        {expandedFeedbackId === fb.id ? fb.feedback : (
+                          fb.feedback.length > 280 ? `${fb.feedback.substring(0, 280)}...` : fb.feedback
+                        )}
+                      </div>
+
+                      {/* Actions for this stored feedback */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900 text-xs">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyFeedbackText(fb.feedback)}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                            title="Copy this stored feedback"
+                          >
+                            <Copy className="w-3 h-3 text-indigo-400" />
+                            <span>Copy</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuditResult(fb.feedback);
+                              setActiveFeedbackId(fb.id);
+                              window.scrollTo({ top: 400, behavior: 'smooth' });
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                            title="Load into active review workbench"
+                          >
+                            <Eye className="w-3 h-3 text-amber-400" />
+                            <span>Open In Review</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setExpandedFeedbackId(expandedFeedbackId === fb.id ? null : fb.id)}
+                            className="text-[11px] text-slate-400 hover:text-slate-200 underline ml-1"
+                          >
+                            {expandedFeedbackId === fb.id ? 'Show Less' : 'Show Full'}
+                          </button>
+                        </div>
+
+                        {/* Apply button if not applied */}
+                        {fb.status !== 'applied' && (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyFeedbackChanges(fb)}
+                            disabled={isApplyingChanges}
+                            className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow transition cursor-pointer disabled:opacity-50"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            <span>Apply This Review</span>
+                          </button>
+                        )}
+                      </div>
+
+                    </div>
+                  ))}
+
+                  {!showFeedbackVault && (track.auditHistory?.length || 0) > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFeedbackVault(true)}
+                      className="w-full py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1"
+                    >
+                      <span>Show all {track.auditHistory?.length} stored reviews in vault</span>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
 

@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   Radio,
   Database,
-  Layers
+  Layers,
+  Plus
 } from 'lucide-react';
 import { Track } from '../types';
 
@@ -20,6 +21,7 @@ interface NavigationHeaderProps {
   onOpenSunoBridge: () => void;
   onOpenSearch: () => void;
   onOpenChat: () => void;
+  onOpenCreateProject?: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   selectedEpFilter?: string;
@@ -31,6 +33,7 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   onOpenSunoBridge,
   onOpenSearch,
   onOpenChat,
+  onOpenCreateProject,
   activeTab,
   setActiveTab,
   selectedEpFilter = 'ALL'
@@ -134,6 +137,17 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           <HardDrive className="w-3.5 h-3.5 text-indigo-400" />
           <span className="hidden lg:inline">Nextcloud Hub</span>
         </button>
+
+        {onOpenCreateProject && (
+          <button
+            onClick={onOpenCreateProject}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
+            title="Create New Sovereign Track"
+          >
+            <Plus className="w-3.5 h-3.5 text-white" />
+            <span>+ New Project</span>
+          </button>
+        )}
 
         <button
           onClick={onOpenSunoBridge}

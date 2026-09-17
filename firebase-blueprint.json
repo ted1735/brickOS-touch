@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "collections": {
+    "tracks": {
+      "description": "brickOS music tracks, lyrics, Suno prompts, version history, and audit records",
+      "fields": {
+        "id": { "type": "string", "description": "Unique Track Identifier (e.g. TRK-01 or UUID)" },
+        "ep": { "type": "string", "description": "EP Suite grouping" },
+        "title": { "type": "string", "description": "Track title" },
+        "status": { "type": "string", "description": "Kanban pipeline stage" },
+        "genre": { "type": "string", "description": "Music genre and style classification" },
+        "bpm": { "type": "number", "description": "Tempo in beats per minute" },
+        "key": { "type": "string", "description": "Musical key" },
+        "vocal": { "type": "string", "description": "Vocal artist or archetype" },
+        "vocalCast": { "type": "string", "description": "Detailed vocal casting description" },
+        "thesis": { "type": "string", "description": "Theological or thematic concept thesis" },
+        "sunoPrompt": { "type": "string", "description": "Suno style prompt generation string" },
+        "negativePrompt": { "type": "string", "description": "Excluded sonic artifacts and negative prompt" },
+        "engineSliders": { "type": "object", "description": "Suno v5.5 engine sliders config" },
+        "lyrics": { "type": "string", "description": "Full song lyrics with structural meta-tags" },
+        "versions": { "type": "array", "description": "Immutable version snapshot history" },
+        "auditHistory": { "type": "array", "description": "Gemini theological & lyrical audit review records" },
+        "selahPrayed": { "type": "boolean", "description": "24h Selah prayer status" },
+        "notes": { "type": "string", "description": "Production or engineer notes" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      }
+    },
+    "composition_sessions": {
+      "description": "Saved track composition sessions, workspace snapshots, lyric revisions, and active sonic configurations in brickOS Studio",
+      "fields": {
+        "id": { "type": "string", "description": "Unique session ID (e.g. SES-01 or UUID)" },
+        "name": { "type": "string", "description": "Human-readable session title or workflow description" },
+        "trackId": { "type": "string", "description": "Associated Track Identifier" },
+        "trackTitle": { "type": "string", "description": "Track title at time of session" },
+        "ep": { "type": "string", "description": "EP suite grouping" },
+        "description": { "type": "string", "description": "Session production notes and intent" },
+        "activeTab": { "type": "string", "description": "Workspace tab active during session" },
+        "tags": { "type": "array", "description": "Filter and categorization tags" },
+        "isPinned": { "type": "boolean", "description": "Pinned status for quick access" },
+        "color": { "type": "string", "description": "Visual theme color tag" },
+        "snapshot": { "type": "object", "description": "Complete frozen state of the track (lyrics, Suno prompts, engine sliders, BPM, key, vocalCast, status, versions count)" },
+        "createdAt": { "type": "string", "description": "ISO timestamp when session was created" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last session update" }
+      }
+    }
+  }
+}

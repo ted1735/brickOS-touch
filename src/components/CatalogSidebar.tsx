@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Disc, ShieldCheck, Heart, Sparkles } from 'lucide-react';
+import { Plus, Search, Filter, Disc, ShieldCheck, Heart, Sparkles, X, Layers } from 'lucide-react';
 import { Track } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 
@@ -8,13 +8,19 @@ interface CatalogSidebarProps {
   selectedTrack: Track;
   onSelectTrack: (track: Track) => void;
   onAddTrack: () => void;
+  onClose?: () => void;
+  onSwitchToSessionsTab?: () => void;
+  sessionsCount?: number;
 }
 
 export const CatalogSidebar: React.FC<CatalogSidebarProps> = ({
   tracks,
   selectedTrack,
   onSelectTrack,
-  onAddTrack
+  onAddTrack,
+  onClose,
+  onSwitchToSessionsTab,
+  sessionsCount = 0
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEpFilter, setSelectedEpFilter] = useState('ALL');
@@ -31,22 +37,44 @@ export const CatalogSidebar: React.FC<CatalogSidebarProps> = ({
   });
 
   return (
-    <aside className="w-full lg:w-84 bg-slate-900/70 border-r border-slate-800 flex flex-col p-4 space-y-3.5">
+    <aside className="w-80 sm:w-88 bg-slate-900 border-r border-slate-800 flex flex-col p-4 space-y-3.5 h-full overflow-hidden flex-shrink-0 z-30 shadow-2xl">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Disc className="w-4 h-4 text-indigo-400 animate-spin-slow" />
+          <Disc className="w-4 h-4 text-indigo-400" />
           <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
             Catalog Roster ({filteredTracks.length}/{tracks.length})
           </span>
         </div>
-        <button
-          onClick={onAddTrack}
-          className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 text-xs font-bold shadow-sm"
-          title="Add New Track to Catalog"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Track</span>
-        </button>
+        <div className="flex items-center gap-1">
+          {onSwitchToSessionsTab && (
+            <button
+              type="button"
+              onClick={onSwitchToSessionsTab}
+              className="px-2 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-700/50 flex items-center gap-1 text-[11px] font-bold transition cursor-pointer"
+              title="Switch to Track Composition Sessions"
+            >
+              <Layers className="w-3 h-3 text-indigo-400" />
+              <span>Sessions ({sessionsCount})</span>
+            </button>
+          )}
+          <button
+            onClick={onAddTrack}
+            className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 text-xs font-bold shadow-sm cursor-pointer"
+            title="Add New Track to Catalog"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New</span>
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="Close Roster"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search Input */}

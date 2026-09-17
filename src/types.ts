@@ -20,6 +20,50 @@ export interface EngineSliders {
   voiceAudio: number;
 }
 
+export interface AuditFeedbackRecord {
+  id: string;
+  timestamp: string;
+  model: string;
+  feedback: string;
+  status: 'pending' | 'applied' | 'dismissed';
+  preRevisionVersion?: string;
+  postRevisionVersion?: string;
+}
+
+export interface CompositionSessionSnapshot {
+  lyrics: string;
+  sunoPrompt: string;
+  negativePrompt: string;
+  engineSliders: EngineSliders;
+  bpm: number;
+  key: string;
+  genre: string;
+  vocal: string;
+  vocalCast: string;
+  thesis: string;
+  selahPrayed?: boolean;
+  status: TrackStatus;
+  notes?: string;
+  versionsCount: number;
+  latestVersionTag?: string;
+}
+
+export interface CompositionSession {
+  id: string;
+  name: string;
+  trackId: string;
+  trackTitle: string;
+  ep: string;
+  createdAt: string;
+  updatedAt: string;
+  activeTab?: string;
+  description?: string;
+  tags: string[];
+  isPinned?: boolean;
+  color?: string;
+  snapshot: CompositionSessionSnapshot;
+}
+
 export interface Track {
   id: string;
   ep: string;
@@ -36,6 +80,7 @@ export interface Track {
   engineSliders: EngineSliders;
   lyrics: string;
   versions: TrackVersion[];
+  auditHistory?: AuditFeedbackRecord[];
   selahPrayed?: boolean;
   notes?: string;
 }
