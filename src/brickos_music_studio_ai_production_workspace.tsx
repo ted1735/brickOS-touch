@@ -49,9 +49,11 @@ import {
   Cloud,
   FolderKanban,
   Save,
-  RefreshCcw
+  RefreshCcw,
+  Sun,
+  Moon
 } from 'lucide-react';
-import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession } from './types';
+import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset } from './types';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
 import { audioMiniDaw } from './utils/audioEngine';
@@ -66,6 +68,7 @@ import { CreateProjectModal } from './components/CreateProjectModal';
 import { CatalogSidebar } from './components/CatalogSidebar';
 import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
 import { SideNavigationPanel } from './components/SideNavigationPanel';
+import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import {
   loadTracksFromFirestore,
   subscribeToFirestoreTracks,
@@ -101,9 +104,38 @@ export default function BrickOSMusicStudioWorkspace() {
     return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
   });
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database'
+    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
+
+  // Light / Dark Theme State with persistence and HTML class sync
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('brickos_theme');
+      if (saved) return saved === 'dark';
+      return true; // Default dark studio aesthetic
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+      }
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('brickos_theme', isDarkMode ? 'dark' : 'light');
+    }
+  }, [isDarkMode]);
+
+  const handleToggleTheme = () => {
+    setIsDarkMode(prev => !prev);
+  };
 
   // Firestore persistent cloud database synchronization state
   const [isDbConnected, setIsDbConnected] = useState<boolean>(isFirebaseConfigured());
@@ -462,6 +494,57 @@ export default function BrickOSMusicStudioWorkspace() {
       setTimeout(() => setCopiedNotification(''), 4000);
     } catch (err: any) {
       alert(`Cloud sync error: ${err.message || 'Check connection'}`);
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
+
+  // Apply a matched Nextcloud asset directly to a catalog track
+  const handleApplyAssetToTrack = async (asset: NextcloudFolderAsset, trackId: string) => {
+    const targetTrack = tracks.find(t => t.id === trackId);
+    if (!targetTrack) return;
+
+    const noteLine = `\n[Nextcloud Asset Linked]: ${asset.filename} (${asset.category}) [${asset.fileSizeFormatted}]`;
+    const updatedTrack: Track = {
+      ...targetTrack,
+      notes: (targetTrack.notes || '') + noteLine,
+    };
+
+    if (asset.category === 'MASTER_AUDIO') {
+      updatedTrack.status = 'Audio Master';
+    } else if (asset.category === 'UVR5_VOCAL_STEM') {
+      if (updatedTrack.status === 'Idea / Concept' || updatedTrack.status === 'Lyrics Finalized') {
+        updatedTrack.status = 'UVR5 Stem Prep';
+      }
+    }
+
+    if (asset.previewImageUrl && (asset.category === 'VISUAL_ARTWORK' || asset.category === 'VIDEO_REEL')) {
+      setGeneratedImages(prev => [
+        {
+          id: `img-nc-${Date.now()}`,
+          url: asset.previewImageUrl!,
+          prompt: asset.notes || asset.filename,
+          aspectRatio: asset.filename.includes('9x16') ? '9:16' : '1:1',
+          timestamp: new Date().toISOString().split('T')[0],
+          mode: 'create',
+          trackTitle: targetTrack.title
+        },
+        ...prev
+      ]);
+    }
+
+    setTracks(prev => prev.map(t => (t.id === trackId ? updatedTrack : t)));
+    if (selectedTrack.id === trackId) {
+      setSelectedTrack(updatedTrack);
+    }
+
+    try {
+      setIsDbSyncing(true);
+      await saveTrackToFirestore(updatedTrack);
+      setCopiedNotification(`Attached "${asset.filename}" to track ${targetTrack.title}!`);
+      setTimeout(() => setCopiedNotification(''), 4000);
+    } catch (err) {
+      console.warn('Could not persist track update to Firestore:', err);
     } finally {
       setIsDbSyncing(false);
     }
@@ -971,7 +1054,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div className={`min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       
       {/* GLOBAL NOTIFICATION TOAST */}
       {copiedNotification && (
@@ -982,7 +1065,13 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       )}
 
       {/* TOP NAVIGATION HEADER */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md bg-opacity-95 flex-shrink-0">
+      <header
+        className={`px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
+          isDarkMode
+            ? 'bg-slate-900/95 border-b border-slate-800 text-white'
+            : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => setActiveTab('kanban')}
@@ -995,25 +1084,32 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <div className="flex items-center gap-2">
               <h1 
                 onClick={() => setActiveTab('kanban')}
-                className="text-base font-black tracking-wider text-white hover:text-indigo-300 transition cursor-pointer"
+                className={`text-base font-black tracking-wider transition cursor-pointer ${
+                  isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
+                }`}
                 title="Return to Master Kanban Dashboard"
               >
                 brickOS MASTER STUDIO
               </h1>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 font-mono text-[10px] font-bold border border-indigo-700/50">
+              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/30">
                 v5.5 SOVEREIGN
               </span>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 font-mono text-[10px] font-semibold border border-emerald-700/30">
+              <button
+                type="button"
+                onClick={() => setActiveTab('nextcloud_sync')}
+                className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
+                title="Nextcloud Live WebDAV & Folder 207332 Matcher"
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                WebDAV Online
-              </span>
+                <span>WebDAV / 207332</span>
+              </button>
               <button
                 type="button"
                 onClick={handleManualSyncDatabase}
                 className={`hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border transition cursor-pointer ${
                   isDbConnected
-                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-700/40 hover:bg-cyan-900/80'
-                    : 'bg-amber-950/80 text-amber-300 border-amber-700/40 hover:bg-amber-900/80'
+                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
                 }`}
                 title={`Firestore Cloud Database: ${isDbConnected ? 'Connected & Auto-Saving' : 'Connecting...'} • Click to trigger cloud re-sync`}
               >
@@ -1022,20 +1118,20 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 {lastSyncedAt && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+            <p className={`text-[11px] flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
               <span>Ted Moyer (Primary Artist / OAC)</span>
               <span>•</span>
-              <span className="text-indigo-400 font-medium">BRICK Records</span>
+              <span className="text-indigo-500 font-medium">BRICK Records</span>
               <span>•</span>
               {activeTab === 'kanban' ? (
-                <span className="text-amber-400 font-medium bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                   {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5">
-                  <span className="text-indigo-300 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
+                  <span className="text-indigo-500 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
                   <span>•</span>
-                  <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
+                  <span className="text-amber-500 font-medium">{selectedTrack.ep}</span>
                 </span>
               )}
             </p>
@@ -1046,41 +1142,58 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
           <button
             onClick={() => setActiveTab('kanban')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
               activeTab === 'kanban'
                 ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
             }`}
             title="Master Kanban Pipeline Dashboard"
           >
-            <Layers className="w-3.5 h-3.5 text-indigo-300" />
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
             <span>Dashboard</span>
+          </button>
+
+          {/* NEXTCLOUD WEBDAV MATCHER & SYNC (FOLDER 207332) */}
+          <button
+            onClick={() => setActiveTab('nextcloud_sync')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              activeTab === 'nextcloud_sync'
+                ? 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-950/60 shadow-md'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-emerald-700 border-slate-300'
+            }`}
+            title="Open Nextcloud /Music-Production Folder & Stem Matcher"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">/Music-Production (207332)</span>
+            <span className="sm:hidden">/Music-Production</span>
           </button>
 
           <button
             onClick={() => setActiveTab('search')}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            }`}
           >
             <Search className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden md:inline">Google Search Grounding</span>
-            <span className="md:hidden">Search</span>
+            <span className="hidden md:inline">Grounding</span>
           </button>
 
           <button
             onClick={() => setActiveTab('coproducer')}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            }`}
           >
             <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden md:inline">Studio Co-Producer AI</span>
-            <span className="md:hidden">AI Chat</span>
-          </button>
-
-          <button
-            onClick={() => setIsStorageModalOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
-          >
-            <HardDrive className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden lg:inline">Nextcloud Hub</span>
+            <span className="hidden md:inline">Co-Producer</span>
           </button>
 
           {/* Side Navigation Panel Toggle: Projects */}
@@ -1097,7 +1210,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
               isSideNavOpen && sideNavTab === 'projects'
                 ? 'bg-indigo-600 border-indigo-400 text-white shadow-indigo-950/60 shadow-md'
-                : 'bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white border-slate-700'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
             }`}
             title="Open Projects & Catalog Navigation Panel"
           >
@@ -1120,7 +1235,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
               isSideNavOpen && sideNavTab === 'sessions'
                 ? 'bg-purple-600 border-purple-400 text-white shadow-purple-950/60 shadow-md'
-                : 'bg-slate-800 hover:bg-slate-700 text-purple-300 hover:text-white border-slate-700'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 hover:text-white border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
             }`}
             title="Open Project Composition Sessions Manager"
           >
@@ -1143,7 +1260,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
               isSideNavOpen && sideNavTab === 'assets'
                 ? 'bg-cyan-600 border-cyan-400 text-white shadow-cyan-950/60 shadow-md'
-                : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border-slate-700'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
             }`}
             title="Manage Studio Stems, Checkpoints & Media Assets"
           >
@@ -1165,7 +1284,24 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30 cursor-pointer"
           >
             <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-            <span>⚡ Suno & NightCafe Bridge</span>
+            <span className="hidden sm:inline">⚡ Suno Bridge</span>
+          </button>
+
+          {/* LIGHT / DARK MODE TOGGLE SWITCH */}
+          <button
+            onClick={handleToggleTheme}
+            className={`p-2 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            }`}
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle Light and Dark Mode"
+          >
+            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+            <span className="text-xs font-bold hidden xl:inline">
+              {isDarkMode ? 'Light' : 'Dark'}
+            </span>
           </button>
         </div>
       </header>
@@ -1211,17 +1347,24 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 isCollapsed={isSideNavCollapsed}
                 onToggleCollapse={() => setIsSideNavCollapsed(!isSideNavCollapsed)}
                 onClose={() => setIsSideNavOpen(false)}
+                isDarkMode={isDarkMode}
               />
             </div>
           </>
         )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col min-w-0 ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5 bg-slate-950' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
+        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
           
           {/* TRACK HEADER BANNER (Shown only on single-track workbench views) */}
           {activeTab !== 'kanban' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+            <div
+              className={`bento-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 transition-all duration-200 ${
+                isDarkMode
+                  ? 'bg-slate-900 border border-slate-800 text-white shadow-xl'
+                  : 'bg-white border border-slate-200 text-slate-900 shadow-sm ring-1 ring-slate-900/5'
+              }`}
+            >
               <div className="space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 rounded bg-indigo-900 text-indigo-300 font-mono text-xs font-bold">
@@ -1238,7 +1381,11 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                         setActiveTab('lyrics');
                       }
                     }}
-                    className="bg-slate-950 border border-slate-700 hover:border-indigo-500 rounded-xl px-2.5 py-1 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 max-w-[220px] truncate cursor-pointer shadow-sm"
+                    className={`border hover:border-indigo-500 rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-indigo-500 max-w-[220px] truncate cursor-pointer shadow-xs transition ${
+                      isDarkMode
+                        ? 'bg-slate-950 border-slate-700 text-white'
+                        : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                     title="Quick Switch Track"
                   >
                     {tracks.map(t => (
@@ -1262,7 +1409,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
                       isSideNavOpen && sideNavTab === 'projects'
                         ? 'bg-indigo-600 border-indigo-500 text-white'
-                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-indigo-300 hover:text-white'
+                        : isDarkMode
+                        ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-indigo-300 hover:text-white'
+                        : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-indigo-700'
                     }`}
                     title="Toggle Projects & Catalog Panel"
                   >
@@ -1284,7 +1433,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
                       isSideNavOpen && sideNavTab === 'sessions'
                         ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-md shadow-purple-950/60'
-                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-purple-300 hover:text-white'
+                        : isDarkMode
+                        ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-purple-300 hover:text-white'
+                        : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-purple-700'
                     }`}
                     title="Manage Composition Sessions"
                   >
@@ -1306,7 +1457,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
                       isSideNavOpen && sideNavTab === 'assets'
                         ? 'bg-cyan-600 border-cyan-500 text-white'
-                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-cyan-300 hover:text-white'
+                        : isDarkMode
+                        ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-cyan-300 hover:text-white'
+                        : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-cyan-700'
                     }`}
                     title="Manage Stems, Checkpoints & Visuals"
                   >
@@ -1327,7 +1480,11 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                   {/* Return to Kanban */}
                   <button
                     onClick={() => setActiveTab('kanban')}
-                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${
+                      isDarkMode
+                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                    }`}
                     title="Return to Master Kanban Dashboard"
                   >
                     <Layers className="w-3.5 h-3.5 text-indigo-400" />
@@ -1336,27 +1493,29 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 </div>
 
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2 flex-wrap">
+                  <h2 className={`text-xl sm:text-2xl font-black flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     <span>{selectedTrack.title}</span>
-                    <span className="text-xs px-2 py-0.5 rounded font-normal text-slate-400 bg-slate-800 font-mono">
+                    <span className={`text-xs px-2 py-0.5 rounded font-normal font-mono ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-slate-100'}`}>
                       {selectedTrack.bpm} BPM • {selectedTrack.key}
                     </span>
-                    <span className="text-xs text-indigo-400 font-medium font-mono">
+                    <span className="text-xs text-indigo-500 font-semibold font-mono">
                       {selectedTrack.ep}
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-300 italic max-w-2xl mt-0.5">"{selectedTrack.thesis}"</p>
+                  <p className={`text-xs italic max-w-2xl mt-0.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>"{selectedTrack.thesis}"</p>
                 </div>
               </div>
 
               {/* Status & Vocal Cast Selector */}
               <div className="flex items-center gap-3 flex-wrap">
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Production Status</label>
+                  <label className={`block text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Production Status</label>
                   <select
                     value={selectedTrack.status}
                     onChange={(e) => handleTrackUpdate('status', e.target.value as any)}
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-indigo-500 cursor-pointer ${
+                      isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="Idea / Concept">Idea / Concept</option>
                     <option value="Lyrics Finalized">Lyrics Finalized</option>
@@ -1369,12 +1528,14 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vocal Formant Cast</label>
+                  <label className={`block text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Vocal Formant Cast</label>
                   <input
                     type="text"
                     value={selectedTrack.vocalCast}
                     onChange={(e) => handleTrackUpdate('vocalCast', e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className={`border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 ${
+                      isDarkMode ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                     placeholder="e.g. Silas Thorne (Aged Oak)"
                   />
                 </div>
@@ -1385,7 +1546,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
                       selectedTrack.selahPrayed
                         ? 'bg-emerald-950 border-emerald-600 text-emerald-300'
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                        : isDarkMode
+                        ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                        : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
                     }`}
                     title="Mandatory 24h prayer & stationkeeping before master release"
                   >
@@ -1398,10 +1561,12 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           )}
 
           {/* WORKBENCH TABS - DOUBLE STACKED TO SAVE HORIZONTAL SPACE */}
-          <div className="border-b border-slate-800 pb-2 space-y-1.5 flex flex-col">
+          <div className={`border-b pb-2 space-y-1.5 flex flex-col ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
             {/* TIER 1: CORE MUSIC & AUDIO PRODUCTION PIPELINE */}
             <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
-              <span className="text-[9px] font-mono uppercase text-indigo-400 font-bold px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-800/40 hidden sm:inline-block flex-shrink-0">
+              <span className={`text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded border hidden sm:inline-block flex-shrink-0 ${
+                isDarkMode ? 'text-indigo-400 bg-indigo-950/80 border-indigo-800/40' : 'text-indigo-700 bg-indigo-50 border-indigo-200'
+              }`}>
                 Tier 1: Audio Engine
               </span>
               <button
@@ -1409,7 +1574,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'kanban'
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5 text-indigo-400" />
@@ -1421,7 +1588,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'lyrics'
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5 text-blue-400" />
@@ -1433,7 +1602,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'database'
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Database className="w-3.5 h-3.5 text-cyan-400" />
@@ -1441,11 +1612,27 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               </button>
 
               <button
+                onClick={() => setActiveTab('nextcloud_sync')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'nextcloud_sync'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm border-emerald-400'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-emerald-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-emerald-700 hover:bg-emerald-50 shadow-2xs'
+                }`}
+              >
+                <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Nextcloud Bento Matcher (207332)</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('mixer')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'mixer'
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Scissors className="w-3.5 h-3.5 text-amber-400" />
@@ -1457,7 +1644,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'mastering'
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Activity className="w-3.5 h-3.5 text-emerald-400" />
@@ -1469,7 +1658,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'ministry'
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Music className="w-3.5 h-3.5 text-cyan-400" />
@@ -1479,7 +1670,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
             {/* TIER 2: MEDIA, SEO, TELEMETRY & AI COPILOTS */}
             <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
-              <span className="text-[9px] font-mono uppercase text-purple-400 font-bold px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800/40 hidden sm:inline-block flex-shrink-0">
+              <span className={`text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded border hidden sm:inline-block flex-shrink-0 ${
+                isDarkMode ? 'text-purple-400 bg-purple-950/80 border-purple-800/40' : 'text-purple-700 bg-purple-50 border-purple-200'
+              }`}>
                 Tier 2: Visuals & Copilots
               </span>
               <button
@@ -1487,7 +1680,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'veo_visuals'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Clapperboard className="w-3.5 h-3.5 text-amber-400" />
@@ -1499,7 +1694,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'youtube'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Film className="w-3.5 h-3.5 text-rose-500" />
@@ -1511,7 +1708,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'omnipost'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Share2 className="w-3.5 h-3.5 text-purple-400" />
@@ -1523,7 +1722,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'nightcafe'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Zap className="w-3.5 h-3.5 text-blue-400" />
@@ -1535,7 +1736,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'telemetry'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-purple-400" />
@@ -1547,7 +1750,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'coproducer'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
@@ -1559,7 +1764,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'search'
                     ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
                 <Search className="w-3.5 h-3.5 text-cyan-400" />
@@ -1583,6 +1790,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               selectedEpFilter={selectedEpFilter}
               onSelectEpFilter={setSelectedEpFilter}
               onOpenCreateProject={() => setIsCreateModalOpen(true)}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -2260,6 +2468,20 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </div>
           )}
 
+          {/* TAB: NEXTCLOUD BENTO LIVE WEBDAV & FOLDER 207332 ASSET MATCHER */}
+          {activeTab === 'nextcloud_sync' && (
+            <NextcloudBentoSyncTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              onSelectTrack={(t) => {
+                setSelectedTrack(t);
+              }}
+              onApplyAssetToTrack={handleApplyAssetToTrack}
+              isDarkMode={isDarkMode}
+              onNavigateToTab={setActiveTab}
+            />
+          )}
+
         </main>
       </div>
 
@@ -2292,19 +2514,42 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               </button>
             </div>
 
+            {/* DIRECT LAUNCHER FOR BENTO ASSET MATCHER */}
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/80 via-purple-950/60 to-emerald-950/80 border border-indigo-700/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>Nextcloud Asset Matcher & Live Sync Workspace</span>
+                </div>
+                <div className="text-[11px] text-slate-300">
+                  Full Bento-style hub to match stems, lyrics, and art from Folder 207332 directly to catalog tracks.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStorageModalOpen(false);
+                  setActiveTab('nextcloud_sync');
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/40 flex-shrink-0 cursor-pointer"
+              >
+                <span>Launch Matcher (207332) →</span>
+              </button>
+            </div>
+
             <div className="space-y-4 text-xs text-slate-300">
               {/* WebDAV Endpoint Info */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-400 font-mono uppercase">
-                    Root WebDAV URL ({DEFAULT_WEBDAV_USER}):
+                    /Music-Production WebDAV URL ({DEFAULT_WEBDAV_USER}):
                   </span>
                   <button
-                    onClick={() => copyToClipboard(PRODUCTION_NEXTCLOUD_WEBDAV, 'WebDAV Root URL')}
+                    onClick={() => copyToClipboard(PRODUCTION_NEXTCLOUD_WEBDAV, '/Music-Production WebDAV URL')}
                     className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-mono"
                   >
                     <Copy className="w-3 h-3" />
-                    <span>Copy Root</span>
+                    <span>Copy WebDAV URL</span>
                   </button>
                 </div>
                 <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl font-mono text-indigo-300 text-[11px] select-all truncate">

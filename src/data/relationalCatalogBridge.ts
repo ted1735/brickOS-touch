@@ -10,16 +10,16 @@ import {
 // ==============================================================================
 // 1. LIVE NEXTCLOUD WEBDAV ENDPOINT CONFIGURATION
 // ==============================================================================
-export const PRODUCTION_NEXTCLOUD_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS';
-export const PRODUCTION_NEXTCLOUD_BASE = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted';
+export const PRODUCTION_NEXTCLOUD_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
+export const PRODUCTION_NEXTCLOUD_BASE = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
 export const DEFAULT_WEBDAV_USER = 'ncted';
 
 /**
  * Dynamic WebDAV Asset Resolution
- * Generates exact live WebDAV URL matching sovereign folder structure:
- * Visuals: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS/[TRK-ID]/visuals/[version]/[filename]
- * Stems:   https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS/[TRK-ID]/stems/[filename]
- * Shared:  https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS/shared/[collection]/[filename]
+ * Generates exact live WebDAV URL matching sovereign folder structure in /Music-Production:
+ * Visuals: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/[TRK-ID]/visuals/[version]/[filename]
+ * Stems:   https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/[TRK-ID]/stems/[filename]
+ * Shared:  https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/shared/[collection]/[filename]
  */
 export function resolveWebDavAssetUrl(
   trackId: string,
@@ -340,7 +340,7 @@ export function getTrackStems(trackId: string): AudioStemRecord[] {
       passType: 'Primary_Vocal',
       modelUsed: 'BS-Roformer-Viperx-1297 (Lead Vocal Isolation)',
       isCompleted: true,
-      webdavRelativePath: `brickOS/${cleanId}/stems/${cleanId}_BS-Roformer_Vocal_24bit_48k.wav`,
+      webdavRelativePath: `Music-Production/${cleanId}/stems/${cleanId}_BS-Roformer_Vocal_24bit_48k.wav`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/stems/${cleanId}_BS-Roformer_Vocal_24bit_48k.wav`,
       fileSizeBytes: 42500000,
       sampleRateHz: 48000,
@@ -352,7 +352,7 @@ export function getTrackStems(trackId: string): AudioStemRecord[] {
       passType: 'True_Instrumental',
       modelUsed: 'Kim-Inst-v2-HQ (True Instrumental Extraction)',
       isCompleted: true,
-      webdavRelativePath: `brickOS/${cleanId}/stems/${cleanId}_KimInst_Instrumental_24bit_48k.wav`,
+      webdavRelativePath: `Music-Production/${cleanId}/stems/${cleanId}_KimInst_Instrumental_24bit_48k.wav`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/stems/${cleanId}_KimInst_Instrumental_24bit_48k.wav`,
       fileSizeBytes: 58900000,
       sampleRateHz: 48000,
@@ -364,7 +364,7 @@ export function getTrackStems(trackId: string): AudioStemRecord[] {
       passType: 'Dry_Studio_Vocal',
       modelUsed: 'FoxJoy-DeReverb-v3 (Room Tone & Sibilance Stripper)',
       isCompleted: true,
-      webdavRelativePath: `brickOS/${cleanId}/stems/${cleanId}_FoxJoy_Dereverb_DryVocal_24bit_48k.wav`,
+      webdavRelativePath: `Music-Production/${cleanId}/stems/${cleanId}_FoxJoy_Dereverb_DryVocal_24bit_48k.wav`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/stems/${cleanId}_FoxJoy_Dereverb_DryVocal_24bit_48k.wav`,
       fileSizeBytes: 41800000,
       sampleRateHz: 48000,
@@ -376,7 +376,7 @@ export function getTrackStems(trackId: string): AudioStemRecord[] {
       passType: 'DAW_Master_Session',
       modelUsed: 'Nashville-Linear-Master-Bus (Cakewalk / ProTools)',
       isCompleted: true,
-      webdavRelativePath: `brickOS/${cleanId}/stems/${cleanId}_DAW_Master_24bit_48k.wav`,
+      webdavRelativePath: `Music-Production/${cleanId}/stems/${cleanId}_DAW_Master_24bit_48k.wav`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/stems/${cleanId}_DAW_Master_24bit_48k.wav`,
       fileSizeBytes: 72400000,
       sampleRateHz: 48000,
@@ -401,7 +401,7 @@ export function getTrackVisualAssets(track: Track): VisualAssetRecord[] {
       title: `${track.title} - Official Master Cover Art`,
       prompt: `Cinematic album cover for ${track.title}, ${track.genre}, ${track.thesis}, warm chiaroscuro lighting, photorealistic 8k`,
       isActiveMaster: true,
-      webdavRelativePath: `brickOS/${cleanId}/visuals/v1.0/${cleanId}_CoverArt_${cleanTitle}_1x1.png`,
+      webdavRelativePath: `Music-Production/${cleanId}/visuals/v1.0/${cleanId}_CoverArt_${cleanTitle}_1x1.png`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/visuals/v1.0/${cleanId}_CoverArt_${cleanTitle}_1x1.png`,
       similarityTags: cleanId === 'TRK-01' || cleanId === 'TRK-03' || cleanId === 'TRK-04' || cleanId === 'TRK-24'
         ? ['#Theme_SanctuaryCross', '#Album_Cover_Master']
@@ -423,7 +423,7 @@ export function getTrackVisualAssets(track: Track): VisualAssetRecord[] {
       title: `${track.title} - Veo 3 Video Seed Keyframe`,
       prompt: `Vertical 9:16 cinematic video seed frame for ${track.title}, 60fps dynamic lighting, high contrast color grade`,
       isActiveMaster: false,
-      webdavRelativePath: `brickOS/${cleanId}/visuals/v1.0/${cleanId}_VeoSeed_${cleanTitle}_9x16.png`,
+      webdavRelativePath: `Music-Production/${cleanId}/visuals/v1.0/${cleanId}_VeoSeed_${cleanTitle}_9x16.png`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/visuals/v1.0/${cleanId}_VeoSeed_${cleanTitle}_9x16.png`,
       similarityTags: ['#Video_Seed_Frame', '#Mobile_9_16'],
       compatibleTracks: [cleanId],
@@ -437,7 +437,7 @@ export function getTrackVisualAssets(track: Track): VisualAssetRecord[] {
       title: `${track.title} - 4K Cinematic Background Plate`,
       prompt: `Widescreen 16:9 cinematic storyboard plate for YouTube long-form release and stage ministry charts`,
       isActiveMaster: false,
-      webdavRelativePath: `brickOS/${cleanId}/visuals/v1.0/${cleanId}_CinematicPlate_${cleanTitle}_16x9.png`,
+      webdavRelativePath: `Music-Production/${cleanId}/visuals/v1.0/${cleanId}_CinematicPlate_${cleanTitle}_16x9.png`,
       fullWebdavUrl: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${cleanId}/visuals/v1.0/${cleanId}_CinematicPlate_${cleanTitle}_16x9.png`,
       similarityTags: ['#B_Roll_Cinematic_Plate', '#Stage_Background'],
       compatibleTracks: [cleanId],

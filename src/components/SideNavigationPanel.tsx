@@ -60,6 +60,7 @@ interface SideNavigationPanelProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onClose?: () => void;
+  isDarkMode?: boolean;
 }
 
 export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
@@ -84,7 +85,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   onSetActivePanelTab,
   isCollapsed,
   onToggleCollapse,
-  onClose
+  onClose,
+  isDarkMode = true
 }) => {
   // Search & Filter state for Projects
   const [projectSearch, setProjectSearch] = useState('');
@@ -231,25 +233,31 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   }
 
   return (
-    <aside className="w-80 sm:w-92 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-hidden flex-shrink-0 z-30 shadow-2xl transition-all duration-200">
+    <aside
+      className={`w-80 sm:w-92 border-r flex flex-col h-full overflow-hidden flex-shrink-0 z-30 shadow-2xl transition-all duration-200 ${
+        isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+      }`}
+    >
       
       {/* HEADER: TITLE, TAB SWITCHER & PIN/COLLAPSE */}
-      <div className="p-3.5 border-b border-slate-800 space-y-3 bg-slate-900/90">
+      <div className={`p-3.5 border-b space-y-3 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
               bOS
             </div>
             <div>
-              <h2 className="text-xs font-black text-white uppercase tracking-wider">Studio Side Nav</h2>
-              <p className="text-[10px] text-slate-400 font-mono">Projects, Sessions & Assets</p>
+              <h2 className={`text-xs font-black uppercase tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Studio Side Nav</h2>
+              <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Projects, Sessions & Assets</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1">
             <button
               onClick={onToggleCollapse}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'
+              }`}
               title="Collapse Side Navigation Panel"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -257,7 +265,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer lg:hidden"
+                className={`p-1.5 rounded-lg transition cursor-pointer lg:hidden ${
+                  isDarkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-500 hover:text-rose-600 hover:bg-slate-200'
+                }`}
                 title="Close drawer"
               >
                 <X className="w-4 h-4" />
@@ -267,17 +277,21 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         </div>
 
         {/* 3-WAY SUB-TAB NAVIGATION */}
-        <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+        <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border text-[11px] font-bold ${
+          isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
+        }`}>
           <button
             type="button"
             onClick={() => onSetActivePanelTab('projects')}
             className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activePanelTab === 'projects'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
           >
-            <Disc className="w-3.5 h-3.5 text-indigo-300" />
+            <Disc className="w-3.5 h-3.5 text-indigo-400" />
             <span>Projects ({tracks.length})</span>
           </button>
 
@@ -287,10 +301,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activePanelTab === 'sessions'
                 ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
           >
-            <FolderKanban className="w-3.5 h-3.5 text-purple-300" />
+            <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
             <span>Sessions ({sessions.length})</span>
           </button>
 
@@ -300,33 +316,41 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activePanelTab === 'assets'
                 ? 'bg-cyan-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
           >
-            <HardDrive className="w-3.5 h-3.5 text-cyan-300" />
+            <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
             <span>Assets</span>
           </button>
         </div>
       </div>
 
       {/* CONTENT AREA BASED ON ACTIVE TAB */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-3.5 space-y-3.5">
+      <div className={`flex-1 overflow-y-auto custom-scrollbar p-3.5 space-y-3.5 ${
+        isDarkMode ? 'bg-slate-900/40' : 'bg-slate-50/50'
+      }`}>
         
         {/* ======================================================== */}
-        {/* TAB 1: SAVED MUSICAL PROJECTS (CATALOG) */}
+        {/* TAB 1: SAVED MUSICAL PROJECTS (CATALOG) - SELECTOR 2     */}
         {/* ======================================================== */}
         {activePanelTab === 'projects' && (
           <div className="space-y-3">
             {/* Search & Add New Project */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   placeholder="Search 26+ tracks, genre, vocals..."
                   value={projectSearch}
                   onChange={(e) => setProjectSearch(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className={`w-full border rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500 transition ${
+                    isDarkMode
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-500'
+                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                  }`}
                 />
               </div>
               <button
@@ -343,10 +367,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar text-[10px] font-bold">
               <button
                 onClick={() => setProjectEpFilter('ALL')}
-                className={`px-2 py-0.5 rounded-lg transition whitespace-nowrap ${
+                className={`px-2 py-0.5 rounded-lg transition whitespace-nowrap cursor-pointer ${
                   projectEpFilter === 'ALL'
                     ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 All EPs ({tracks.length})
@@ -355,10 +381,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 <button
                   key={ep.id}
                   onClick={() => setProjectEpFilter(ep.title)}
-                  className={`px-2 py-0.5 rounded-lg transition whitespace-nowrap ${
+                  className={`px-2 py-0.5 rounded-lg transition whitespace-nowrap cursor-pointer ${
                     projectEpFilter === ep.title
                       ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      : isDarkMode
+                      ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {ep.title.replace('The ', '')}
@@ -383,24 +411,28 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                       onClick={() => onSelectTrack(track)}
                       className={`p-2.5 rounded-xl border transition-all cursor-pointer group ${
                         isSelected
-                          ? 'bg-indigo-950/60 border-indigo-500/80 shadow-md shadow-indigo-950/50'
-                          : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
+                          ? isDarkMode
+                            ? 'bg-indigo-950/60 border-indigo-500/80 shadow-md shadow-indigo-950/50'
+                            : 'bg-indigo-50/80 border-indigo-400 shadow-sm'
+                          : isDarkMode
+                          ? 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
+                          : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono text-[10px] font-bold text-indigo-400 bg-indigo-950/90 px-1.5 py-0.5 rounded border border-indigo-800/40">
+                            <span className="font-mono text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/30">
                               {track.id}
                             </span>
-                            <span className="font-bold text-xs text-white truncate max-w-[160px]">
+                            <span className={`font-bold text-xs truncate max-w-[160px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                               {track.title}
                             </span>
                             {isSelected && (
                               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Active on workbench" />
                             )}
                           </div>
-                          <p className="text-[10px] text-slate-400 truncate">
+                          <p className={`text-[10px] truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                             {track.ep} • {track.genre}
                           </p>
                         </div>
@@ -409,25 +441,29 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           <span
                             className={`inline-block text-[9px] font-bold font-mono px-1.5 py-0.5 rounded ${
                               track.status === 'Released'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
+                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
                                 : track.status === 'Audio Master'
-                                ? 'bg-purple-950 text-purple-300 border border-purple-800/40'
+                                ? 'bg-purple-500/10 text-purple-500 border border-purple-500/30'
                                 : track.status === 'UVR5 Stem Prep'
-                                ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
-                                : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
+                                : isDarkMode
+                                ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
                             }`}
                           >
                             {track.status}
                           </span>
-                          <div className="text-[9px] font-mono text-slate-500">
+                          <div className="text-[9px] font-mono text-slate-400">
                             {track.bpm} BPM • {track.key}
                           </div>
                         </div>
                       </div>
 
                       {/* Bottom row: Sessions count and Selah status */}
-                      <div className="mt-2 pt-1.5 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
-                        <span className="truncate max-w-[170px] italic text-slate-500">
+                      <div className={`mt-2 pt-1.5 border-t flex items-center justify-between text-[10px] ${
+                        isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'
+                      }`}>
+                        <span className="truncate max-w-[170px] italic">
                           {track.vocalCast || track.vocal}
                         </span>
                         <div className="flex items-center gap-2">
@@ -460,13 +496,17 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
                     placeholder="Search session snapshots..."
                     value={sessionSearch}
                     onChange={(e) => setSessionSearch(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    className={`w-full border rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-purple-500 transition ${
+                      isDarkMode
+                        ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-500'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                    }`}
                   />
                 </div>
                 <button
@@ -483,24 +523,36 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               <div className="flex items-center gap-1 text-[10px] font-bold">
                 <button
                   onClick={() => setSessionFilterMode('all')}
-                  className={`px-2 py-0.5 rounded-lg transition ${
-                    sessionFilterMode === 'all' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                    sessionFilterMode === 'all'
+                      ? 'bg-purple-600 text-white'
+                      : isDarkMode
+                      ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   All ({sessions.length})
                 </button>
                 <button
                   onClick={() => setSessionFilterMode('current_track')}
-                  className={`px-2 py-0.5 rounded-lg transition ${
-                    sessionFilterMode === 'current_track' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                    sessionFilterMode === 'current_track'
+                      ? 'bg-purple-600 text-white'
+                      : isDarkMode
+                      ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {selectedTrack.id} Only ({sessions.filter((s) => s.trackId === selectedTrack.id).length})
                 </button>
                 <button
                   onClick={() => setSessionFilterMode('pinned')}
-                  className={`px-2 py-0.5 rounded-lg transition flex items-center gap-1 ${
-                    sessionFilterMode === 'pinned' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  className={`px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                    sessionFilterMode === 'pinned'
+                      ? 'bg-purple-600 text-white'
+                      : isDarkMode
+                      ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <Pin className="w-2.5 h-2.5" />
@@ -511,10 +563,14 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
             {/* Quick Create Form Modal */}
             {isCreatingSession && (
-              <form onSubmit={handleSubmitNewSession} className="bg-slate-950 border border-purple-600/50 rounded-xl p-3 space-y-2.5 shadow-xl animate-fadeIn">
-                <div className="flex items-center justify-between text-xs font-bold text-white border-b border-slate-800 pb-1.5">
-                  <span className="text-purple-300">Save Composition Session</span>
-                  <button type="button" onClick={() => setIsCreatingSession(false)} className="text-slate-400 hover:text-white">✕</button>
+              <form onSubmit={handleSubmitNewSession} className={`border rounded-xl p-3 space-y-2.5 shadow-xl animate-fadeIn ${
+                isDarkMode ? 'bg-slate-950 border-purple-600/50' : 'bg-white border-purple-300'
+              }`}>
+                <div className={`flex items-center justify-between text-xs font-bold border-b pb-1.5 ${
+                  isDarkMode ? 'text-white border-slate-800' : 'text-slate-900 border-slate-200'
+                }`}>
+                  <span className="text-purple-600 dark:text-purple-300">Save Composition Session</span>
+                  <button type="button" onClick={() => setIsCreatingSession(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">✕</button>
                 </div>
                 <div>
                   <label className="block text-[9px] font-mono uppercase text-slate-400 mb-0.5">Session Name</label>
@@ -522,7 +578,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     type="text"
                     value={newSessionName}
                     onChange={(e) => setNewSessionName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-purple-500"
+                    className={`w-full rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-purple-500 border ${
+                      isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                     placeholder="e.g. Master's Hand - Bridge Rework"
                     required
                   />
@@ -533,17 +591,21 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     type="text"
                     value={newSessionDesc}
                     onChange={(e) => setNewSessionDesc(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-purple-500"
+                    className={`w-full rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-purple-500 border ${
+                      isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                     placeholder="Notes on this iteration..."
                   />
                 </div>
                 <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-1.5 text-[10px] text-slate-300 cursor-pointer">
+                  <label className={`flex items-center gap-1.5 text-[10px] cursor-pointer ${
+                    isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                  }`}>
                     <input
                       type="checkbox"
                       checked={newSessionPinned}
                       onChange={(e) => setNewSessionPinned(e.target.checked)}
-                      className="rounded bg-slate-900 border-slate-700 text-purple-600"
+                      className="rounded text-purple-600"
                     />
                     <span>Pin to top</span>
                   </label>
@@ -551,7 +613,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsCreatingSession(false)}
-                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold"
+                      className={`px-2 py-1 rounded text-[10px] font-bold ${
+                        isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
                     >
                       Cancel
                     </button>
@@ -569,7 +633,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             {/* Sessions List */}
             <div className="space-y-1.5">
               {filteredSessions.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-500 font-mono">
+                <div className="text-center py-8 text-xs text-slate-400 font-mono">
                   No sessions found. Create a snapshot to capture this composition state!
                 </div>
               ) : (
@@ -581,8 +645,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                       key={session.id}
                       className={`p-2.5 rounded-xl border transition-all ${
                         isActive
-                          ? 'bg-purple-950/60 border-purple-500/80 shadow-md shadow-purple-950/50'
-                          : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
+                          ? isDarkMode
+                            ? 'bg-purple-950/60 border-purple-500/80 shadow-md shadow-purple-950/50'
+                            : 'bg-purple-50 border-purple-400 shadow-xs'
+                          : isDarkMode
+                          ? 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
+                          : 'bg-white border-slate-200 hover:border-purple-300 hover:bg-slate-50'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-1.5">
@@ -591,12 +659,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           onClick={() => onSelectSession(session)}
                         >
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-xs text-white truncate max-w-[170px]">
+                            <span className={`font-bold text-xs truncate max-w-[170px] ${
+                              isDarkMode ? 'text-white' : 'text-slate-900'
+                            }`}>
                               {session.name}
                             </span>
-                            {session.isPinned && <Pin className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />}
+                            {session.isPinned && <Pin className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />}
                           </div>
-                          <p className="text-[10px] text-purple-300/80 truncate">
+                          <p className={`text-[10px] truncate ${
+                            isDarkMode ? 'text-purple-300/80' : 'text-purple-700'
+                          }`}>
                             {session.trackTitle} ({session.trackId})
                           </p>
                         </div>
@@ -606,15 +678,19 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onTogglePinSession(session)}
-                            className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition"
+                            className={`p-1 rounded transition ${
+                              isDarkMode ? 'text-slate-400 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
+                            }`}
                             title={session.isPinned ? 'Unpin' : 'Pin to top'}
                           >
-                            <Pin className={`w-3 h-3 ${session.isPinned ? 'fill-amber-400 text-amber-400' : ''}`} />
+                            <Pin className={`w-3 h-3 ${session.isPinned ? 'fill-amber-500 text-amber-500' : ''}`} />
                           </button>
                           <button
                             type="button"
                             onClick={() => onDuplicateSession(session)}
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                            className={`p-1 rounded transition ${
+                              isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+                            }`}
                             title="Duplicate/Fork session"
                           >
                             <Copy className="w-3 h-3" />
@@ -622,7 +698,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => onDeleteSession(session.id)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                            className={`p-1 rounded transition ${
+                              isDarkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100'
+                            }`}
                             title="Delete session"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -632,7 +710,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
                       {/* Snapshot details */}
                       <div
-                        className="mt-2 pt-1.5 border-t border-slate-900 flex items-center justify-between text-[9px] text-slate-400 font-mono cursor-pointer"
+                        className={`mt-2 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono cursor-pointer ${
+                          isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'
+                        }`}
                         onClick={() => onSelectSession(session)}
                       >
                         <div className="flex items-center gap-1.5">
@@ -640,7 +720,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           <span>•</span>
                           <span>{session.snapshot?.key || 'C'}</span>
                           <span>•</span>
-                          <span className="text-indigo-400">{session.snapshot?.latestVersionTag || 'v1.0'}</span>
+                          <span className="text-indigo-500">{session.snapshot?.latestVersionTag || 'v1.0'}</span>
                         </div>
                         <button
                           type="button"
@@ -648,7 +728,13 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                             e.stopPropagation();
                             onSelectSession(session);
                           }}
-                          className="px-2 py-0.5 rounded bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-[9px] font-bold"
+                          className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                            isActive
+                              ? 'bg-purple-600 text-white'
+                              : isDarkMode
+                              ? 'bg-purple-900/60 hover:bg-purple-800 text-purple-200'
+                              : 'bg-purple-100 hover:bg-purple-200 text-purple-800'
+                          }`}
                         >
                           {isActive ? 'Active' : 'Switch'}
                         </button>
@@ -662,58 +748,84 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* TAB 3: STUDIO ASSET MANAGEMENT */}
+        {/* TAB 3: MEDIA ASSETS & UVR5 STEM REPOSITORY               */}
         {/* ======================================================== */}
         {activePanelTab === 'assets' && (
           <div className="space-y-3.5">
-            <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1">
+            <div className={`p-2.5 rounded-xl border space-y-1 ${
+              isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white">Active Track Assets</span>
-                <span className="font-mono text-[10px] text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/40">
+                <span className={`text-xs font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Active Track Assets</span>
+                <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${
+                  isDarkMode
+                    ? 'text-cyan-400 bg-cyan-950/80 border-cyan-800/40'
+                    : 'text-cyan-700 bg-cyan-50 border-cyan-200'
+                }`}>
                   {selectedTrack.id}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 truncate">{selectedTrack.title} ({selectedTrack.ep})</p>
+              <p className={`text-[10px] truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{selectedTrack.title} ({selectedTrack.ep})</p>
             </div>
 
             {/* Asset Category Filter Chips */}
             <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-bold pb-1 custom-scrollbar">
               <button
                 onClick={() => setAssetFilter('all')}
-                className={`px-2 py-0.5 rounded-lg transition ${
-                  assetFilter === 'all' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                  assetFilter === 'all'
+                    ? 'bg-cyan-600 text-white'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 All
               </button>
               <button
                 onClick={() => setAssetFilter('stems')}
-                className={`px-2 py-0.5 rounded-lg transition ${
-                  assetFilter === 'stems' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                  assetFilter === 'stems'
+                    ? 'bg-cyan-600 text-white'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Stems (4)
               </button>
               <button
                 onClick={() => setAssetFilter('lyrics')}
-                className={`px-2 py-0.5 rounded-lg transition ${
-                  assetFilter === 'lyrics' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                  assetFilter === 'lyrics'
+                    ? 'bg-cyan-600 text-white'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Lyrics ({selectedTrack.versions.length})
               </button>
               <button
                 onClick={() => setAssetFilter('visuals')}
-                className={`px-2 py-0.5 rounded-lg transition ${
-                  assetFilter === 'visuals' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                  assetFilter === 'visuals'
+                    ? 'bg-cyan-600 text-white'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Art ({generatedImages.length})
               </button>
               <button
                 onClick={() => setAssetFilter('videos')}
-                className={`px-2 py-0.5 rounded-lg transition ${
-                  assetFilter === 'videos' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
+                  assetFilter === 'videos'
+                    ? 'bg-cyan-600 text-white'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Veo ({generatedVideos.length})
@@ -723,14 +835,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             {/* Section 1: UVR5 Lossless Audio Stems */}
             {(assetFilter === 'all' || assetFilter === 'stems') && (
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                <div className={`flex items-center justify-between text-[11px] font-bold ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                }`}>
                   <span className="flex items-center gap-1.5">
-                    <Music className="w-3.5 h-3.5 text-cyan-400" />
+                    <Music className="w-3.5 h-3.5 text-cyan-500" />
                     <span>UVR5 Isolated Stems (24-bit/48kHz)</span>
                   </span>
                   <button
                     onClick={() => onNavigateToTab('mixer')}
-                    className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono"
+                    className="text-[10px] text-cyan-500 hover:text-cyan-600 font-mono font-bold"
                   >
                     Open DAW →
                   </button>
@@ -740,10 +854,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                   {activeStems.map((stem) => (
                     <div
                       key={stem.id}
-                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-xs transition"
+                      className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                      }`}
                     >
                       <div className="space-y-0.5 min-w-0 pr-2">
-                        <div className="font-bold text-white text-[11px] truncate">{stem.name}</div>
+                        <div className={`font-bold text-[11px] truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                          {stem.name}
+                        </div>
                         <div className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5">
                           <span>{stem.format}</span>
                           <span>•</span>
@@ -758,7 +878,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           className={`p-1.5 rounded-lg transition cursor-pointer ${
                             playingStemId === stem.id
                               ? 'bg-cyan-500 text-slate-950 font-bold'
-                              : 'bg-slate-800 hover:bg-slate-700 text-cyan-300'
+                              : isDarkMode
+                              ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300'
+                              : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200'
                           }`}
                           title={playingStemId === stem.id ? 'Pause Preview' : 'Audition Stem Preview'}
                         >
@@ -770,7 +892,11 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                             e.preventDefault();
                             alert(`Downloading master stem: ${stem.name} (${stem.format})`);
                           }}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                          className={`p-1.5 rounded-lg transition ${
+                            isDarkMode
+                              ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
                           title="Download high-resolution stem WAV"
                         >
                           <Download className="w-3 h-3" />
@@ -784,15 +910,19 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
             {/* Section 2: Lyric Versions & Checkpoints */}
             {(assetFilter === 'all' || assetFilter === 'lyrics') && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+              <div className={`space-y-1.5 pt-2 border-t ${
+                isDarkMode ? 'border-slate-800/80' : 'border-slate-200'
+              }`}>
+                <div className={`flex items-center justify-between text-[11px] font-bold ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                }`}>
                   <span className="flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                    <FileText className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Saved Lyric Checkpoints ({selectedTrack.versions.length})</span>
                   </span>
                   <button
                     onClick={() => onNavigateToTab('lyrics')}
-                    className="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono"
+                    className="text-[10px] text-indigo-500 hover:text-indigo-600 font-mono font-bold"
                   >
                     Open Lyrics →
                   </button>
@@ -802,20 +932,34 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                   {selectedTrack.versions.map((ver, idx) => (
                     <div
                       key={idx}
-                      className="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-xs transition"
+                      className={`p-2 rounded-xl border flex items-center justify-between text-xs transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                      }`}
                     >
                       <div className="space-y-0.5 min-w-0 pr-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[9px] font-bold text-indigo-300 bg-indigo-950 px-1.5 py-0.5 rounded border border-indigo-800/40">
+                          <span className={`font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                            isDarkMode
+                              ? 'text-indigo-300 bg-indigo-950 border-indigo-800/40'
+                              : 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                          }`}>
                             {ver.version}
                           </span>
-                          <span className="text-[10px] font-medium text-white truncate max-w-[140px]">{ver.reason}</span>
+                          <span className={`text-[10px] font-medium truncate max-w-[140px] ${
+                            isDarkMode ? 'text-white' : 'text-slate-900'
+                          }`}>{ver.reason}</span>
                         </div>
-                        <div className="text-[9px] font-mono text-slate-500">{ver.timestamp}</div>
+                        <div className="text-[9px] font-mono text-slate-400">{ver.timestamp}</div>
                       </div>
                       <button
                         onClick={() => onNavigateToTab('lyrics')}
-                        className="px-2 py-1 rounded bg-slate-800 hover:bg-indigo-600 text-white text-[9px] font-bold transition"
+                        className={`px-2 py-1 rounded text-[9px] font-bold transition ${
+                          isDarkMode
+                            ? 'bg-slate-800 hover:bg-indigo-600 text-white'
+                            : 'bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-700'
+                        }`}
                       >
                         Inspect
                       </button>
@@ -827,15 +971,19 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
             {/* Section 3: Visual & Cover Art Assets */}
             {(assetFilter === 'all' || assetFilter === 'visuals') && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+              <div className={`space-y-1.5 pt-2 border-t ${
+                isDarkMode ? 'border-slate-800/80' : 'border-slate-200'
+              }`}>
+                <div className={`flex items-center justify-between text-[11px] font-bold ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                }`}>
                   <span className="flex items-center gap-1.5">
-                    <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                    <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
                     <span>Visuals & Cover Art ({generatedImages.length})</span>
                   </span>
                   <button
                     onClick={() => onNavigateToTab('veo_visuals')}
-                    className="text-[10px] text-purple-400 hover:text-purple-300 font-mono"
+                    className="text-[10px] text-purple-500 hover:text-purple-600 font-mono font-bold"
                   >
                     Open Studio →
                   </button>
@@ -845,12 +993,14 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                   {generatedImages.map((img) => (
                     <div
                       key={img.id}
-                      className="group relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 aspect-square"
+                      className={`group relative rounded-xl overflow-hidden border aspect-square ${
+                        isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-100'
+                      }`}
                     >
                       <img src={img.url} alt={img.prompt} className="w-full h-full object-cover group-hover:scale-105 transition" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition p-2 flex flex-col justify-end text-[9px] text-white">
                         <span className="font-bold truncate">{img.trackTitle || selectedTrack.title}</span>
-                        <span className="text-slate-400 font-mono">{img.aspectRatio}</span>
+                        <span className="text-slate-300 font-mono">{img.aspectRatio}</span>
                       </div>
                     </div>
                   ))}
@@ -860,22 +1010,28 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
             {/* Section 4: Veo 3 Video Generations */}
             {(assetFilter === 'all' || assetFilter === 'videos') && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+              <div className={`space-y-1.5 pt-2 border-t ${
+                isDarkMode ? 'border-slate-800/80' : 'border-slate-200'
+              }`}>
+                <div className={`flex items-center justify-between text-[11px] font-bold ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                }`}>
                   <span className="flex items-center gap-1.5">
-                    <Video className="w-3.5 h-3.5 text-amber-400" />
+                    <Video className="w-3.5 h-3.5 text-amber-500" />
                     <span>Veo 3 Video Generations ({generatedVideos.length})</span>
                   </span>
                   <button
                     onClick={() => onNavigateToTab('veo_visuals')}
-                    className="text-[10px] text-amber-400 hover:text-amber-300 font-mono"
+                    className="text-[10px] text-amber-500 hover:text-amber-600 font-mono font-bold"
                   >
                     Open Veo →
                   </button>
                 </div>
 
                 {generatedVideos.length === 0 ? (
-                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center text-[10px] text-slate-500 font-mono">
+                  <div className={`p-3 rounded-xl border text-center text-[10px] font-mono ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-500'
+                  }`}>
                     No Veo videos rendered for this project yet.
                   </div>
                 ) : (
@@ -883,15 +1039,25 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     {generatedVideos.map((vid) => (
                       <div
                         key={vid.id}
-                        className="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-xs"
+                        className={`p-2 rounded-xl border flex items-center justify-between text-xs ${
+                          isDarkMode
+                            ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                            : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                        }`}
                       >
                         <div className="min-w-0 pr-2">
-                          <div className="text-[10px] font-bold text-white truncate max-w-[170px]">{vid.prompt}</div>
-                          <div className="text-[9px] font-mono text-amber-400">{vid.status.toUpperCase()} • {vid.aspectRatio}</div>
+                          <div className={`text-[10px] font-bold truncate max-w-[170px] ${
+                            isDarkMode ? 'text-white' : 'text-slate-900'
+                          }`}>{vid.prompt}</div>
+                          <div className="text-[9px] font-mono text-amber-500">{vid.status.toUpperCase()} • {vid.aspectRatio}</div>
                         </div>
                         <button
                           onClick={() => onNavigateToTab('veo_visuals')}
-                          className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[9px] font-bold"
+                          className={`px-2 py-1 rounded text-[9px] font-bold ${
+                            isDarkMode
+                              ? 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+                              : 'bg-slate-100 hover:bg-slate-200 text-amber-800'
+                          }`}
                         >
                           View
                         </button>
@@ -902,32 +1068,50 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               </div>
             )}
 
-            {/* Nextcloud / WebDAV Sync Button */}
+            {/* Nextcloud / WebDAV Sync Button - Dedicated to /Music-Production */}
             <div className="pt-2">
-              <a
-                href="https://nextcloud.brickos.io"
-                target="_blank"
-                rel="noreferrer"
-                className="w-full py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('nextcloud_sync')}
+                className={`w-full py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-between cursor-pointer shadow-xs ${
+                  isDarkMode
+                    ? 'bg-indigo-950/60 hover:bg-indigo-900/80 border-indigo-700/50 hover:border-indigo-500 text-indigo-200 hover:text-white'
+                    : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-900'
+                }`}
+                title="Launch Nextcloud Live WebDAV & Folder 207332 /Music-Production Asset Matcher"
               >
-                <HardDrive className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Nextcloud WebDAV Stem Hub</span>
-                <ExternalLink className="w-3 h-3 text-slate-500" />
-              </a>
+                <span className="flex items-center gap-1.5">
+                  <HardDrive className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>/Music-Production Matcher</span>
+                </span>
+                <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
+                  isDarkMode
+                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-700/40'
+                    : 'text-emerald-800 bg-emerald-100 border-emerald-300'
+                }`}>
+                  Live Sync →
+                </span>
+              </button>
             </div>
 
             {/* Nashville SOP Rules & Markdown Editor Shortcut */}
-            <div className="pt-2 border-t border-slate-800/80">
+            <div className={`pt-2 border-t ${
+              isDarkMode ? 'border-slate-800/80' : 'border-slate-200'
+            }`}>
               <button
                 type="button"
                 onClick={() => onNavigateToTab('lyrics')}
-                className="w-full py-2 px-3 rounded-xl bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-800/40 text-indigo-300 hover:text-white text-xs font-bold transition flex items-center justify-between cursor-pointer"
+                className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-indigo-950/40 hover:bg-indigo-900/60 border-indigo-800/40 text-indigo-300 hover:text-white'
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                }`}
               >
                 <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
                   <span>Nashville SOP Rules (.md)</span>
                 </span>
-                <span className="text-[10px] font-mono text-indigo-400">Configure →</span>
+                <span className="text-[10px] font-mono text-indigo-500">Configure →</span>
               </button>
             </div>
 

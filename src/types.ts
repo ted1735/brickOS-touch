@@ -276,3 +276,49 @@ export interface SOPRulesPackage {
   rules: SOPRuleDefinition[];
 }
 
+export type NextcloudAssetCategory =
+  | 'MASTER_AUDIO'
+  | 'UVR5_VOCAL_STEM'
+  | 'INSTRUMENTAL_STEM'
+  | 'LYRIC_SOP_DOC'
+  | 'VISUAL_ARTWORK'
+  | 'VIDEO_REEL'
+  | 'CHORD_MIDI'
+  | 'UNCATEGORIZED';
+
+export interface NextcloudFolderAsset {
+  id: string;
+  filename: string;
+  folderId: string; // e.g. '207332'
+  category: NextcloudAssetCategory;
+  fileSizeBytes: number;
+  fileSizeFormatted: string;
+  mimeType: string;
+  webdavPath: string;
+  shareUrl: string;
+  matchedTrackId: string | null; // e.g. 'TRK-01' or null
+  matchedTrackTitle?: string;
+  matchConfidence: number; // 0 - 100
+  suggestedTrackId?: string;
+  suggestedCategory?: NextcloudAssetCategory;
+  isMatched: boolean;
+  bpm?: number;
+  key?: string;
+  audioDurationSeconds?: number;
+  previewAudioType?: 'vocal' | 'harmony' | 'instrumental' | 'drums' | 'sawtooth';
+  previewImageUrl?: string;
+  notes?: string;
+  lastSyncedAt: string;
+}
+
+export interface NextcloudSyncConfig {
+  serverUrl: string;
+  username: string;
+  appPassword?: string;
+  webdavRoot: string;
+  folderIdOrShareUrl: string;
+  lastConnectionStatus: 'connected' | 'unauthorized' | 'error' | 'idle';
+  lastPingMs?: number;
+  lastSyncTimestamp?: string;
+}
+

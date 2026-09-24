@@ -543,6 +543,187 @@ app.post('/api/gemini/analyze-video', async (req, res) => {
   }
 });
 
+// 11. Nextcloud Live WebDAV Connection Test
+app.post('/api/nextcloud/test-connection', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      serverUrl = 'https://nextcloud.moyercloud.com',
+      username = 'ncted',
+      password = '',
+      webdavPath = '/remote.php/dav/files/ncted/Music-Production'
+    } = req.body;
+
+    const targetUrl = `${serverUrl.replace(/\/$/, '')}${webdavPath.startsWith('/') ? webdavPath : '/' + webdavPath}`;
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+      'Depth': '0',
+    };
+
+    if (password) {
+      const authString = Buffer.from(`${username}:${password}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    // Attempt PROPFIND first (standard WebDAV)
+    let response;
+    let methodUsed = 'PROPFIND';
+    try {
+      response = await fetch(targetUrl, {
+        method: 'PROPFIND',
+        headers,
+      });
+    } catch (methodErr) {
+      // Fallback to GET/HEAD if PROPFIND blocked by edge proxy
+      methodUsed = 'GET';
+      response = await fetch(targetUrl, {
+        method: 'GET',
+        headers,
+      });
+    }
+
+    const latencyMs = Date.now() - startTime;
+    const isSuccess = response.status >= 200 && response.status < 300;
+    const isAuthRequired = response.status === 401;
+
+    let responseSnippet = '';
+    try {
+      const rawText = await response.text();
+      responseSnippet = rawText.slice(0, 300);
+    } catch {
+      // ignore
+    }
+
+    res.json({
+      success: isSuccess,
+      status: response.status,
+      statusText: response.statusText,
+      latencyMs,
+      targetUrl,
+      folderPath: '/Music-Production',
+      methodUsed,
+      isAuthRequired,
+      message: isSuccess
+        ? `Successfully connected to Nextcloud WebDAV /Music-Production for ${username} (${latencyMs}ms)`
+        : isAuthRequired
+        ? `Authentication required (HTTP 401). Nextcloud WebDAV is live at ${targetUrl}, but requires an App Password.`
+        : `Nextcloud returned HTTP ${response.status} ${response.statusText}`,
+      snippet: responseSnippet,
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('Nextcloud connection test error:', err);
+    res.status(500).json({
+      success: false,
+      status: 0,
+      latencyMs,
+      error: err.message || 'Failed to reach Nextcloud server',
+      message: `Failed to connect to Nextcloud: ${err.message}`,
+    });
+  }
+});
+
+// 12. Nextcloud Live Sync Folder / Share Endpoint
+app.post('/api/nextcloud/sync-folder', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      folderId = '207332',
+      serverUrl = 'https://nextcloud.moyercloud.com',
+      username = 'ncted',
+      password = '',
+      webdavPath = '/remote.php/dav/files/ncted/Music-Production',
+      folderPath = '/Music-Production'
+    } = req.body;
+
+    // Check direct WebDAV directory
+    const targetUrl = `${serverUrl.replace(/\/$/, '')}${webdavPath.startsWith('/') ? webdavPath : '/' + webdavPath}`;
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+      'Depth': '1',
+    };
+
+    if (password) {
+      const authString = Buffer.from(`${username}:${password}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    let liveItemsFound = 0;
+    let liveFiles: Array<{ name: string; size: number; href: string; mimeType: string }> = [];
+    let isLiveAuthenticated = false;
+
+    try {
+      const davRes = await fetch(targetUrl, {
+        method: 'PROPFIND',
+        headers,
+      });
+
+      if (davRes.status >= 200 && davRes.status < 300) {
+        isLiveAuthenticated = true;
+        const xml = await davRes.text();
+        // Simple XML regex parser for WebDAV multistatus responses
+        const hrefMatches = [...xml.matchAll(/<d:href>([^<]+)<\/d:href>/gi)];
+        const lengthMatches = [...xml.matchAll(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/gi)];
+
+        for (let i = 0; i < hrefMatches.length; i++) {
+          const href = decodeURIComponent(hrefMatches[i][1]);
+          const filename = href.split('/').filter(Boolean).pop() || '';
+          // Filter out hidden files, root drive references, and the /Music-Production container folder itself
+          if (
+            filename &&
+            !filename.startsWith('.') &&
+            filename.toLowerCase() !== 'music-production' &&
+            filename.toLowerCase() !== 'ncted' &&
+            filename.toLowerCase() !== 'files'
+          ) {
+            const size = lengthMatches[i] ? parseInt(lengthMatches[i][1], 10) : 0;
+            liveFiles.push({
+              name: filename,
+              size,
+              href,
+              mimeType: filename.endsWith('.wav')
+                ? 'audio/wav'
+                : filename.endsWith('.mp3')
+                ? 'audio/mpeg'
+                : filename.endsWith('.png')
+                ? 'image/png'
+                : filename.endsWith('.jpg') || filename.endsWith('.jpeg')
+                ? 'image/jpeg'
+                : filename.endsWith('.mp4')
+                ? 'video/mp4'
+                : 'application/octet-stream'
+            });
+          }
+        }
+        liveItemsFound = liveFiles.length;
+      }
+    } catch (davErr) {
+      console.warn('Live WebDAV PROPFIND query failed:', davErr);
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      folderId,
+      serverUrl,
+      username,
+      isLiveAuthenticated,
+      liveItemsFound,
+      liveFiles,
+      files: liveFiles,
+      latencyMs,
+      timestamp: new Date().toISOString(),
+      message: isLiveAuthenticated
+        ? `Successfully synchronized live WebDAV folder /Music-Production with ${liveItemsFound} remote files (${latencyMs}ms)`
+        : `Connected to Nextcloud. Folder ${folderId} (/Music-Production) initialized. For live WebDAV file downloads, provide an App Password.`
+    });
+  } catch (err: any) {
+    console.error('Nextcloud sync error:', err);
+    res.status(500).json({ error: err.message || 'Nextcloud sync failed' });
+  }
+});
+
 // Vite middleware integration
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

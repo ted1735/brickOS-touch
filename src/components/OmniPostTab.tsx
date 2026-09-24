@@ -109,7 +109,7 @@ Ensure high 3-second hook velocity, blue-collar authenticity, zero religious cli
       title: track.title,
       genre: track.genre,
       bpm: track.bpm,
-      webdavStemFolder: `https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS/${track.id}/`,
+      webdavStemFolder: `https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/${track.id}/`,
       exportedAt: new Date().toISOString(),
       campaigns: captions
     };
@@ -295,7 +295,7 @@ Ensure high 3-second hook velocity, blue-collar authenticity, zero religious cli
                 <span>Nextcloud WebDAV Stems Binding:</span>
               </span>
               <p className="text-[11px] text-slate-400 font-mono truncate select-all">
-                https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS/{track.id}/social_cuts/
+                https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/{track.id}/social_cuts/
               </p>
             </div>
 

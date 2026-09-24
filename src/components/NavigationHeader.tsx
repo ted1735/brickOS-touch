@@ -11,7 +11,9 @@ import {
   Radio,
   Database,
   Layers,
-  Plus
+  Plus,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Track } from '../types';
 
@@ -25,6 +27,8 @@ interface NavigationHeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   selectedEpFilter?: string;
+  isDarkMode?: boolean;
+  onToggleTheme?: () => void;
 }
 
 export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
@@ -36,10 +40,18 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   onOpenCreateProject,
   activeTab,
   setActiveTab,
-  selectedEpFilter = 'ALL'
+  selectedEpFilter = 'ALL',
+  isDarkMode = true,
+  onToggleTheme
 }) => {
   return (
-    <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md bg-opacity-95 flex-shrink-0">
+    <header
+      className={`px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
+        isDarkMode
+          ? 'bg-slate-900/95 border-b border-slate-800 text-white'
+          : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
+      }`}
+    >
       <div className="flex items-center gap-3">
         <button
           onClick={() => setActiveTab('kanban')}
@@ -52,33 +64,39 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           <div className="flex items-center gap-2">
             <h1 
               onClick={() => setActiveTab('kanban')}
-              className="text-base font-black tracking-wider text-white hover:text-indigo-300 transition cursor-pointer"
+              className={`text-base font-black tracking-wider transition cursor-pointer ${
+                isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
+              }`}
               title="Return to Master Kanban Dashboard"
             >
               brickOS MASTER STUDIO
             </h1>
-            <span className="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 font-mono text-[10px] font-bold border border-indigo-700/50">
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/30">
               v5.5 SOVEREIGN
             </span>
-            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 font-mono text-[10px] font-semibold border border-emerald-700/30">
+            <button
+              onClick={() => setActiveTab('nextcloud_sync')}
+              className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
+              title="Nextcloud Sync & Asset Matcher"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              WebDAV Online
-            </span>
+              WebDAV / 207332
+            </button>
           </div>
-          <p className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+          <p className={`text-[11px] flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
             <span>Ted Moyer (Primary Artist / OAC)</span>
             <span>•</span>
-            <span className="text-indigo-400 font-medium">BRICK Records</span>
+            <span className="text-indigo-500 font-medium">BRICK Records</span>
             <span>•</span>
             {activeTab === 'kanban' ? (
-              <span className="text-amber-400 font-medium bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+              <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                 {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
-                <span className="text-indigo-300 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
+                <span className="text-indigo-500 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
                 <span>•</span>
-                <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
+                <span className="text-amber-500 font-medium">{selectedTrack.ep}</span>
               </span>
             )}
           </p>
@@ -89,53 +107,74 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
       <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
         <button
           onClick={() => setActiveTab('kanban')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
             activeTab === 'kanban'
               ? 'bg-indigo-600 border-indigo-500 text-white'
-              : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+              : isDarkMode
+              ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
           }`}
           title="Master Kanban Pipeline Dashboard"
         >
-          <Layers className="w-3.5 h-3.5 text-indigo-300" />
+          <Layers className="w-3.5 h-3.5 text-indigo-400" />
           <span>Dashboard</span>
         </button>
 
         <button
+          onClick={() => setActiveTab('nextcloud_sync')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+            activeTab === 'nextcloud_sync'
+              ? 'bg-indigo-600 border-indigo-500 text-white'
+              : isDarkMode
+              ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+          }`}
+          title="Nextcloud WebDAV & Folder 207332 Asset Matcher"
+        >
+          <HardDrive className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="hidden sm:inline">Nextcloud Matcher</span>
+          <span className="sm:hidden">Nextcloud</span>
+        </button>
+
+        <button
           onClick={onOpenSearch}
-          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+            isDarkMode
+              ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+          }`}
           title="Google Search Grounding (gemini-3.5-flash)"
         >
           <Search className="w-3.5 h-3.5 text-blue-400" />
-          <span className="hidden md:inline">Google Search Grounding</span>
-          <span className="md:hidden">Search</span>
+          <span className="hidden md:inline">Grounding</span>
         </button>
 
         <button
           onClick={onOpenChat}
-          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+            isDarkMode
+              ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+          }`}
           title="Studio Co-Producer Gemini Chatbot"
         >
           <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-          <span className="hidden md:inline">Studio Co-Producer AI</span>
-          <span className="md:hidden">AI Chat</span>
+          <span className="hidden md:inline">Co-Producer</span>
         </button>
 
         <button
           onClick={() => setActiveTab('database')}
-          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+            activeTab === 'database'
+              ? 'bg-indigo-600 border-indigo-500 text-white'
+              : isDarkMode
+              ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+          }`}
           title="Relational SQL & Similarity Matrix"
         >
           <Database className="w-3.5 h-3.5 text-cyan-400" />
           <span className="hidden lg:inline">Relational SQL</span>
-        </button>
-
-        <button
-          onClick={onOpenStorage}
-          className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition shadow-sm"
-          title="Nextcloud Sovereign WebDAV Hub"
-        >
-          <HardDrive className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="hidden lg:inline">Nextcloud Hub</span>
         </button>
 
         {onOpenCreateProject && (
@@ -151,12 +190,31 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
 
         <button
           onClick={onOpenSunoBridge}
-          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30"
+          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30 cursor-pointer"
           title="Suno & NightCafe 1-Click Bridge"
         >
           <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-          <span>⚡ Suno & NightCafe Bridge</span>
+          <span className="hidden sm:inline">⚡ Suno Bridge</span>
         </button>
+
+        {/* LIGHT / DARK MODE TOGGLE SWITCH */}
+        {onToggleTheme && (
+          <button
+            onClick={onToggleTheme}
+            className={`p-2 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            }`}
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle Light and Dark Mode"
+          >
+            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+            <span className="text-xs font-bold hidden xl:inline">
+              {isDarkMode ? 'Light' : 'Dark'}
+            </span>
+          </button>
+        )}
       </div>
     </header>
   );

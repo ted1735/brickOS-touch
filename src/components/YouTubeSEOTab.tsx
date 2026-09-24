@@ -76,7 +76,7 @@ OFFICIAL ARTIST LINKS & STEREO MASTERS:
 🎧 Spotify Official: https://open.spotify.com/artist/tedmoyer
 📺 YouTube Music Official: https://music.youtube.com/channel/tedmoyer
 🍎 Apple Music: https://music.apple.com/us/artist/ted-moyer
-📦 Sovereign Stems & Nextcloud WebDAV: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/brickOS/
+📦 Sovereign Stems & Nextcloud WebDAV: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/
 
 PRODUCED & MASTERED BY BRICK RECORDS:
 All rights reserved © 2026 BRICK Records / Ted Moyer. Sovereign Faith Production.
