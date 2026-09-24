@@ -254,3 +254,25 @@ export interface InterchangeableAssetLink {
   previewUrl?: string;
 }
 
+export interface SOPRuleDefinition {
+  id: string;
+  name: string;
+  description: string;
+  triggerType: 'required_tag' | 'forbidden_phrase' | 'contains_any' | 'ratio' | 'custom';
+  tags?: string[];
+  bannedPhrases?: string[];
+  severity: 'error' | 'warning' | 'info';
+  enabled: boolean;
+}
+
+export interface SOPRulesPackage {
+  version: string;
+  updatedAt: string;
+  rawMarkdown: string;
+  cliches: string[];
+  requiredTags: string[];
+  throneRoomTriggers: string[];
+  sonicScarRatio: string;
+  rules: SOPRuleDefinition[];
+}
+

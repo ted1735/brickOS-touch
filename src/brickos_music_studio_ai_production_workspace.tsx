@@ -65,6 +65,7 @@ import { RelationalDatabaseAndMatrixTab } from './components/RelationalDatabaseA
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { CatalogSidebar } from './components/CatalogSidebar';
 import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
+import { SideNavigationPanel } from './components/SideNavigationPanel';
 import {
   loadTracksFromFirestore,
   subscribeToFirestoreTracks,
@@ -116,6 +117,11 @@ export default function BrickOSMusicStudioWorkspace() {
   });
   const [activeSessionId, setActiveSessionId] = useState<string | null>('SES-01');
   const [sidebarMode, setSidebarMode] = useState<'sessions' | 'catalog'>('sessions');
+
+  // Side Navigation Panel State (Projects, Sessions & Studio Assets)
+  const [isSideNavOpen, setIsSideNavOpen] = useState<boolean>(true);
+  const [isSideNavCollapsed, setIsSideNavCollapsed] = useState<boolean>(false);
+  const [sideNavTab, setSideNavTab] = useState<'projects' | 'sessions' | 'assets'>('projects');
 
   // Initialize and synchronize with Firestore Database
   useEffect(() => {
@@ -1077,26 +1083,72 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <span className="hidden lg:inline">Nextcloud Hub</span>
           </button>
 
-          {/* Project Composition Sessions Toggle */}
+          {/* Side Navigation Panel Toggle: Projects */}
           <button
             onClick={() => {
-              if (isCatalogDrawerOpen && sidebarMode === 'sessions') {
-                setIsCatalogDrawerOpen(false);
+              if (isSideNavOpen && sideNavTab === 'projects') {
+                setIsSideNavOpen(false);
               } else {
-                setSidebarMode('sessions');
-                setIsCatalogDrawerOpen(true);
+                setSideNavTab('projects');
+                setIsSideNavOpen(true);
+                setIsSideNavCollapsed(false);
               }
             }}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isCatalogDrawerOpen && sidebarMode === 'sessions'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-indigo-950/60 shadow-md'
+              isSideNavOpen && sideNavTab === 'projects'
+                ? 'bg-indigo-600 border-indigo-400 text-white shadow-indigo-950/60 shadow-md'
                 : 'bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white border-slate-700'
+            }`}
+            title="Open Projects & Catalog Navigation Panel"
+          >
+            <Disc className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Projects ({tracks.length})</span>
+            <span className="sm:hidden">Projects</span>
+          </button>
+
+          {/* Side Navigation Panel Toggle: Sessions */}
+          <button
+            onClick={() => {
+              if (isSideNavOpen && sideNavTab === 'sessions') {
+                setIsSideNavOpen(false);
+              } else {
+                setSideNavTab('sessions');
+                setIsSideNavOpen(true);
+                setIsSideNavCollapsed(false);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isSideNavOpen && sideNavTab === 'sessions'
+                ? 'bg-purple-600 border-purple-400 text-white shadow-purple-950/60 shadow-md'
+                : 'bg-slate-800 hover:bg-slate-700 text-purple-300 hover:text-white border-slate-700'
             }`}
             title="Open Project Composition Sessions Manager"
           >
-            <FolderKanban className="w-3.5 h-3.5 text-indigo-400" />
+            <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
             <span className="hidden sm:inline">Sessions ({sessions.length})</span>
             <span className="sm:hidden">Sessions</span>
+          </button>
+
+          {/* Side Navigation Panel Toggle: Assets */}
+          <button
+            onClick={() => {
+              if (isSideNavOpen && sideNavTab === 'assets') {
+                setIsSideNavOpen(false);
+              } else {
+                setSideNavTab('assets');
+                setIsSideNavOpen(true);
+                setIsSideNavCollapsed(false);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isSideNavOpen && sideNavTab === 'assets'
+                ? 'bg-cyan-600 border-cyan-400 text-white shadow-cyan-950/60 shadow-md'
+                : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border-slate-700'
+            }`}
+            title="Manage Studio Stems, Checkpoints & Media Assets"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">Assets</span>
           </button>
 
           <button
@@ -1110,7 +1162,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
           <button
             onClick={() => setIsSunoBridgeOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30"
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30 cursor-pointer"
           >
             <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
             <span>⚡ Suno & NightCafe Bridge</span>
@@ -1121,49 +1173,45 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* COLLAPSIBLE PROJECT SESSIONS & CATALOG DRAWER / SIDEBAR */}
-        {isCatalogDrawerOpen && (
+        {/* COLLAPSIBLE / PINNABLE SIDE NAVIGATION PANEL */}
+        {isSideNavOpen && (
           <>
             {/* Backdrop on mobile screens */}
             <div 
               className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
-              onClick={() => setIsCatalogDrawerOpen(false)}
+              onClick={() => setIsSideNavOpen(false)}
             />
             <div className="fixed lg:static inset-y-0 left-0 z-40 lg:z-auto h-full flex-shrink-0 animate-in slide-in-from-left duration-200">
-              {sidebarMode === 'sessions' ? (
-                <ProjectSessionsSidebar
-                  sessions={sessions}
-                  activeSessionId={activeSessionId}
-                  selectedTrack={selectedTrack}
-                  activeTab={activeTab}
-                  isDbSyncing={isDbSyncing}
-                  onSelectSession={handleSelectSession}
-                  onSaveCurrentSession={handleSaveCurrentSession}
-                  onUpdateSessionSnapshot={handleUpdateSessionSnapshot}
-                  onDuplicateSession={handleDuplicateSession}
-                  onDeleteSession={handleDeleteSession}
-                  onTogglePinSession={handleTogglePinSession}
-                  onClose={() => setIsCatalogDrawerOpen(false)}
-                  onSwitchToCatalogTab={() => setSidebarMode('catalog')}
-                  catalogTracksCount={tracks.length}
-                />
-              ) : (
-                <CatalogSidebar
-                  tracks={tracks}
-                  selectedTrack={selectedTrack}
-                  onSelectTrack={(trk) => {
-                    setSelectedTrack(trk);
-                    setActiveTab('lyrics');
-                    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                      setIsCatalogDrawerOpen(false);
-                    }
-                  }}
-                  onAddTrack={() => setIsCreateModalOpen(true)}
-                  onClose={() => setIsCatalogDrawerOpen(false)}
-                  onSwitchToSessionsTab={() => setSidebarMode('sessions')}
-                  sessionsCount={sessions.length}
-                />
-              )}
+              <SideNavigationPanel
+                tracks={tracks}
+                selectedTrack={selectedTrack}
+                onSelectTrack={(trk) => {
+                  setSelectedTrack(trk);
+                  setActiveTab('lyrics');
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                    setIsSideNavOpen(false);
+                  }
+                }}
+                onAddNewTrack={() => setIsCreateModalOpen(true)}
+                sessions={sessions}
+                activeSessionId={activeSessionId}
+                onSelectSession={handleSelectSession}
+                onSaveCurrentSession={handleSaveCurrentSession}
+                onUpdateSessionSnapshot={handleUpdateSessionSnapshot}
+                onDuplicateSession={handleDuplicateSession}
+                onDeleteSession={handleDeleteSession}
+                onTogglePinSession={handleTogglePinSession}
+                generatedImages={generatedImages}
+                generatedVideos={generatedVideos}
+                isDbSyncing={isDbSyncing}
+                activeTab={activeTab}
+                onNavigateToTab={setActiveTab}
+                activePanelTab={sideNavTab}
+                onSetActivePanelTab={setSideNavTab}
+                isCollapsed={isSideNavCollapsed}
+                onToggleCollapse={() => setIsSideNavCollapsed(!isSideNavCollapsed)}
+                onClose={() => setIsSideNavOpen(false)}
+              />
             </div>
           </>
         )}
@@ -1200,46 +1248,70 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     ))}
                   </select>
 
-                  {/* Toggle Sessions Sidebar Button */}
+                  {/* Side Navigation Panel Toggle: Projects */}
                   <button
                     onClick={() => {
-                      if (isCatalogDrawerOpen && sidebarMode === 'sessions') {
-                        setIsCatalogDrawerOpen(false);
+                      if (isSideNavOpen && sideNavTab === 'projects') {
+                        setIsSideNavOpen(false);
                       } else {
-                        setSidebarMode('sessions');
-                        setIsCatalogDrawerOpen(true);
+                        setSideNavTab('projects');
+                        setIsSideNavOpen(true);
+                        setIsSideNavCollapsed(false);
                       }
                     }}
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
-                      isCatalogDrawerOpen && sidebarMode === 'sessions'
-                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-md shadow-indigo-950/60'
+                      isSideNavOpen && sideNavTab === 'projects'
+                        ? 'bg-indigo-600 border-indigo-500 text-white'
                         : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-indigo-300 hover:text-white'
+                    }`}
+                    title="Toggle Projects & Catalog Panel"
+                  >
+                    <Disc className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Projects ({tracks.length})</span>
+                  </button>
+
+                  {/* Side Navigation Panel Toggle: Sessions */}
+                  <button
+                    onClick={() => {
+                      if (isSideNavOpen && sideNavTab === 'sessions') {
+                        setIsSideNavOpen(false);
+                      } else {
+                        setSideNavTab('sessions');
+                        setIsSideNavOpen(true);
+                        setIsSideNavCollapsed(false);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+                      isSideNavOpen && sideNavTab === 'sessions'
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-md shadow-purple-950/60'
+                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-purple-300 hover:text-white'
                     }`}
                     title="Manage Composition Sessions"
                   >
-                    <FolderKanban className="w-3.5 h-3.5 text-indigo-400" />
+                    <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
                     <span>Sessions ({sessions.filter(s => s.trackId === selectedTrack.id).length})</span>
                   </button>
 
-                  {/* Toggle Catalog Roster Button */}
+                  {/* Side Navigation Panel Toggle: Assets */}
                   <button
                     onClick={() => {
-                      if (isCatalogDrawerOpen && sidebarMode === 'catalog') {
-                        setIsCatalogDrawerOpen(false);
+                      if (isSideNavOpen && sideNavTab === 'assets') {
+                        setIsSideNavOpen(false);
                       } else {
-                        setSidebarMode('catalog');
-                        setIsCatalogDrawerOpen(true);
+                        setSideNavTab('assets');
+                        setIsSideNavOpen(true);
+                        setIsSideNavCollapsed(false);
                       }
                     }}
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
-                      isCatalogDrawerOpen && sidebarMode === 'catalog'
-                        ? 'bg-indigo-600 border-indigo-500 text-white'
-                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+                      isSideNavOpen && sideNavTab === 'assets'
+                        ? 'bg-cyan-600 border-cyan-500 text-white'
+                        : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-cyan-300 hover:text-white'
                     }`}
-                    title="Toggle Track Catalog Roster"
+                    title="Manage Stems, Checkpoints & Visuals"
                   >
-                    <Disc className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>{isCatalogDrawerOpen && sidebarMode === 'catalog' ? 'Close Roster' : `Catalog Roster (${tracks.length})`}</span>
+                    <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Assets</span>
                   </button>
 
                   {/* + New Song Button */}
@@ -1325,137 +1397,175 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </div>
           )}
 
-          {/* WORKBENCH TABS */}
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-0 overflow-x-auto custom-scrollbar">
-            <button
-              onClick={() => setActiveTab('kanban')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'kanban' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Kanban & Dashboard</span>
-            </button>
+          {/* WORKBENCH TABS - DOUBLE STACKED TO SAVE HORIZONTAL SPACE */}
+          <div className="border-b border-slate-800 pb-2 space-y-1.5 flex flex-col">
+            {/* TIER 1: CORE MUSIC & AUDIO PRODUCTION PIPELINE */}
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+              <span className="text-[9px] font-mono uppercase text-indigo-400 font-bold px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-800/40 hidden sm:inline-block flex-shrink-0">
+                Tier 1: Audio Engine
+              </span>
+              <button
+                onClick={() => setActiveTab('kanban')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'kanban'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Kanban & Dashboard</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('lyrics')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'lyrics' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5 text-blue-400" />
-              <span>Lyrics & Suno 4-Block</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('lyrics')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'lyrics'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 text-blue-400" />
+                <span>Lyrics & Suno 4-Block</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('database')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'database' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Database className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Relational SQL & Similarity Matrix</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('database')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'database'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Relational SQL & Matrix</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('mixer')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'mixer' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Scissors className="w-3.5 h-3.5 text-amber-400" />
-              <span>4-Track Mini-DAW</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('mixer')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'mixer'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Scissors className="w-3.5 h-3.5 text-amber-400" />
+                <span>4-Track Mini-DAW</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('mastering')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'mastering' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Mastering Engineer & A/B Bus</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('mastering')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'mastering'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Mastering Engineer & A/B</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('youtube')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'youtube' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5 text-rose-500" />
-              <span>YouTube SEO Lens</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('ministry')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'ministry'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Music className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Live Ministry Charts</span>
+              </button>
+            </div>
 
-            <button
-              onClick={() => setActiveTab('omnipost')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'omnipost' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Share2 className="w-3.5 h-3.5 text-purple-400" />
-              <span>OmniPost Social</span>
-            </button>
+            {/* TIER 2: MEDIA, SEO, TELEMETRY & AI COPILOTS */}
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+              <span className="text-[9px] font-mono uppercase text-purple-400 font-bold px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800/40 hidden sm:inline-block flex-shrink-0">
+                Tier 2: Visuals & Copilots
+              </span>
+              <button
+                onClick={() => setActiveTab('veo_visuals')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'veo_visuals'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Clapperboard className="w-3.5 h-3.5 text-amber-400" />
+                <span>Visuals & Veo 3 Video</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('ministry')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'ministry' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Music className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Live Ministry Charts</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('youtube')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'youtube'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Film className="w-3.5 h-3.5 text-rose-500" />
+                <span>YouTube SEO Lens</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('veo_visuals')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'veo_visuals' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Clapperboard className="w-3.5 h-3.5 text-amber-400" />
-              <span>Visuals & Veo 3 Video</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('omnipost')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'omnipost'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Share2 className="w-3.5 h-3.5 text-purple-400" />
+                <span>OmniPost Social</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('nightcafe')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'nightcafe' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5 text-blue-400" />
-              <span>NightCafe Queue Runner</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('nightcafe')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'nightcafe'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-blue-400" />
+                <span>NightCafe Queue</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('telemetry')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'telemetry' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>1h Telemetry</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('telemetry')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'telemetry'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>1h Telemetry</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('coproducer')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'coproducer' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
-              <span>Studio Co-Producer AI</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('coproducer')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'coproducer'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+                <span>Studio Co-Producer AI</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('search')}
-              className={`pb-3 text-xs font-bold transition flex items-center gap-1.5 border-b-2 whitespace-nowrap px-2.5 ${
-                activeTab === 'search' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Search className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Search Grounding</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'search'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Search Grounding</span>
+              </button>
+            </div>
           </div>
 
           {/* TAB: KANBAN & PRODUCTION DASHBOARD */}
