@@ -1061,6 +1061,17 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
                   <span>Revision A Target:</span>
                   <span>{versionA.version}</span>
                 </div>
+                {versionA.genre && (
+                  <div className="text-[10px] text-indigo-300 font-sans font-bold flex items-center justify-between">
+                    <span>{versionA.genre}</span>
+                    {versionA.bpm && <span>{versionA.bpm} BPM</span>}
+                  </div>
+                )}
+                {versionA.vocal && (
+                  <div className="text-[10px] text-slate-400">
+                    Vocal: <span className="text-slate-200">{versionA.vocal}</span>
+                  </div>
+                )}
                 <p className="truncate text-slate-400">Lines: {versionA.lyrics.split('\n').filter(Boolean).length} • Words: {versionA.lyrics.split(/\s+/).filter(Boolean).length}</p>
               </div>
 
@@ -1138,6 +1149,17 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
                   <span>Revision B Target:</span>
                   <span>{versionB.version}</span>
                 </div>
+                {versionB.genre && (
+                  <div className="text-[10px] text-purple-300 font-sans font-bold flex items-center justify-between">
+                    <span>{versionB.genre}</span>
+                    {versionB.bpm && <span>{versionB.bpm} BPM</span>}
+                  </div>
+                )}
+                {versionB.vocal && (
+                  <div className="text-[10px] text-slate-400">
+                    Vocal: <span className="text-slate-200">{versionB.vocal}</span>
+                  </div>
+                )}
                 <p className="truncate text-slate-400">Lines: {versionB.lyrics.split('\n').filter(Boolean).length} • Words: {versionB.lyrics.split(/\s+/).filter(Boolean).length}</p>
               </div>
 

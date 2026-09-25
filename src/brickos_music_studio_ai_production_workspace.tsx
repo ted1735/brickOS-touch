@@ -587,6 +587,12 @@ export default function BrickOSMusicStudioWorkspace() {
   // NightCafe prompts
   const [nightCafePrompts, setNightCafePrompts] = useState(NIGHTCAFE_DEFAULT_PROMPTS);
 
+  // Prompt Vault & Storyboard Engine State
+  const [promptSongFilter, setPromptSongFilter] = useState('All');
+  const [promptTypeFilter, setPromptTypeFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [promptSearchQuery, setPromptSearchQuery] = useState('');
+  const [expandedPromptIdx, setExpandedPromptIdx] = useState<number | null>(null);
+
   // Visual & Veo State
   const [imagePrompt, setImagePrompt] = useState('Cinematic album cover for sovereign faith album, weathered cedar wood, cracked gold Kintsugi seams, warm dramatic chiaroscuro lighting, photorealistic 8k');
   const [imageAspectRatio, setImageAspectRatio] = useState('1:1');
@@ -1977,6 +1983,195 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     <p className="text-xs text-slate-400">
                       Create & edit album art with Gemini Flash, and generate or animate images into cinematic video using Google Veo 3.
                     </p>
+                  </div>
+                </div>
+
+                {/* PROMPT VAULT & STORYBOARD ENGINE (MMH, VENOM, MASK, CYHL, ETC.) */}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Master Visual & Video Prompt Vault ({nightCafePrompts.length} Prompts Loaded)
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      {/* Type Filter */}
+                      <div className="bg-slate-900 border border-slate-800 p-0.5 rounded-lg flex items-center gap-1 font-mono text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setPromptTypeFilter('all')}
+                          className={`px-2 py-0.5 rounded ${promptTypeFilter === 'all' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          All Types
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPromptTypeFilter('image')}
+                          className={`px-2 py-0.5 rounded ${promptTypeFilter === 'image' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          Images
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPromptTypeFilter('video')}
+                          className={`px-2 py-0.5 rounded ${promptTypeFilter === 'video' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          Videos
+                        </button>
+                      </div>
+
+                      {/* Search */}
+                      <input
+                        type="text"
+                        placeholder="Search prompts (e.g. hands, rain, clock)..."
+                        value={promptSearchQuery}
+                        onChange={(e) => setPromptSearchQuery(e.target.value)}
+                        className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-48"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Song Filter Chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-800/60">
+                    <span className="text-[10px] text-slate-500 uppercase font-mono mr-1">Song:</span>
+                    {['All', 'Meet Me Here', 'Venom Into Victory', 'Trading In The Mask', 'Check Your Heart Light', "The Work Ain't Done"].map((songName) => {
+                      const count = songName === 'All' ? nightCafePrompts.length : nightCafePrompts.filter(p => p.song === songName).length;
+                      return (
+                        <button
+                          key={songName}
+                          type="button"
+                          onClick={() => setPromptSongFilter(songName)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                            promptSongFilter === songName
+                              ? 'bg-amber-600 text-white shadow-sm'
+                              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                          }`}
+                        >
+                          <span>{songName === 'Meet Me Here' ? 'Meet Me Here (MMH)' : songName}</span>
+                          <span className="px-1 rounded bg-black/40 text-[9px] font-mono">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Filtered Prompts List */}
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                    {nightCafePrompts
+                      .filter((p) => {
+                        const matchesSong = promptSongFilter === 'All' || p.song === promptSongFilter;
+                        const matchesType = promptTypeFilter === 'all' || (p.type || 'image') === promptTypeFilter;
+                        const matchesQuery = !promptSearchQuery ||
+                          p.title.toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
+                          p.prompt.toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
+                          (p.tags && p.tags.some(t => t.toLowerCase().includes(promptSearchQuery.toLowerCase())));
+                        return matchesSong && matchesType && matchesQuery;
+                      })
+                      .map((p, idx) => (
+                        <div key={idx} className="p-3 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl space-y-2 transition text-xs">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-white text-[12px]">{p.title}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[9px] border border-blue-800/40">
+                                {p.song}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[9px]">
+                                {p.aspectRatio || '9:16'}
+                              </span>
+                              {p.engine && (
+                                <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[9px] border border-purple-800/40">
+                                  {p.engine}
+                                </span>
+                              )}
+                              {p.type === 'video' && (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 font-mono text-[9px] border border-rose-800/40">
+                                  Video Short
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setImagePrompt(p.prompt);
+                                  if (p.aspectRatio) setImageAspectRatio(p.aspectRatio);
+                                  copyToClipboard(p.prompt, "Prompt loaded to Image Studio");
+                                }}
+                                className="px-2 py-1 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 text-[10px] font-bold flex items-center gap-1 transition"
+                                title="Load into Image Generator"
+                              >
+                                <Zap className="w-3 h-3 text-amber-300" />
+                                <span>⚡ Image</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setVideoPrompt(p.initialPrompt || p.prompt);
+                                  if (p.aspectRatio === '9:16' || p.aspectRatio === '16:9') {
+                                    setVideoAspectRatio(p.aspectRatio);
+                                  }
+                                  copyToClipboard(p.initialPrompt || p.prompt, "Prompt loaded to Veo Studio");
+                                }}
+                                className="px-2 py-1 rounded bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-[10px] font-bold flex items-center gap-1 transition"
+                                title="Load into Google Veo Video Generator"
+                              >
+                                <Film className="w-3 h-3 text-rose-400" />
+                                <span>🎬 Video</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(p.prompt, `Prompt: ${p.title}`)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold flex items-center gap-1 transition"
+                                title="Copy prompt"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </button>
+
+                              {p.extensionPrompt && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedPromptIdx(expandedPromptIdx === idx ? null : idx)}
+                                  className="px-1.5 py-1 rounded text-slate-400 hover:text-white text-[10px] font-mono"
+                                  title="Toggle extension & audio cues"
+                                >
+                                  {expandedPromptIdx === idx ? '▲ Less' : '▼ Details'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <p className="text-[11px] text-slate-300 font-mono leading-relaxed line-clamp-3">
+                            {p.prompt}
+                          </p>
+
+                          {expandedPromptIdx === idx && (
+                            <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1.5 text-[11px] font-mono">
+                              {p.initialPrompt && (
+                                <div>
+                                  <span className="text-amber-400 font-bold">Initial 10s: </span>
+                                  <span className="text-slate-300">{p.initialPrompt}</span>
+                                </div>
+                              )}
+                              {p.extensionPrompt && (
+                                <div>
+                                  <span className="text-emerald-400 font-bold">Extension: </span>
+                                  <span className="text-slate-300">{p.extensionPrompt}</span>
+                                </div>
+                              )}
+                              {p.audioCues && (
+                                <div>
+                                  <span className="text-indigo-400 font-bold">Audio Cues: </span>
+                                  <span className="text-slate-300">{p.audioCues}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 </div>
 

@@ -89,31 +89,39 @@ export const CatalogSidebar: React.FC<CatalogSidebarProps> = ({
         />
       </div>
 
-      {/* EP Suite Filter Chips */}
+      {/* Filter / View Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar text-[10px] font-bold">
         <button
           onClick={() => setSelectedEpFilter('ALL')}
           className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
             selectedEpFilter === 'ALL'
-              ? 'bg-indigo-600 text-white'
+              ? 'bg-indigo-600 text-white shadow-sm'
               : 'bg-slate-800 text-slate-400 hover:text-slate-200'
           }`}
         >
-          All EPs
+          All Songs ({tracks.length})
         </button>
-        {EP_COLLECTIONS.map((ep, idx) => (
-          <button
-            key={ep.id}
-            onClick={() => setSelectedEpFilter(`EP ${idx + 1}`)}
-            className={`px-2 py-1 rounded-lg transition whitespace-nowrap ${
-              selectedEpFilter === `EP ${idx + 1}`
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            EP {idx + 1}
-          </button>
-        ))}
+        <button
+          onClick={() => setSearchQuery('Done')}
+          className={`px-2 py-1 rounded-lg transition whitespace-nowrap bg-slate-800 text-slate-400 hover:text-white`}
+          title="Filter to The Work Ain't Done"
+        >
+          The Work Ain't Done
+        </button>
+        <button
+          onClick={() => setSearchQuery('Heart')}
+          className={`px-2 py-1 rounded-lg transition whitespace-nowrap bg-slate-800 text-slate-400 hover:text-white`}
+          title="Filter to Check Your Heart Light"
+        >
+          Heart Light
+        </button>
+        <button
+          onClick={() => setSearchQuery('Blood')}
+          className={`px-2 py-1 rounded-lg transition whitespace-nowrap bg-slate-800 text-slate-400 hover:text-white`}
+          title="Filter to Nothing But The Blood"
+        >
+          The Blood
+        </button>
       </div>
 
       {/* Track List */}

@@ -1,4 +1,19 @@
 import { Track, EPCollection, NightCafePrompt } from '../types';
+import {
+  THE_WORK_AINT_DONE_VERSIONS,
+  CHECK_YOUR_HEART_LIGHT_VERSIONS,
+  NOTHING_BUT_THE_BLOOD_VERSIONS,
+  MEET_ME_HERE_VERSIONS,
+  CALVARY_GRIT_VERSIONS,
+  GHOST_IN_THE_MACHINE_VERSIONS,
+  CONFIDENT_AND_CONSISTENT_VERSIONS,
+  BLINDFOLD_BLESSING_VERSIONS,
+  TRADING_IN_THE_MASK_VERSIONS,
+  LEANING_NOT_LEAVING_VERSIONS,
+  THE_MASTERS_HAND_VERSIONS,
+  EVERY_CANDLES_VICTORY_VERSIONS
+} from './songVersionsCatalog';
+import { ALL_CANONICAL_PROMPTS } from './canonicalPrompts';
 
 export const EP_COLLECTIONS: EPCollection[] = [
   { id: 'EP 1: Restoration', title: 'EP 1: The Restoration Project', theme: 'Refinement, Healing & Foundation' },
@@ -116,50 +131,8 @@ Brick by brick.`,
     sunoPrompt: "Heavy Melodic Dubstep, 140 BPM, Key of F# Minor, massive supersaws, filtered drops, wood lathe foley, raw spoken word intro",
     negativePrompt: "sibilance, piercing treble, muddy low end, robotic artifacting, autotune",
     engineSliders: { weirdness: 14, styleInfluence: 72, voiceAudio: 100 },
-    lyrics: `[Bridge 1 | intimate | ambient pads]
-Take the rough, Take the raw,
-Sand away the pride.
-Under the weight of the Master’s hand,
-There’s nowhere left to hide.
-
-[Bridge 2 | building energy | rhythmic pulse]
-Take the rough, Take the raw,
-Sand away the pride.
-Under the weight of the Master’s hand,
-There’s nowhere left to hide.
-
-[Bridge 3 | maximum tension | rising pitch]
-Spin the lathe, Feel the heat,
-Until the work is done.
-It’s not my image, not my will,
-BUT THE LIKENESS OF THE SON!
-
-[Selah | filtered drop | underwater effect]
-
-[Drop | Heavy Melodic Dubstep | Massive Supersaws]
-(THE MAKER'S HAND!)
-
-[Verse 2 | 1:30 | Half-time | Driving sub-bass]
-The blade meets the surface,
-The sparks begin to fly.
-Cutting out the hollow parts,
-To let the truth rise high.
-
-[Chorus | 2:00 | Anthemic vocal]
-Oh, the Maker’s hand is steady,
-When the steel is glowing red.
-He’s writing out a story,
-Where the old man is left for dead.
-
-[Final Drop | 3:20 | Maximum Volume | Heavy Glitch FX]
-(Explosive finale)
-
-[Outro | 3:50 | Reverb tail | Fading synth]
-In the grain... of the wood...`,
-    versions: [
-      { version: "v1.0 (Dubstep)", timestamp: "2026-09-02", reason: "Melodic Dubstep & Massive Supersaws", lyrics: "Take the rough, Take the raw, Sand away the pride..." },
-      { version: "v2.0 (Spoken Rewrite)", timestamp: "2026-09-04", reason: "Emotional spoken word intro about male provider weight & loneliness", lyrics: "Spoken intro: Who helps this man when he doesn't have the answers? Take the rough, take the raw..." }
-    ],
+    lyrics: THE_MASTERS_HAND_VERSIONS[0].lyrics,
+    versions: THE_MASTERS_HAND_VERSIONS,
     selahPrayed: true,
   },
   {
@@ -176,60 +149,8 @@ In the grain... of the wood...`,
     sunoPrompt: "Gospel Soul Country Rock, 78 BPM, Key of G Major, warm Hammond organ swell, soulful acoustic piano, raw dynamic belt",
     negativePrompt: "sibilance, synthetic instruments, robotic vocal tune, flat dynamics",
     engineSliders: { weirdness: 10, styleInfluence: 70, voiceAudio: 100 },
-    lyrics: `The shadows tried to take your light,
-And keep every morning still,
-No, they never met the spirit,
-Of a "Thy will be done" kind of will.
-Through the seasons of the silence,
-And the weight of all you lost,
-You carried every burden,
-Never counting up the cost.
-From a husband to a daughter,
-Stolen long before their time,
-You were the steady heartbeat,
-In the mountain and the climb.
-
-This is a song of triumph, 
-In a melody of grace,
-You’re a giant, 
-You’re defiant,
-With the light upon your face!
-You’re the beauty in the breaking,
-You’re the story to be told,
-It was mercy in the making,
-Of a heart of solid gold.
-Dedicated to the family,
-Spirit brave and spirit true,
-Every candle is a victory,
-That was won because of you!
-
-Doctors had their charts and graphs,
-Winter wind was bold and cold,
-A fire in your silence,
-That the world has never told.
-You looked cancer in the eye,
-And you made the coward flee,
-You rose up from the wreckage,
-To find who you’re meant to be.
-
-Solo Vocal, no reverb:
-You’re a breathing miracle...
-
-UNDERNEATH THE OPEN SKIES!
-
-This is a song of triumph, 
-In a melody of grace,
-You’re a giant, 
-You’re defiant,
-With the light upon your face.
-
-Light up every holiday,
-Every candle's victory,
-For the woman you chose to be.`,
-    versions: [
-      { version: "v1.0 (Solo Tribute)", timestamp: "2026-08-28", reason: "Raw intimate solo vocal & piano", lyrics: "The shadows tried to take your light... You're a breathing miracle..." },
-      { version: "v2.0 (Gospel Group Shout)", timestamp: "2026-09-03", reason: "Full Gospel Choir & Hammond B3 Leslie swell with Mrs T", lyrics: "Intro: This is for you Mom... Full choir explosive finale underneath the open skies!" }
-    ],
+    lyrics: EVERY_CANDLES_VICTORY_VERSIONS[0].lyrics,
+    versions: EVERY_CANDLES_VICTORY_VERSIONS,
     selahPrayed: true,
   },
   {
@@ -246,49 +167,8 @@ For the woman you chose to be.`,
     sunoPrompt: "Modern Gospel EDM Trap Hybrid, 110 BPM, Key of E Minor, stomp-clap rhythm, heavy 808s, soaring alto belt",
     negativePrompt: "sibilance, thin chorus, autotune, robotic pitch",
     engineSliders: { weirdness: 14, styleInfluence: 75, voiceAudio: 100 },
-    lyrics: `[Intro]
-[Stomp-and-clap rhythm, heavy stomps]
-"Yeah... we're taking it back to the source. From the dust to the river. Let’s work."
-
-[Verse 1]
-There is a river... (Nothing but the blood!)
-Runs through the desert... (Nothing but the blood!)
-I was looking for a sign— (Looking for a sign!)
-Leaving it behind. (Leave it all behind!)
-Now I'm standing in the light! (Yeah, I'm standing in the light!)
-
-[Chorus]
-[Full Power - Wall of Sound]
-Precious is the source! (Precious is the source!)
-The river in my bones! (River in my bones!)
-No other hope I find! (No other hope!)
-NOTHING! BUT THE BLOOD OF JESUS! (NOTHING BUT THE BLOOD!)
-
-[Verse 2]
-Lies I told myself. (Lies I told myself!)
-Trophies on a shelf. (Trophies on a shelf!)
-Truth is breaking through. (The truth is breaking through!)
-Making all things new. (Making all things new!)
-Washed and I am clean! (Washed clean!)
-Yeah, you know just what I mean!
-
-[Bridge]
-Grace—to the horizon. (To the horizon!)
-Love—reaches the island. (Reaches the island!)
-The River—yeah it’s rising. (The River is rising!)
-CARRY THIS WANDERER HOME! (CARRY ME HOME!)
-
-[Final Chorus & Reprise]
-PRECIOUS IS THE SOURCE!
-THE RIVER IN MY BONES!
-NO OTHER HOPE I FIND!
-NOTHING BUT THE BLOOD OF... JESUS!`,
-    versions: [
-      { version: "v1.0 (Gospel Wall)", timestamp: "2026-08-30", reason: "Stomp-and-clap soulful gospel wall of sound", lyrics: "There is a river... Runs through the desert..." },
-      { version: "v2.0 (Mrs T Worship 6/8)", timestamp: "2026-09-02", reason: "Mrs T deep authoritative alto, Hammond B3, Throne Room Pivot", lyrics: "Where is the river that runs through the desert? Nothing but the blood of Jesus..." },
-      { version: "v3.0 (Classic Blues-Rock)", timestamp: "2026-09-03", reason: "Overdriven Marshall stacks, pentatonic blues guitar solo, raspy fry", lyrics: "Heavy drum fill, bluesy pentatonic riff, raspy power belt..." },
-      { version: "v4.0 (CHH Aggressive 808)", timestamp: "2026-09-04", reason: "Male rap hard hitting, 808 bass, brass fanfare", lyrics: "River in the drought. Shadow in my mouth. I was looking for a sign..." }
-    ],
+    lyrics: NOTHING_BUT_THE_BLOOD_VERSIONS[0].lyrics,
+    versions: NOTHING_BUT_THE_BLOOD_VERSIONS,
     selahPrayed: true,
   },
   {
@@ -393,46 +273,8 @@ Lifted from the ruins to behold His face!`,
     sunoPrompt: "Roots Acoustic to Epic Stadium Rock, 72 BPM, Key of C Major, piano cello duet building to roaring Marshall stacks",
     negativePrompt: "sibilance, synth pop, artificial pitch correction",
     engineSliders: { weirdness: 12, styleInfluence: 70, voiceAudio: 100 },
-    lyrics: `[Verse 1 | intimate | breathy alto]
-I was praying for a shoreline
-where the waves don’t ever break.
-Looking for a version of peace
-that didn't have a price or an ache.
-But the silence isn't safety
-and the comfort isn't the goal.
-There’s a friction in the waiting
-that’s meant to make me whole.
-
-[Pre-Chorus]
-I’m dropping the anchor I held in my hand,
-Trading the weakness that I understand.
-He’s working in the weight to perfect the design,
-This is the pressure that makes the diamond shine.
-
-[Chorus 1 | anthemic | big lift | soaring strings]
-It’s the leaning, not the leaving!
-It’s the leaning, not the leaving!
-There is a purpose in the pain,
-A steady hand inside the flame!
-I surrender the battle, I surrender the fight,
-I trust the Father to turn on the light!
-Oh, it’s the leaning, not the leaving!
-
-[Verse 2]
-I’m done with the heavy lifting
-of trying to save my own life.
-Until the only comfort I’m left with...
-IS CHRIST AND CHRIST ALONE!
-
-[Bridge | climax | massive vocal stack]
-Unity is born when the pride starts to break!
-Peace is the treasure that the fire can’t take!
-We don’t find the light by avoiding the dark
-But by letting the friction become the spark!`,
-    versions: [
-      { version: "v1.0 (Acoustic Cello)", timestamp: "2026-08-29", reason: "Piano and deep cello duet, intimate breathy alto", lyrics: "I was praying for a shoreline... It's the leaning, not the leaving..." },
-      { version: "v2.0 (Stadium Rock)", timestamp: "2026-09-02", reason: "Overdriven Marshall stacks, syncopated snare crack, Benatar snarl", lyrics: "Overdriven Marshall stacks: I was clawing for a shoreline... IS CHRIST AND CALVARY!" }
-    ],
+    lyrics: LEANING_NOT_LEAVING_VERSIONS[0].lyrics,
+    versions: LEANING_NOT_LEAVING_VERSIONS,
     selahPrayed: true,
   },
   {
@@ -449,53 +291,8 @@ But by letting the friction become the spark!`,
     sunoPrompt: "Swamptronica Revival Worship, 104 BPM, Key of G Major, driving banjo roll, stomp-clap percussion, resonator slide, massive choir",
     negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts, autotune",
     engineSliders: { weirdness: 12, styleInfluence: 72, voiceAudio: 100 },
-    lyrics: `[Verse 1]
-Saw a warning light flashin'
-Halfway down Highway 9
-Told myself I'd check tomorrow
-Told myself I had the time
-Funny thing about trouble
-It don't stay where you leave it
-You can paint over the symptoms
-But eventually you'll see it
-The cost is always cheaper
-When you catch it at the start
-Funny how I'll check an engine
-Before I'll check my heart
-
-[Pre-Chorus]
-Patience ain't passive
-Waiting ain't weak
-Faith gets muddy boots
-Walkin' where it can't see
-
-[Chorus]
-Check your heart light
-Don't keep drivin' on
-Somethin's runnin' warnin'
-And you know somethin's wrong
-God of all seasons
-Won't You look inside of me
-Check your heart light
-Before it costs you everything!
-
-[Bridge - Throne Room Pivot]
-So I pulled off to the shoulder
-Took my hands up off the wheel
-Hauled the questions from my trunk
-Brought the anger I couldn't heal!
-Popped the hood right at the altar, said:
-"God. This. Is. How. I. Feel!"
-And the first thing I could whisper...
-Was Your name!
-JESUS!
-You're rebuildin' me from the inside out!`,
-    versions: [
-      { version: "v1.0 (Brandon Swamptronica)", timestamp: "2026-08-25", reason: "BMV1 Brandon weathered raspy storyteller", lyrics: "Saw a warning light flashin' halfway down Highway 9..." },
-      { version: "v2.0 (CYHLv2 Revival)", timestamp: "2026-08-28", reason: "Explosive 60s hook, tent revival roar", lyrics: "Check your heart light! Don't run cold! Quit burning miles down broken roads!" },
-      { version: "v3.0 (Ms T v2 Alto)", timestamp: "2026-09-01", reason: "Deep alto chest-voice, warm B3 organ", lyrics: "Saw a warning light flashin' crossin' past the county line..." },
-      { version: "v4.0 (Ms T v8 Master)", timestamp: "2026-09-04", reason: "Refined slant-rhyme bridge: Hauled questions from my trunk, God this is how I feel!", lyrics: "Popped the hood right at the altar, said: God. This. Is. How. I. Feel!" }
-    ],
+    lyrics: CHECK_YOUR_HEART_LIGHT_VERSIONS[0].lyrics,
+    versions: CHECK_YOUR_HEART_LIGHT_VERSIONS,
     selahPrayed: true,
   },
 
@@ -685,41 +482,8 @@ Underneath the banner of the Most High!`,
     sunoPrompt: "Dark Cinematic Industrial Stadium CHH, 138 BPM, Key of D Minor, clock-ticking hi-hats, distorted electric guitar, rapid triplets",
     negativePrompt: "sibilance, cheerful melodies, clean pop radio",
     engineSliders: { weirdness: 16, styleInfluence: 74, voiceAudio: 100 },
-    lyrics: `[Intro]
-(Atmospheric sound of stadium whistle, heavy distorted electric guitar feedback)
-One team. One heartbeat. 
-Check the tape. 77 on the jersey, weight is on the soul. Listen.
-
-[Verse 1]
-Nose guard breathing down my neck, smelling like the mud
-Right guard, locking in the stance, it’s in the blood
-Blue 42! The cadence is a war cry in the cold
-Seventy-Seven on the line, doing what I’m told
-Dirt in the fingernails, sweat stinging in the eyes
-We don’t run for the trophies, we run for the prize!
-
-[Chorus]
-One team! One heartbeat! 
-When the whistle blows, we don’t accept defeat!
-Keep fighting, keep driving, keep flying high!
-Calvary Eagles, we’re the kings of the sky!
-From the one-yard line to the end zone floor
-We don't just play the game—we're bringing the roar!
-
-[Verse 2]
-Coach yelling in the ear, echoing inside the helmet:
-"If your line ain't straight, your mind ain't straight"—you felt it?
-That’s the discipline, the gospel of the gridiron grind!
-
-[Bridge]
-I look to the Hill where my help comes from,
-Before the victory's won, the battle's begun!
-Quiet the mind. Hear the call.
-One Team. One Heartbeat. Stand tall.`,
-    versions: [
-      { version: "v1.0 (The Prophet)", timestamp: "2026-09-02", reason: "Deep Baritone stadium rap delivery", lyrics: "One team. One heartbeat. 77 on the jersey..." },
-      { version: "v2.0 (NF Combatant Rewrite)", timestamp: "2026-09-04", reason: "Rapid-fire triplets, surgical flow, dark industrial noise", lyrics: "Calvary on the jersey, vision getting blurry... Blue 42! Intellectual attack on the track!" }
-    ],
+    lyrics: CALVARY_GRIT_VERSIONS[0].lyrics,
+    versions: CALVARY_GRIT_VERSIONS,
     selahPrayed: false,
   },
   {
@@ -829,55 +593,8 @@ He is alive, He is ALIVE!`,
     sunoPrompt: "Slow-Burn Cinematic CHH, 76 BPM, half-time feel, dark orchestral strings, distant rain, deep 808 heartbeat, emotional grand piano",
     negativePrompt: "sibilance, radio pop polish, confident delivery, auto-tune, happy melodies",
     engineSliders: { weirdness: 16, styleInfluence: 72, voiceAudio: 100 },
-    lyrics: `[Intro: Spoken Word, Cinematic rain, slow heartbeat kick]
-They see the uniform... 
-They see the... "I got it." 
-But nobody sees the hands... shaking... under the table. 
-I’m the bridge everyone walks on... but who’s looking... underneath?
-
-[Verse 1 | 76 BPM, lagged flow, behind the beat]
-Coffee... at five. 
-Mask on... by six.
-Fixing the sink... while the soul’s in a fix.
-My kids need a shield... 
-And my wife... needs a rock.
-The boss needs a win... and the church... needs to sing.
-The silence... is screaming... in this truck.
-I’m driving on empty... just running on luck.
-
-[Verse 2]
-Staring at the wood grain... tracing... every line.
-The clock is ticking like a hammer... stealing all my time.
-The "Ask" is coming... I can feel it in the heat.
-The weight of the decision... the smell of my defeat.
-Then I say... "I don't know"... 
-
-[Stop Music - 3 second total vacuum silence]
-
-...and the air... leaves the room.
-I’m a ghost in my own hallway... I’ve forgotten my name.
-Living for the honor... but I’m dying... in the shame.
-
-[Chorus]
-Who helps the man... when the man is the help?
-Who catches the one... catching everyone else?
-I’m at the end of the rope... and the knot’s coming loose.
-Lord, I’m the provider... but I’m dying for You.
-It’s so lonely in the dark... I can't even see my face.
-Just a son without an answer... searching for Your grace.
-
-[Bridge/Outro]
-(Spoken) I don’t have it. I don’t have the answer! I’m just a son... 
-[DYNAMIC SHIFT: Explosive Spoken Scream]
-WHO CAN'T DO IT THIS TIME! 
-[Distorted Reprise Scream]
-GOD, I’M AT THE EDGE! I’M AT THE LAST LINE!
-PLEASE... GOD! JUST MEET ME HERE!
-...at the last line.`,
-    versions: [
-      { version: "v1.0 (Standard 76 BPM)", timestamp: "2026-09-02", reason: "Standard cinematic blue-collar psalm with 3s vacuum silence", lyrics: "Coffee at five. Mask on by six..." },
-      { version: "v2.0 (Harder Scream)", timestamp: "2026-09-04", reason: "MMH Harder: Raw, exhausted, voice breaking at 2 a.m. in truck", lyrics: "WHO CAN'T DO IT THIS TIME?! LOGIC'S GONE! THIS IS THE LAST LINE!" }
-    ],
+    lyrics: MEET_ME_HERE_VERSIONS[0].lyrics,
+    versions: MEET_ME_HERE_VERSIONS,
     selahPrayed: true,
   },
 
@@ -988,35 +705,8 @@ Where the blood was spilled is where victory is found!`,
     sunoPrompt: "Industrial Trap CHH, 130 BPM, Key of Eb Minor, industrial 808 distortion, metallic percussion, deep resonant chest voice",
     negativePrompt: "sibilance, generic pop, muddy sub bass",
     engineSliders: { weirdness: 18, styleInfluence: 75, voiceAudio: 100 },
-    lyrics: `[Kane - CHH Industrial Cut]
-[Intro]
-Brick OS. System override. Kingdom logic in a binary world.
-
-[Verse 1]
-They got the data on your dopamine, they’re mining for your soul
-A digital panopticon that’s fighting for control
-It’s the validation-vacation, a synthetic location
-Building your foundation on a pixelated nation? (Nah)
-I see the ghost in the wires, the liar in the code
-Selling you a shortcut on a heavy-burden road
-You're counting "likes" while you're losing the Likeness!
-
-[Chorus]
-He’s not a GHOST in the machine!
-He’s the KING of everything I’ve seen!
-(Hard Stop - Bass Drop)
-He’s NOT a ghost in the machine!
-He’s the KING of everything I’ve seen!
-
-[Verse 2]
-I beat the system with the Wisdom, my vision is corrected
-The enemy is frantic 'cause my spirit is protected
-Domestic earnestness—I'm focused on my family tree
-While you’re scrolling through the feed of a dead philosophy!`,
-    versions: [
-      { version: "v1.0 (Kane CHH)", timestamp: "2026-09-03", reason: "Kane deep industrial 808 CHH master", lyrics: "They got the data on your dopamine... He's not a ghost in the machine!" },
-      { version: "v2.0 (Neon Gospel K-Pop)", timestamp: "2026-09-04", reason: "Neon Gospel female boss energy, high-pitch glitches, explosive choir", lyrics: "Watch the screen. Watch the shadow. The war is in the room. He's NOT a ghost in the machine!" }
-    ],
+    lyrics: GHOST_IN_THE_MACHINE_VERSIONS[0].lyrics,
+    versions: GHOST_IN_THE_MACHINE_VERSIONS,
     selahPrayed: false,
   },
   {
@@ -1033,39 +723,8 @@ While you’re scrolling through the feed of a dead philosophy!`,
     sunoPrompt: "Christian Hip Hop CEDM, 128 BPM, Key of G Minor, heavy sub-bass, Monica gritty soulful rasp, 808 trap drops, pumping sidechain",
     negativePrompt: "sibilance, slow tempo, mellow acoustic guitar, auto-tune",
     engineSliders: { weirdness: 10, styleInfluence: 72, voiceAudio: 100 },
-    lyrics: `Twenty-six years in the ring, still standing
-Four lives raised, yeah the grace was demanding
-Forty-five years, just hitting my stride
-Got the discipline locked, no place to hide
-Steps on the pavement, 15k on the clock
-Twice a day in the gym, yeah I’m solid as a rock
-Just checked the watch, another record is gone
-Yeah, I’m chasing the Son till the break of the dawn!
-
-Consistent... Stronger... LET’S GO!
-
-[Chorus]
-I’m stayin’ consistent for my calling!
-I’m gettin’ hotter for my husband!
-I’m stayin’ stronger for our kids!
-And I’m confident for me—yeah, look at what He did!
-
-One’s moved out, got three still in the nest
-I’m building up the temple, giving them my best
-I want 'em to see what a finish line takes
-It’s more than the muscles, it’s the spirit carrying the weight—
-Through the ceiling, through the doubt, through the "I can't" noise
-I’m a woman on a mission, let 'em hear the voice!
-
-Another mile down.
-Another record broken.
-Stay consistent.
-Hotter for him... stronger for them.
-Forty-five and just getting started.
-Confident!`,
-    versions: [
-      { version: "v1.0 (Master)", timestamp: "2026-09-02", reason: "Courtney's official workout anthem master cut", lyrics: "Twenty-six years in the ring, still standing..." }
-    ],
+    lyrics: CONFIDENT_AND_CONSISTENT_VERSIONS[0].lyrics,
+    versions: CONFIDENT_AND_CONSISTENT_VERSIONS,
     selahPrayed: true,
   },
 
@@ -1155,49 +814,8 @@ You're home.`,
     sunoPrompt: "Christian EDM Progressive House or Acoustic Country Duet, dynamic tension and release, euphoric supersaws, male and female duet",
     negativePrompt: "sibilance, robotic tuning, muddy bass",
     engineSliders: { weirdness: 12, styleInfluence: 72, voiceAudio: 100 },
-    lyrics: `[Verse 1 | Male Voice | intimate | dry]
-I’m staring at the table, 
-you’re tracing out a line, 
-Trying to find a future, 
-where the stars and logic align. 
-
-[Verse 1 | Female Voice | joins | breathy]
-The map is getting heavy, 
-the ink is running dry, 
-We’re asking for a "how-to", 
-when we’re meant to ask for "Why". 
-
-[Pre-Chorus | Duet | building tension]
-We’ve got a thousand reasons, 
-to stay inside the door, 
-Waiting on a signal, 
-we’ve already heard before. 
-
-[Chorus | Duet | anthemic | UNISON]
-It’s a blindfold blessing, 
-a holy "I don’t know," 
-It’s the weight of the shadow, 
-where the wild mercies grow. 
-I’m trading the compass, 
-for the pulse inside the chest, 
-‘Cause "wherever" is a promise, 
-and HIS "wherever" is my rest!
-
-[Bridge]
-The step is thin as paper,
-The dark is thick as stone,
-But the "wherever" of the Father,
-Means we never walk alone!
-
-[Chorus | Duet | maximum intensity | Power Belt]
-It’s a blindfold blessing, 
-a holy "I don’t know," 
-Cause "wherever" is a promise, 
-and HIS "wherever" is my rest!`,
-    versions: [
-      { version: "v1.0 (Country Duet)", timestamp: "2026-08-30", reason: "Solo cello, rhythmic acoustic tapping, Brandon & Monica duet", lyrics: "I'm staring at the table, you're tracing out a line..." },
-      { version: "v2.0 (Progressive CEDM)", timestamp: "2026-09-02", reason: "128 BPM progressive house, massive stadium supersaw drop", lyrics: "Build-up: One, two, one two three let's go! It's a blindfold blessing! A holy I don't know!" }
-    ],
+    lyrics: BLINDFOLD_BLESSING_VERSIONS[0].lyrics,
+    versions: BLINDFOLD_BLESSING_VERSIONS,
     selahPrayed: true,
   },
   {
@@ -1214,40 +832,8 @@ and HIS "wherever" is my rest!`,
     sunoPrompt: "A Cappella Spoken Word into Explosive Gospel Choir, 82 BPM, Key of Eb Major, warm B3 organ, log drums, handclaps, raw chest belt",
     negativePrompt: "sibilance, electronic synths, autotune, pop polish",
     engineSliders: { weirdness: 10, styleInfluence: 74, voiceAudio: 100 },
-    lyrics: `[Specific Delivery Instruction: ABSOLUTE A CAPPELLA START. NO INSTRUMENTS. Spoken Word, intimate, close-mic, dry.]
-
-[Verse 1]
-(Ms T - Spoken Word, slow and thoughtful)
-I was caught in my reflection... just staring at the glass.
-Counting every wrinkle... watching how the minutes pass.
-Measuring my value by the fading of the light...
-Listening to whispers... in the middle of the night.
-
-[Pre-Chorus]
-(SUDDEN IMPACT: Single, warm, low B3 Organ note swells slowly)
-But the glass is just a witness made of silver and of sand!
-It doesn't know the secrets or the power of His hand!
-If you’re chasing down a ghost just to feel like you’re enough,
-You’re betting on an image that’ll run when it gets tough!
-Yeah, you’re hunting for a reason in a face that’s gonna change,
-Looking for a beauty that can never be rearranged!
-
-[Chorus]
-[Explosive Drop - Deep Log Drums and Massive Gospel Choir]
-The glass is gonna crack, the silver's gonna fade!
-I’m trading in the mask for the way that I was made!
-I'm a masterpiece of mercy, I'm a canvas of His grace!
-I don't need a looking-glass to see the Father's face!
-Eyes on the King, let the glass lose its sting!
-
-[Bridge]
-He looks at the heart... (Choir: Yes He does!)
-He’s clearing the view... (Choir: Making it new!)
-He’s taking the fragments... (Choir: Oh!)
-And making it You!`,
-    versions: [
-      { version: "v1.0 (Master)", timestamp: "2026-09-03", reason: "Ms T master cut with absolute a cappella start into explosive gospel choir", lyrics: "I was caught in my reflection... just staring at the glass..." }
-    ],
+    lyrics: TRADING_IN_THE_MASK_VERSIONS[0].lyrics,
+    versions: TRADING_IN_THE_MASK_VERSIONS,
     selahPrayed: true,
   },
   {
@@ -1379,20 +965,24 @@ Just meet me here…
     ],
     selahPrayed: false,
   },
+  {
+    id: "TRK-27",
+    ep: "Frontline Healthcare & Ministry",
+    title: "The Work Ain't Done",
+    status: "Audio Master",
+    genre: "Folk-Hop / Boom-Bap CHH / K-Pop Ministry Hybrid",
+    bpm: 102,
+    key: "G Minor",
+    vocal: "Kane / Brandon",
+    vocalCast: "Kane (Tectonic Baritone) & Brandon (Frontline Grit)",
+    thesis: "Extending the Healing Ministry of Christ; discharge done? Not when the ink dries! Success is keeping recovery from crashing in the parking lot.",
+    sunoPrompt: "Frontline Folk-Hop to Boom-Bap Hybrid, 102 BPM, Key of G Minor, tight rimshot on 2 and 4, acoustic guitar flatpicking, heavy foot-stomp kick, tectonic baritone authority, teach back hook",
+    negativePrompt: "sibilance, high-frequency hiss, piercing treble, autotune, clinical throughput jargon without soul",
+    engineSliders: { weirdness: 12, styleInfluence: 72, voiceAudio: 100 },
+    lyrics: THE_WORK_AINT_DONE_VERSIONS[0].lyrics,
+    versions: THE_WORK_AINT_DONE_VERSIONS,
+    selahPrayed: true,
+  },
 ];
 
-export const NIGHTCAFE_DEFAULT_PROMPTS: NightCafePrompt[] = [
-  { song: "Brick by Brick", idx: 1, title: "Foundational Blueprint", prompt: "Cinematic shot of weathered granite cornerstone set into red clay soil under morning light, blueprint sketches faintly glowing in the dust, 8k photorealistic.", aspectRatio: "1:1" },
-  { song: "The Master's Hand", idx: 2, title: "The Spinning Lathe", prompt: "Macro 120fps shot of dark walnut spinning on a woodturning lathe, glowing shavings curling off in golden ribbons, warm workshop lighting.", aspectRatio: "16:9" },
-  { song: "Every Candle's Victory", idx: 3, title: "The Altar Under the Open Skies", prompt: "Triumphant wide shot of a resilient woman with gold in her eyes looking up underneath open sunrise skies, thousands of flickering candles.", aspectRatio: "16:9" },
-  { song: "Nothing But The Blood", idx: 4, title: "River in the Desert", prompt: "Epic cinematic shot of a radiant living water river cutting through a cracked desert canyon, golden sunrise illuminating mist, photorealistic.", aspectRatio: "16:9" },
-  { song: "Check Your Heart Light", idx: 5, title: "Muddy Boots at the Altar", prompt: "Close-up of worn muddy boots resting beside an open pickup truck hood on a country gravel shoulder at dusk, warm altar glow, 9:16 vertical.", aspectRatio: "9:16" },
-  { song: "Glitter", idx: 6, title: "The Dark House Lit With Glitter", prompt: "Dark weathered craftsman home at twilight suddenly bursting with golden interior warmth and iridescent floating sparkles, photorealistic 8k.", aspectRatio: "1:1" },
-  { song: "Meet Me Here", idx: 7, title: "5 AM Rain & Shaking Hands", prompt: "Close-up of rough calloused hands clasped under a dark wooden table, single tear on knuckles, blue-collar truck cab rain streaks, 9:16 vertical.", aspectRatio: "9:16" },
-  { song: "Venom Into Victory", idx: 8, title: "Golden Whistle & Shimmer Volcano", prompt: "Hyper-saturated K-Pop aesthetic, 3D chrome golden whistle spinning over shimmering liquid gold lava volcano, pink neon accents, 9:16.", aspectRatio: "9:16" },
-  { song: "Ghost In The Machine", idx: 9, title: "Silicon Cathedral", prompt: "Vast brutalist cathedral interior crossed with glowing optic fiber cables and towering server racks, stained glass holographic projections in gold.", aspectRatio: "16:9" },
-  { song: "The Milestone", idx: 10, title: "15k Step Pavement", prompt: "Low-angle dynamic tracking of aggressive running shoes striking wet asphalt at sunrise, golden sunburst reflecting off puddles, 9:16 vertical.", aspectRatio: "9:16" },
-  { song: "Blindfold Blessing", idx: 11, title: "Linen Blindfold & Canyon Mist", prompt: "Surrender portrait of artisan in coarse linen blindfold walking calmly onto mountain bridge shrouded in dawn clouds, 9:16.", aspectRatio: "9:16" },
-  { song: "Trading In The Mask", idx: 12, title: "Shattered Porcelain Kintsugi", prompt: "Macro slow motion shot of white porcelain mask shattering and mending with molten glowing 24k gold seams, photorealistic 8k.", aspectRatio: "1:1" },
-  { song: "Breath and Bone", idx: 13, title: "Awakening of Dry Bones", prompt: "Desert canyon with scarred cedar and resurrected life, holy golden wind swirling, touching the scars of the Living One, 16:9.", aspectRatio: "16:9" },
-];
+export const NIGHTCAFE_DEFAULT_PROMPTS: NightCafePrompt[] = ALL_CANONICAL_PROMPTS;

@@ -12,6 +12,11 @@ export interface TrackVersion {
   timestamp: string;
   reason: string;
   lyrics: string;
+  bpm?: number;
+  genre?: string;
+  vocal?: string;
+  archetype?: string;
+  stylePrompt?: string;
 }
 
 export interface EngineSliders {
@@ -97,6 +102,12 @@ export interface NightCafePrompt {
   title: string;
   prompt: string;
   aspectRatio?: string;
+  type?: 'image' | 'video' | 'storyboard';
+  engine?: string;
+  initialPrompt?: string;
+  extensionPrompt?: string;
+  audioCues?: string;
+  tags?: string[];
 }
 
 export interface ChatMessage {
