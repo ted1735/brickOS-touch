@@ -12,6 +12,7 @@ import {
   Sliders,
   Scissors,
   CheckCircle,
+  AlertCircle,
   AlertTriangle,
   Upload,
   Download,
@@ -107,8 +108,20 @@ export default function BrickOSMusicStudioWorkspace() {
     'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
+  const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
 
-  // Light / Dark Theme State with persistence and HTML class sync
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setNotificationType(type);
+    setCopiedNotification(message);
+    setTimeout(() => setCopiedNotification(''), 4000);
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    showToast(`Copied ${label} to clipboard!`, 'success');
+  };
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('brickos_theme');
@@ -490,10 +503,9 @@ export default function BrickOSMusicStudioWorkspace() {
       setIsDbSyncing(true);
       await seedInitialCatalog(tracks);
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      setCopiedNotification(`Successfully synced all ${tracks.length} tracks to Cloud Firestore!`);
-      setTimeout(() => setCopiedNotification(''), 4000);
+      showToast(`Successfully synced all ${tracks.length} tracks to Cloud Firestore!`, 'success');
     } catch (err: any) {
-      alert(`Cloud sync error: ${err.message || 'Check connection'}`);
+      showToast(`Cloud sync error: ${err.message || 'Check connection'}`, 'error');
     } finally {
       setIsDbSyncing(false);
     }
@@ -640,15 +652,6 @@ export default function BrickOSMusicStudioWorkspace() {
   // Canvas visualizer ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animFrameRef = useRef<number | null>(null);
-
-  // Helper for clipboard
-  const copyToClipboard = (text: string, label: string) => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-    }
-    setCopiedNotification(`Copied ${label} to clipboard!`);
-    setTimeout(() => setCopiedNotification(''), 3000);
-  };
 
   // Commit Song Changes & Updates and persist to Firestore
   const handleTrackUpdate = async (field: keyof Track | 'version_commit' | 'batch_update', value: any) => {
@@ -825,12 +828,12 @@ export default function BrickOSMusicStudioWorkspace() {
           trackTitle: selectedTrack.title
         };
         setGeneratedImages([newImg, ...generatedImages]);
-        copyToClipboard('Image generated successfully', 'Generated Image');
+        showToast('Visual asset generated successfully!', 'success');
       } else if (data.error) {
-        alert(`Image Generation Failed: ${data.error}`);
+        showToast(`Image Generation Failed: ${data.error}`, 'error');
       }
     } catch (e: any) {
-      alert(`Image Generation Error: ${e.message}`);
+      showToast(`Image Generation Error: ${e.message}`, 'error');
     } finally {
       setIsGeneratingImage(false);
     }
@@ -969,10 +972,10 @@ export default function BrickOSMusicStudioWorkspace() {
           searchQueries: data.searchQueries || [],
         });
       } else if (data.error) {
-        alert(`Search Grounding Error: ${data.error}`);
+        showToast(`Search Grounding Error: ${data.error}`, 'error');
       }
     } catch (e: any) {
-      alert(`Search error: ${e.message}`);
+      showToast(`Search error: ${e.message}`, 'error');
     } finally {
       setIsSearching(false);
     }
@@ -1058,8 +1061,20 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       
       {/* GLOBAL NOTIFICATION TOAST */}
       {copiedNotification && (
-        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border border-emerald-500/40 animate-bounce">
-          <CheckCircle className="w-4 h-4 text-white" />
+        <div
+          className={`fixed top-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border transition-all ${
+            notificationType === 'error'
+              ? 'bg-rose-600 text-white border-rose-400 shadow-rose-950/50'
+              : notificationType === 'info'
+              ? 'bg-indigo-600 text-white border-indigo-400 shadow-indigo-950/50'
+              : 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-950/50'
+          }`}
+        >
+          {notificationType === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-white shrink-0" />
+          ) : (
+            <CheckCircle className="w-4 h-4 text-white shrink-0" />
+          )}
           <span>{copiedNotification}</span>
         </div>
       )}
@@ -1622,7 +1637,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 }`}
               >
                 <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Nextcloud Bento Matcher (207332)</span>
+                <span>/Music-Production (207332)</span>
               </button>
 
               <button

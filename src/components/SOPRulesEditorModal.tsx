@@ -50,6 +50,7 @@ export const SOPRulesEditorModal: React.FC<SOPRulesEditorModalProps> = ({
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+  const [saveErrorNotice, setSaveErrorNotice] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -274,12 +275,13 @@ ${clichesFormatted}
 
       await onSaveRules(updatedPackage);
       setSaveSuccessNotice(true);
+      setSaveErrorNotice(null);
       setTimeout(() => {
         setSaveSuccessNotice(false);
         onClose();
       }, 1000);
     } catch (e: any) {
-      alert(`Error saving rules: ${e.message}`);
+      setSaveErrorNotice(e.message || 'Error saving rules');
     } finally {
       setIsSaving(false);
     }
@@ -719,6 +721,12 @@ ${clichesFormatted}
             {saveSuccessNotice && (
               <span className="text-emerald-400 font-bold text-xs flex items-center gap-1 font-mono animate-fadeIn">
                 <Check className="w-4 h-4" /> Rules applied live!
+              </span>
+            )}
+
+            {saveErrorNotice && (
+              <span className="text-rose-400 font-bold text-xs flex items-center gap-1 font-mono animate-fadeIn">
+                <AlertTriangle className="w-4 h-4" /> {saveErrorNotice}
               </span>
             )}
 

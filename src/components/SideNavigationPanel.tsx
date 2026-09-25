@@ -98,6 +98,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [newSessionName, setNewSessionName] = useState('');
   const [newSessionDesc, setNewSessionDesc] = useState('');
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [newSessionTags, setNewSessionTags] = useState<string[]>(['Lyrics Polish']);
   const [newSessionPinned, setNewSessionPinned] = useState(false);
 
@@ -325,6 +326,14 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             <span>Assets</span>
           </button>
         </div>
+
+        {/* Stem Download Notice Banner */}
+        {downloadNotice && (
+          <div className="p-2 rounded-xl bg-cyan-600 text-white font-mono text-[10px] font-bold shadow-md flex items-center justify-between gap-1 animate-fadeIn">
+            <span>{downloadNotice}</span>
+            <button onClick={() => setDownloadNotice(null)} className="hover:opacity-75 cursor-pointer">✕</button>
+          </div>
+        )}
       </div>
 
       {/* CONTENT AREA BASED ON ACTIVE TAB */}
@@ -890,7 +899,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           href="#download-stem"
                           onClick={(e) => {
                             e.preventDefault();
-                            alert(`Downloading master stem: ${stem.name} (${stem.format})`);
+                            setDownloadNotice(`Downloading ${stem.name} (${stem.format})`);
+                            setTimeout(() => setDownloadNotice(null), 3500);
                           }}
                           className={`p-1.5 rounded-lg transition ${
                             isDarkMode

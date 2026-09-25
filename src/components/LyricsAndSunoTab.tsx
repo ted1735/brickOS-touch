@@ -84,6 +84,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
     preVer: string;
     postVer: string;
   } | null>(null);
+  const [errorNotification, setErrorNotification] = useState<string | null>(null);
 
   // Stored Feedback History & Review Vault State
   const [showFeedbackVault, setShowFeedbackVault] = useState(false);
@@ -390,7 +391,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
       setPaneCount(2);
     } catch (err: any) {
       console.error('Failed to apply audit changes:', err);
-      alert(`Error applying Gemini revisions: ${err.message || 'Server error'}`);
+      setErrorNotification(`Error applying Gemini revisions: ${err.message || 'Server error'}`);
     } finally {
       setIsApplyingChanges(false);
       setApplyStageMessage(null);
@@ -625,6 +626,29 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
               ✕
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ERROR NOTIFICATION BANNER */}
+      {errorNotification && (
+        <div className="bg-rose-950/80 border border-rose-600/50 rounded-2xl p-4 shadow-xl flex items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-5 h-5 text-rose-400" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-rose-300">Error Applying Revisions</h4>
+              <p className="text-[11px] text-rose-400/80 font-mono mt-0.5">{errorNotification}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorNotification(null)}
+            className="p-1 rounded text-rose-400 hover:text-white"
+            title="Dismiss error"
+          >
+            ✕
+          </button>
         </div>
       )}
 
