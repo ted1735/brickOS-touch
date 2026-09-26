@@ -14,9 +14,13 @@ import {
 } from 'lucide-react';
 import { Track, MixerTrack } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
+import { HelpCircle } from 'lucide-react';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface MiniDawMixerTabProps {
   track: Track;
+  onOpenSectionGuide?: (sectionId?: any) => void;
+  isDarkMode?: boolean;
 }
 
 const INITIAL_STEMS: MixerTrack[] = [
@@ -173,23 +177,43 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
   }, [isPlaying]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
-      {/* Header Bar */}
-      <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-        <div>
-          <h3 className="text-base font-black text-white flex items-center gap-2">
-            <span>4-Track Lossless Waveform Mixer & Trimmer (Mini-DAW)</span>
-            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
-              24-Bit / 48kHz PCM Lossless
-            </span>
-          </h3>
-          <p className="text-xs text-slate-400">
-            Precision stem balancing for {track.title} ({track.bpm} BPM • {track.key}) with real-time Web Audio API summing.
-          </p>
-        </div>
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="mixer"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'mixer')}
+        isDarkMode={isDarkMode}
+      />
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <h3 className="text-base font-black text-white flex items-center gap-2">
+              <span>4-Track Lossless Waveform Mixer & Trimmer (Mini-DAW)</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
+                24-Bit / 48kHz PCM Lossless
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              Precision stem balancing for {track.title} ({track.bpm} BPM • {track.key}) with real-time Web Audio API summing.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {onOpenSectionGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenSectionGuide('mixer')}
+                className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="Open Mini-DAW Mixer Operating Guide & SOP Rules"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>How To Use Mixer</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
             <span className="text-slate-500 px-1.5 font-mono text-[10px]">CROP:</span>
             {(['30s', '60s', 'full'] as const).map(p => (
               <button

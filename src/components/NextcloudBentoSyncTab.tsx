@@ -46,6 +46,8 @@ import {
   DEFAULT_NEXTCLOUD_CONFIG
 } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
+import { HelpCircle } from 'lucide-react';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface NextcloudBentoSyncTabProps {
   tracks: Track[];
@@ -54,6 +56,7 @@ interface NextcloudBentoSyncTabProps {
   onApplyAssetToTrack: (asset: NextcloudFolderAsset, trackId: string) => void;
   isDarkMode: boolean;
   onNavigateToTab?: (tab: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
 }
 
 export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
@@ -62,7 +65,8 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   onSelectTrack,
   onApplyAssetToTrack,
   isDarkMode,
-  onNavigateToTab
+  onNavigateToTab,
+  onOpenSectionGuide
 }) => {
   // Config & Credentials State
   const [config, setConfig] = useState<NextcloudSyncConfig>(() => getSavedNextcloudConfig());
@@ -399,6 +403,13 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         </div>
       )}
 
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="nextcloud_sync"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'nextcloud_sync')}
+        isDarkMode={isDarkMode}
+      />
+
       {/* COMPACT BREADCRUMB & FOLDER BANNER: ZERO WASTED SPACE */}
       <div
         className={`p-4 rounded-2xl border transition-all ${
@@ -452,6 +463,18 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
 
           {/* Action Toolbar */}
           <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-start md:justify-end">
+            {onOpenSectionGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenSectionGuide('nextcloud_sync')}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="Open Nextcloud WebDAV Operating Guide & SOP Rules"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>How To Use Nextcloud</span>
+              </button>
+            )}
+
             <button
               onClick={handleSyncFolder}
               disabled={isSyncingFolder}
@@ -1026,7 +1049,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
-                    Link to Sovereign Track:
+                    Link to Master Track:
                   </label>
                   {currentAsset.suggestedTrackId && (
                     <button

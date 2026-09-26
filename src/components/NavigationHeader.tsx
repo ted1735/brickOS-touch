@@ -13,7 +13,8 @@ import {
   Layers,
   Plus,
   Sun,
-  Moon
+  Moon,
+  HelpCircle
 } from 'lucide-react';
 import { Track } from '../types';
 import { CURRENT_STUDIO_VERSION } from '../utils/versioning';
@@ -25,6 +26,7 @@ interface NavigationHeaderProps {
   onOpenSearch: () => void;
   onOpenChat: () => void;
   onOpenCreateProject?: () => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   selectedEpFilter?: string;
@@ -39,6 +41,7 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   onOpenSearch,
   onOpenChat,
   onOpenCreateProject,
+  onOpenSectionGuide,
   activeTab,
   setActiveTab,
   selectedEpFilter = 'ALL',
@@ -172,17 +175,17 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
               ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
               : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
           }`}
-          title="Relational SQL & Similarity Matrix"
+          title="Master Track Catalog & Interchangeable Similarity Matrix"
         >
           <Database className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden lg:inline">Relational SQL</span>
+          <span className="hidden lg:inline">Master Catalog</span>
         </button>
 
         {onOpenCreateProject && (
           <button
             onClick={onOpenCreateProject}
             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
-            title="Create New Sovereign Track"
+            title="Create New Track Project (Standard Schema v1.0)"
           >
             <Plus className="w-3.5 h-3.5 text-white" />
             <span>+ New Project</span>
@@ -197,6 +200,23 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
           <span className="hidden sm:inline">⚡ Suno Bridge</span>
         </button>
+
+        {/* SECTION GUIDE & SOP BUTTON */}
+        {onOpenSectionGuide && (
+          <button
+            onClick={() => onOpenSectionGuide(activeTab)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isDarkMode
+                ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+            }`}
+            title="Open Section Guide & Nashville SOP Rules"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Guide & SOP</span>
+            <span className="sm:hidden">Guide</span>
+          </button>
+        )}
 
         {/* LIGHT / DARK MODE TOGGLE SWITCH */}
         {onToggleTheme && (

@@ -52,7 +52,8 @@ import {
   Save,
   RefreshCcw,
   Sun,
-  Moon
+  Moon,
+  HelpCircle
 } from 'lucide-react';
 import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem } from './types';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
@@ -72,6 +73,7 @@ import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
+import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -602,6 +604,19 @@ export default function BrickOSMusicStudioWorkspace() {
   // Storage & Nextcloud Modal
   const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
   const [isSunoBridgeOpen, setIsSunoBridgeOpen] = useState(false);
+
+  // Section Guide & SOP Modal State
+  const [isSectionGuideOpen, setIsSectionGuideOpen] = useState(false);
+  const [sectionGuideTarget, setSectionGuideTarget] = useState<StudioSectionId>('kanban');
+
+  const handleOpenSectionGuide = (sectionId?: StudioSectionId) => {
+    if (sectionId) {
+      setSectionGuideTarget(sectionId);
+    } else {
+      setSectionGuideTarget(activeTab as StudioSectionId);
+    }
+    setIsSectionGuideOpen(true);
+  };
 
   // Mini-DAW Mixer State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -1343,6 +1358,21 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <span className="hidden sm:inline">⚡ Suno Bridge</span>
           </button>
 
+          {/* SECTION GUIDE & SOP BUTTON */}
+          <button
+            onClick={() => handleOpenSectionGuide(activeTab as StudioSectionId)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isDarkMode
+                ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50 shadow-amber-950/40'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+            }`}
+            title="Open Interactive Section Guide & Nashville SOP Rules"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Guide & SOP</span>
+            <span className="sm:hidden">Guide</span>
+          </button>
+
           {/* LIGHT / DARK MODE TOGGLE SWITCH */}
           <button
             onClick={handleToggleTheme}
@@ -1859,6 +1889,37 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 <span>Search Grounding</span>
               </button>
             </div>
+          </div>
+
+          {/* ACTIVE SECTION CONTEXT BANNER & "HOW TO USE THIS SECTION" BUTTON */}
+          <div className={`px-4 py-2.5 rounded-xl border flex items-center justify-between flex-wrap gap-2 transition ${
+            isDarkMode
+              ? 'bg-slate-900/90 border-slate-800 text-slate-200'
+              : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              <span className="text-xs font-bold text-slate-300">
+                Active Section: <strong className="text-white font-mono uppercase">{activeTab.replace('_', ' ')}</strong>
+              </span>
+              <span className="text-slate-500 hidden sm:inline">•</span>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                {selectedTrack ? `${selectedTrack.id}: ${selectedTrack.title}` : 'Studio Master'}
+              </span>
+            </div>
+
+            <button
+              onClick={() => handleOpenSectionGuide(activeTab as StudioSectionId)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border shadow-xs ${
+                isDarkMode
+                  ? 'bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border-amber-500/40'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+              }`}
+              title={`Open detailed instructions & SOP rules for ${activeTab.replace('_', ' ')}`}
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>How To Use This Section & SOP</span>
+            </button>
           </div>
 
           {/* TAB: KANBAN & PRODUCTION DASHBOARD */}
@@ -3092,6 +3153,17 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         existingTracksCount={tracks.length}
         existingTracks={tracks}
         defaultEp={selectedTrack.ep}
+      />
+
+      {/* UNIVERSAL SECTION INSTRUCTION & SOP MODAL */}
+      <SectionInstructionModal
+        isOpen={isSectionGuideOpen}
+        onClose={() => setIsSectionGuideOpen(false)}
+        initialSection={sectionGuideTarget}
+        onNavigateToSection={(targetSection) => {
+          setActiveTab(targetSection as any);
+        }}
+        isDarkMode={isDarkMode}
       />
 
     </div>

@@ -11,13 +11,18 @@ import {
   HardDrive,
   RefreshCw,
   Layers,
-  ChevronRight
+  ChevronRight,
+  HelpCircle
 } from 'lucide-react';
 import { Track } from '../types';
+import { CURRENT_STUDIO_VERSION } from '../utils/versioning';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface LiveMinistryChartsTabProps {
   track: Track;
   onCopyText: (text: string, label: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
+  isDarkMode?: boolean;
 }
 
 const KEYS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -94,7 +99,7 @@ OUTRO:
   const handleDownloadStemsManifest = () => {
     const manifest = {
       bundle: "brickOS Stage Stems Package",
-      version: "v5.5",
+      version: CURRENT_STUDIO_VERSION,
       trackId: track.id,
       title: track.title,
       tempoBpm: track.bpm,
@@ -115,7 +120,13 @@ OUTRO:
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="ministry"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'ministry')}
+        isDarkMode={isDarkMode}
+      />
       
       {/* HEADER */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
@@ -133,6 +144,18 @@ OUTRO:
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onOpenSectionGuide && (
+            <button
+              type="button"
+              onClick={() => onOpenSectionGuide('ministry')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open Live Ministry Charts Operating Guide & SOP Rules"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>How To Use Ministry Charts</span>
+            </button>
+          )}
+
           {/* Key Transposer */}
           <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
             <span className="text-xs text-slate-400 font-bold">Key:</span>

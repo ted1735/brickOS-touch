@@ -16,13 +16,22 @@ import {
   Video
 } from 'lucide-react';
 import { Track } from '../types';
+import { HelpCircle } from 'lucide-react';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface YouTubeSEOTabProps {
   track: Track;
   onCopyText: (text: string, label: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
+  isDarkMode?: boolean;
 }
 
-export const YouTubeSEOTab: React.FC<YouTubeSEOTabProps> = ({ track, onCopyText }) => {
+export const YouTubeSEOTab: React.FC<YouTubeSEOTabProps> = ({
+  track,
+  onCopyText,
+  onOpenSectionGuide,
+  isDarkMode = true
+}) => {
   const [formatMode, setFormatMode] = useState<'shorts' | 'longform'>('shorts');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -43,7 +52,7 @@ export const YouTubeSEOTab: React.FC<YouTubeSEOTabProps> = ({ track, onCopyText 
     'Spiritual Warfare Anthem',
     track.vocalCast?.split('(')[0]?.trim() || track.vocal,
     `${track.bpm} BPM Worship`,
-    'Sovereign Faith Music',
+    'Kingdom Faith Music',
     'Men of God Anthem',
     'BRICK Records',
     'Blue Collar Prayer'
@@ -57,14 +66,14 @@ export const YouTubeSEOTab: React.FC<YouTubeSEOTabProps> = ({ track, onCopyText 
   // Official Artist Signature Block
   const signatureBlock = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OFFICIAL ARTIST LINKS & STEREO MASTERS:
-🎵 Hyperfollow Sovereign Hub: https://distrokid.com/hyperfollow/tedmoyer/${track.id.toLowerCase()}
+🎵 Hyperfollow Release Hub: https://distrokid.com/hyperfollow/tedmoyer/${track.id.toLowerCase()}
 🎧 Spotify Official: https://open.spotify.com/artist/tedmoyer
 📺 YouTube Music Official: https://music.youtube.com/channel/tedmoyer
 🍎 Apple Music: https://music.apple.com/us/artist/ted-moyer
-📦 Sovereign Stems & Nextcloud WebDAV: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/
+📦 Master Stems & Nextcloud WebDAV: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/
 
 PRODUCED & MASTERED BY BRICK RECORDS:
-All rights reserved © 2026 BRICK Records / Ted Moyer. Sovereign Faith Production.
+All rights reserved © 2026 BRICK Records / Ted Moyer. Faith & Family Production.
 Strictly recorded & mastered in 24-Bit / 48kHz Lossless Linear PCM.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
@@ -85,7 +94,7 @@ TIMESTAMPS:
 ${signatureBlock}
 
 KEYWORDS & CATEGORY:
-Christian Hip Hop, Sovereign Faith Music, Ted Moyer, BRICK Records, ${track.title}, Worship Rap 2026.`;
+Christian Hip Hop, Kingdom Faith Music, Ted Moyer, BRICK Records, ${track.title}, Worship Rap 2026.`;
 
   // Check woodworking violations
   const allTextToCheck = `${activeTitle} ${track.thesis} ${track.sunoPrompt}`.toLowerCase();
@@ -145,7 +154,13 @@ ${signatureBlock}
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="youtube"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'youtube')}
+        isDarkMode={isDarkMode}
+      />
       
       {/* HEADER BAR */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
@@ -163,6 +178,18 @@ ${signatureBlock}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onOpenSectionGuide && (
+            <button
+              type="button"
+              onClick={() => onOpenSectionGuide('youtube')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open YouTube SEO Lens Operating Guide & SOP Rules"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>How To Use YouTube SEO</span>
+            </button>
+          )}
+
           {/* Format Mode Toggle */}
           <div className="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center gap-1">
             <button

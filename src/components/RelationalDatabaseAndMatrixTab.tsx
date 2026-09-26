@@ -23,6 +23,8 @@ import {
   FolderSync
 } from 'lucide-react';
 import { Track } from '../types';
+import { HelpCircle } from 'lucide-react';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import {
   PRODUCTION_NEXTCLOUD_WEBDAV,
   PRODUCTION_NEXTCLOUD_BASE,
@@ -43,6 +45,8 @@ interface RelationalDatabaseAndMatrixTabProps {
   selectedTrack: Track;
   onSelectTrack: (track: Track) => void;
   onCopyText: (text: string, label: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
+  isDarkMode?: boolean;
   isDbConnected?: boolean;
   isDbSyncing?: boolean;
   onSyncDatabase?: () => void;
@@ -53,6 +57,8 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
   selectedTrack,
   onSelectTrack,
   onCopyText,
+  onOpenSectionGuide,
+  isDarkMode = true,
   isDbConnected = true,
   isDbSyncing = false,
   onSyncDatabase
@@ -100,16 +106,23 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="database"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'database')}
+        isDarkMode={isDarkMode}
+      />
+
       {/* Top Banner & WebDAV Root Status */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
         <div className="absolute -right-12 -top-12 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 relative z-10">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-950 text-indigo-300 font-mono text-xs font-bold border border-indigo-700/50 flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-indigo-400" />
-                PostgreSQL Relational Database Engine
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 font-mono text-xs font-bold border border-cyan-700/50 flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-cyan-400" />
+                Master Catalog & Asset Matrix
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-mono text-xs font-semibold border border-emerald-700/40 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -120,28 +133,40 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
               </span>
             </div>
             <h2 className="text-xl font-black text-white tracking-wide">
-              Relational Database & Interchangeable Asset Similarity Matrix
+              Master Catalog & Interchangeable Asset Similarity Matrix
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-3xl leading-relaxed">
-              Every track record is relational-linked with its official vocal archetype (The Architect, Brandon, Ms T, Monica, Kane), 
+              Every track record is catalog-linked with its official vocal archetype (The Architect, Brandon, Ms T, Monica, Kane), 
               BPM, key, theological theme thesis, 24-bit/48kHz UVR5 stems, and visual assets resolved directly to your self-hosted Nextcloud WebDAV root.
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {onOpenSectionGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenSectionGuide('database')}
+                className="px-4 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 font-bold text-xs border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="Open Master Catalog & Matrix Guide & SOP Rules"
+              >
+                <HelpCircle className="w-4 h-4 text-amber-400" />
+                <span>How To Use Catalog & Matrix</span>
+              </button>
+            )}
+
             <button
               onClick={handleCopySql}
               className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-indigo-950 transition"
             >
               {isCopiedSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-              <span>{isCopiedSql ? 'Copied SQL Script!' : 'Copy PostgreSQL Seed'}</span>
+              <span>{isCopiedSql ? 'Copied Catalog Seed!' : 'Copy Catalog Backup'}</span>
             </button>
             <button
               onClick={handleDownloadSql}
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center gap-2 transition"
             >
               <Download className="w-4 h-4 text-teal-400" />
-              <span>Download .sql</span>
+              <span>Download Schema</span>
             </button>
           </div>
         </div>
@@ -784,7 +809,7 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
               <span>DAW & Network Integration Snippets</span>
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Direct CLI commands to sync 24-bit/48kHz master WAV files and project sessions between your local Cakewalk / DaVinci Resolve workstation and your Nextcloud WebDAV sovereign server.
+              Direct CLI commands to sync 24-bit/48kHz master WAV files and project sessions between your local Cakewalk / DaVinci Resolve workstation and your Nextcloud WebDAV production server.
             </p>
           </div>
 

@@ -34,6 +34,8 @@ import {
 import { PromptItem, PromptModality, Track, EngineSliders } from '../types';
 import { CANONICAL_PROMPT_LIBRARY } from '../data/promptLibraryCatalog';
 import { generateStandardStoryboardPrompts } from '../schema/songProductionSchema';
+import { HelpCircle } from 'lucide-react';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface PromptEngineeringLibraryTabProps {
   tracks: Track[];
@@ -44,6 +46,7 @@ interface PromptEngineeringLibraryTabProps {
   onSendToSuno: (trackId: string, prompt: string, negativePrompt?: string, sliders?: EngineSliders) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   isDarkMode?: boolean;
+  onOpenSectionGuide?: (sectionId?: any) => void;
 }
 
 export const PromptEngineeringLibraryTab: React.FC<PromptEngineeringLibraryTabProps> = ({
@@ -54,7 +57,8 @@ export const PromptEngineeringLibraryTab: React.FC<PromptEngineeringLibraryTabPr
   onSendToVeoStudio,
   onSendToSuno,
   showToast,
-  isDarkMode = true
+  isDarkMode = true,
+  onOpenSectionGuide
 }) => {
   // Load prompts from localStorage or fallback to canonical library
   const [prompts, setPrompts] = useState<PromptItem[]>(() => {
@@ -337,7 +341,14 @@ export const PromptEngineeringLibraryTab: React.FC<PromptEngineeringLibraryTabPr
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="prompt_library"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'prompt_library')}
+        isDarkMode={isDarkMode}
+      />
+
       {/* HEADER BANNER */}
       <div className={`p-5 rounded-2xl border transition-all ${
         isDarkMode 
@@ -400,6 +411,18 @@ export const PromptEngineeringLibraryTab: React.FC<PromptEngineeringLibraryTabPr
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-wrap">
+            {onOpenSectionGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenSectionGuide('prompt_library')}
+                className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="Open Prompt Library & Storyboard Operating Guide & SOP Rules"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>How To Use Prompts & SOP</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => {

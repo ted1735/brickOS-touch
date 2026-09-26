@@ -38,6 +38,7 @@ import {
   Award
 } from 'lucide-react';
 import { Track, VideoExpressProject, VideoExpressSceneClip } from '../types';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface VideoExpressAgentTabProps {
   tracks: Track[];
@@ -46,6 +47,7 @@ interface VideoExpressAgentTabProps {
   onSelectTrack: (track: Track) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
   copyToClipboard: (text: string, label: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
 }
 
 // 6 Core Factory Styles from factory/WORKFLOW_FACTORY.md
@@ -256,8 +258,8 @@ const CHARACTER_PRESETS = [
     aspectRatio: '9:16' as const
   },
   {
-    id: 'sovereign_pastor',
-    name: 'The Sovereign Preacher',
+    id: 'theological_pastor',
+    name: 'The Shepherd Preacher',
     archetype: 'Theological Teacher',
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80',
     prompt: 'Photorealistic 38-year-old male pastor, dark wool jacket over dark charcoal crewneck, earnest and piercing eye contact, rustic timber chapel beam architecture in soft bokeh background, natural morning sunlight streaming from high window, 85mm anamorphic portrait, cinematic realism.',
@@ -315,7 +317,7 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
     `The lead artisan from "${selectedTrack.title}" — a craftsman reflecting on surrendered labor.`
   );
   const [interviewTopicAnswer, setInterviewTopicAnswer] = useState<string>(
-    `The pivotal moment when human striving yields to sovereign grace (${selectedTrack.thesis}).`
+    `The pivotal moment when human striving yields to surrender and grace (${selectedTrack.thesis}).`
   );
 
   // Script and voice configuration
@@ -394,8 +396,8 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
     {
       sceneNumber: 5,
       sceneTitle: 'The Breakthrough Revelation',
-      spokenLine: 'That silence is where your striving dies and His sovereignty takes over.',
-      charCount: 71,
+      spokenLine: 'That silence is where your striving dies and divine grace takes over.',
+      charCount: 68,
       durationSeconds: 8.0,
       cameraMovement: 'Graceful slow upward tilt, warm light swell',
       avatarExpression: 'Unmistakable conviction, eyes brightening',
@@ -528,9 +530,9 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
       },
       {
         sceneNumber: 5,
-        sceneTitle: 'The Sovereign Pivot',
-        spokenLine: 'Not by human might, but by sovereign grace taking the burden.',
-        charCount: 60,
+        sceneTitle: 'The Surrender Pivot',
+        spokenLine: 'Not by human might, but by divine grace taking the burden.',
+        charCount: 57,
         durationSeconds: 8.0,
         cameraMovement: 'Graceful slow upward tilt, warm light swell',
         avatarExpression: 'Unmistakable conviction, eyes brightening',
@@ -731,41 +733,61 @@ runVideoExpressAutomation();`;
   }, [selectedTrack, activeFactoryStyle, referenceSeed, scenes]);
 
   return (
-    <div className={`p-6 rounded-2xl border space-y-6 transition-colors duration-200 ${
-      isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
-    }`}>
-      {/* HEADER SECTION */}
-      <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-slate-800/60">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 via-purple-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20">
-              <Video className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black tracking-wide flex items-center gap-2">
-                  <span>VideoExpress.ai Talking Avatar Agent</span>
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                  Consistent Character Mode
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  &lt;100 Chars Rule
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Factory & Automation Playbook
-                </span>
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="video_express"
+        onOpenModalGuide={(sec) => onOpenSectionGuide ? onOpenSectionGuide(sec || 'video_express') : setActiveTabSubView('guide')}
+        isDarkMode={isDarkMode}
+      />
+
+      <div className={`p-6 rounded-2xl border space-y-6 transition-colors duration-200 ${
+        isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+      }`}>
+        {/* HEADER SECTION */}
+        <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-slate-800/60">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 via-purple-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20">
+                <Video className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-400">
-                100% mapped implementation of <code>strontiumplatform/VideoExpress.ai</code>: Workflow Factory (<code>WORKFLOW_FACTORY.md</code>), Foundations (<code>FOUNDATIONS.md</code>), and Browser Automation (<code>browser-automation.md</code>).
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-black tracking-wide flex items-center gap-2">
+                    <span>VideoExpress.ai Talking Avatar Agent</span>
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    Consistent Character Mode
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    &lt;100 Chars Rule
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Factory & Automation Playbook
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  100% mapped implementation of <code>strontiumplatform/VideoExpress.ai</code>: Workflow Factory (<code>WORKFLOW_FACTORY.md</code>), Foundations (<code>FOUNDATIONS.md</code>), and Browser Automation (<code>browser-automation.md</code>).
+                </p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Top Action Tabs & Track Selector */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Song selector dropdown */}
+          {/* Top Action Tabs & Track Selector */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenSectionGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenSectionGuide('video_express')}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="Open VideoExpress Talking Avatar Agent SOP & Operating Rules"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>How To Use VideoExpress</span>
+              </button>
+            )}
+
+            {/* Song selector dropdown */}
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-slate-400 font-mono text-[11px]">Track:</span>
             <select

@@ -42,17 +42,22 @@ import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage } from '../ty
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
 import { SOPRulesEditorModal } from './SOPRulesEditorModal';
 import { getNextVersionString } from '../utils/versioning';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface LyricsAndSunoTabProps {
   track: Track;
   onUpdateTrack: (field: string, value: any) => void;
   onCopyText: (text: string, label: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
+  isDarkMode?: boolean;
 }
 
 export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   track,
   onUpdateTrack,
-  onCopyText
+  onCopyText,
+  onOpenSectionGuide,
+  isDarkMode = true
 }) => {
   // Multi-pane comparison layout state (up to 3 panes side-by-side)
   const [paneCount, setPaneCount] = useState<1 | 2 | 3>(1);
@@ -521,7 +526,13 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   const versionB = track.versions[selectedVerBIndex] || track.versions[0];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="lyrics"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'lyrics')}
+        isDarkMode={isDarkMode}
+      />
       
       {/* STORAGE & SYNC STATUS HEADER BAR */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
@@ -531,7 +542,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white">Lyrics Sovereign Vault</span>
+              <span className="text-xs font-bold text-white">Lyrics Master Vault</span>
               <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/50">
                 ✓ LocalStorage & WebDAV Synced
               </span>
@@ -547,6 +558,18 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          {onOpenSectionGuide && (
+            <button
+              type="button"
+              onClick={() => onOpenSectionGuide('lyrics')}
+              className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 font-bold text-xs border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open Lyric Engine & Nashville SOP Rules Guide"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>How To Use Lyrics & SOP</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsImportModalOpen(true)}
             className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950 transition cursor-pointer"

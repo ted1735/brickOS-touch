@@ -22,7 +22,8 @@ import {
   Columns,
   Play,
   Scissors,
-  ExternalLink
+  ExternalLink,
+  HelpCircle
 } from 'lucide-react';
 import { Track, TrackStatus, EPCollection } from '../types';
 
@@ -36,6 +37,7 @@ interface KanbanDashboardTabProps {
   selectedEpFilter?: string;
   onSelectEpFilter?: (ep: string) => void;
   onOpenCreateProject?: () => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
   isDarkMode?: boolean;
 }
 
@@ -59,6 +61,7 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
   selectedEpFilter = 'ALL',
   onSelectEpFilter,
   onOpenCreateProject,
+  onOpenSectionGuide,
   isDarkMode = true
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -269,6 +272,23 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
 
           {/* Right: Search + Add Track Button */}
           <div className="flex items-center gap-2">
+            {onOpenSectionGuide && (
+              <button
+                type="button"
+                onClick={() => onOpenSectionGuide('kanban')}
+                className={`px-2.5 py-1 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  isDarkMode
+                    ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50 shadow-xs'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                }`}
+                title="View Kanban Pipeline Operating Guide & SOP Rules"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Kanban Guide & SOP</span>
+                <span className="sm:hidden">Guide</span>
+              </button>
+            )}
+
             <div className="relative w-44 sm:w-52">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input

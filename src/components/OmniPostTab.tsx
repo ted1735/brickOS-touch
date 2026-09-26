@@ -16,13 +16,22 @@ import {
   Play
 } from 'lucide-react';
 import { Track } from '../types';
+import { HelpCircle } from 'lucide-react';
+import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
 interface OmniPostTabProps {
   track: Track;
   onCopyText: (text: string, label: string) => void;
+  onOpenSectionGuide?: (sectionId?: any) => void;
+  isDarkMode?: boolean;
 }
 
-export const OmniPostTab: React.FC<OmniPostTabProps> = ({ track, onCopyText }) => {
+export const OmniPostTab: React.FC<OmniPostTabProps> = ({
+  track,
+  onCopyText,
+  onOpenSectionGuide,
+  isDarkMode = true
+}) => {
   const [platform, setPlatform] = useState<'tiktok' | 'reels' | 'shorts'>('tiktok');
   const [template, setTemplate] = useState<'viral_hook' | 'selah_bts' | 'anthem_drop' | 'fitness_15k'>('viral_hook');
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
@@ -32,7 +41,7 @@ export const OmniPostTab: React.FC<OmniPostTabProps> = ({ track, onCopyText }) =
   const [captions, setCaptions] = useState({
     viral_hook: {
       tiktok: `Who helps the man when the man is the help? 💔 Drop a 🔨 if you're carrying the family today. God sees your silent 5 AM shift. #ChristianHipHop #MenOfGod #BlueCollarFaith #BRICKRecords #${track.title.replace(/\s+/g, '')}`,
-      reels: `When the truck cab is quiet and the burden feels too heavy to name... Christ meets you right in the dust. "${track.title}" out now on BRICK Records. 🔗 Link in bio for full 24-bit lossless master. #FaithInTheTrenches #ChristianRap #SovereignMusic #FamilyFirst`,
+      reels: `When the truck cab is quiet and the burden feels too heavy to name... Christ meets you right in the dust. "${track.title}" out now on BRICK Records. 🔗 Link in bio for full 24-bit lossless master. #FaithInTheTrenches #ChristianRap #KingdomMusic #FamilyFirst`,
       shorts: `5 AM Diesel cab confession. Who helps the man? Watch full audio on channel. #Shorts #ChristianHipHop #Faith #TedMoyer`
     },
     selah_bts: {
@@ -42,7 +51,7 @@ export const OmniPostTab: React.FC<OmniPostTabProps> = ({ track, onCopyText }) =
     },
     anthem_drop: {
       tiktok: `🚨 "${track.title}" JUST DROPPED! Turn this up in the truck or the gym! 🔊 26 years in the ring and we're not tapping out! #NewMusic #CEDM #ChristianWorkout #Anthem`,
-      reels: `Official Release Announcement: "${track.title}" is officially live across all sovereign streaming hubs! Stream lossless 24-bit audio now. #ReleaseDay #BRICKRecords #KingdomAnthem`,
+      reels: `Official Release Announcement: "${track.title}" is officially live across all major streaming hubs! Stream lossless 24-bit audio now. #ReleaseDay #BRICKRecords #KingdomAnthem`,
       shorts: `"${track.title}" OFFICIAL AUDIO IS LIVE! Turn your volume all the way up. #NewMusicFriday #ChristianEDM`
     },
     fitness_15k: {
@@ -123,7 +132,13 @@ Ensure high 3-second hook velocity, blue-collar authenticity, zero religious cli
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
+      <SectionQuickHelpBanner
+        sectionId="omnipost"
+        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'omnipost')}
+        isDarkMode={isDarkMode}
+      />
       
       {/* HEADER BAR */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
@@ -141,6 +156,18 @@ Ensure high 3-second hook velocity, blue-collar authenticity, zero religious cli
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onOpenSectionGuide && (
+            <button
+              type="button"
+              onClick={() => onOpenSectionGuide('omnipost')}
+              className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 font-bold text-xs border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open OmniPost Social Engine Guide & SOP Rules"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>How To Use OmniPost</span>
+            </button>
+          )}
+
           <button
             onClick={handleGenerateAiCopy}
             disabled={isGeneratingCopy}
