@@ -343,26 +343,28 @@ export const SECTION_GUIDES: Record<StudioSectionId, SectionGuideItem> = {
   },
   database: {
     id: 'database',
-    title: 'Relational Database & Track Matrix',
-    badge: 'Catalog Management',
+    title: 'Master Catalog & Asset Cross-Matching Matrix',
+    badge: 'Harmonic & Asset Matrix',
     icon: Database,
-    summary: 'Comprehensive tabular view of the entire 15+ track catalog with schema inspection, filtering, and JSON backup exports.',
-    purpose: 'Audit track attributes (BPM, key, EP, vocal archetype, notes), inspect database schemas, and export full catalog backups.',
+    summary: 'Dynamic Camelot harmonic key analyzer, BPM compatibility matcher, vocal archetype pairing engine, and Nextcloud WebDAV stem resolution hub.',
+    purpose: 'Identify compatible songs for seamless DJ transitions, mashups, stem sharing, and export full catalog JSON backups without SQL overhead.',
     keySteps: [
-      'Search and filter catalog tracks across all columns (Title, EP, Status, Vocal, BPM, Key).',
-      'Click on any row to open and inspect that track in the studio.',
-      'Inspect the standardized SongPackage JSON schema.',
-      'Click "Download Complete Catalog JSON" to save a full offline snapshot.',
-      'Click "Sync All to Cloud DB" to synchronize state with Firebase Firestore.'
+      'Select any reference track to automatically rank all 25 other catalog songs by compatibility score.',
+      'Inspect Harmonic Match (Camelot Wheel: 100% exact key lock, 95% relative major/minor, 90% adjacent 5th modulation).',
+      'Inspect Tempo Match (Direct stem drop at ±3 BPM, pitch-shiftable at ±6 BPM, or half/double-time pocket).',
+      'Audition matched stems together using the built-in Web Audio player.',
+      'Click "Link Asset" to establish cross-catalog stem sharing relationships in the interchangeable asset pool.',
+      'Click "Download .json Backup" to export the entire 26-song catalog graph and WebDAV manifest.'
     ],
     bestPractices: [
-      'Export a JSON backup before making major batch edits across multiple songs.',
-      'Verify that all tracks have valid BPM and Key tags for musician collaboration.'
+      'Use relative major/minor (e.g. 7A D minor with 7B F Major) to create emotionally resonant transitions between songs.',
+      'Half-time/double-time matching allows blending 75 BPM boom-bap tracks with 150 BPM trap-worship tracks without tempo distortion.'
     ],
     sopRules: [
-      'Catalog metadata changes are synchronized in real time across Firestore clients.'
+      'Never force stems into a mix with >6 BPM difference without time-stretching.',
+      'All master audio stems and visual assets resolve to Nextcloud WebDAV root /Music-Production.'
     ],
-    relatedTabs: ['kanban', 'nextcloud_sync', 'lyrics']
+    relatedTabs: ['kanban', 'nextcloud_sync', 'mixer']
   },
   telemetry: {
     id: 'telemetry',

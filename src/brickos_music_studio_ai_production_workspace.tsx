@@ -98,7 +98,7 @@ import {
   generateRcloneConfigBlock,
   generateRcloneSyncCommand,
   generateWindowsDriveMountCommand,
-  generatePostgreSqlRelationalMigration
+  generateCatalogJsonManifest
 } from './data/relationalCatalogBridge';
 
 export default function BrickOSMusicStudioWorkspace() {
@@ -1694,8 +1694,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
                 }`}
               >
-                <Database className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Relational SQL & Matrix</span>
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Catalog Matrix & Asset Linker</span>
               </button>
 
               <button
@@ -3181,22 +3181,22 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-800">
               <button
                 onClick={() => {
-                  const sql = generatePostgreSqlRelationalMigration(tracks);
-                  const blob = new Blob([sql], { type: 'text/plain;charset=utf-8' });
+                  const json = generateCatalogJsonManifest(tracks);
+                  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
                   const url = URL.createObjectURL(blob);
                   const link = document.createElement('a');
                   link.href = url;
-                  link.download = 'brickos_relational_seed.sql';
+                  link.download = `brickos_catalog_backup_${new Date().toISOString().split('T')[0]}.json`;
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
-                  copyToClipboard('Downloaded brickos_relational_seed.sql', 'PostgreSQL Schema');
+                  copyToClipboard('Downloaded brickos_catalog_backup.json', 'Catalog JSON Backup');
                 }}
-                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center justify-center gap-2 transition"
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center justify-center gap-2 transition cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Export Relational SQL Seed (.sql)</span>
+                <span>Export Catalog JSON Backup (.json)</span>
               </button>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -3205,10 +3205,10 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     setIsStorageModalOpen(false);
                     setActiveTab('database');
                   }}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950 cursor-pointer"
                 >
-                  <Database className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Open Database & Matrix Tab</span>
+                  <Layers className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Open Catalog & Matrix Tab</span>
                 </button>
                 <button
                   onClick={() => setIsStorageModalOpen(false)}

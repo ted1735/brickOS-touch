@@ -446,6 +446,64 @@ export function getTrackVisualAssets(track: Track): VisualAssetRecord[] {
 }
 
 // ==============================================================================
+// 6. CATALOG JSON BACKUP & MANIFEST GENERATOR (ZERO SQL)
+// ==============================================================================
+export function generateCatalogJsonManifest(tracks: Track[]): string {
+  const exportPayload = {
+    schemaVersion: '2.5.0',
+    exportTimestamp: new Date().toISOString(),
+    generator: 'brickOS Music Studio Master Catalog Engine',
+    storageLayer: {
+      type: 'Nextcloud WebDAV',
+      rootEndpoint: PRODUCTION_NEXTCLOUD_WEBDAV,
+      folderId: '207332',
+      baseDir: '/Music-Production'
+    },
+    totalTracks: tracks.length,
+    vocalArchetypes: OFFICIAL_VOCAL_ARCHETYPES,
+    tracks: tracks.map((t) => {
+      const stems = getTrackStems(t.id);
+      const visuals = getTrackVisualAssets(t);
+      return {
+        id: t.id,
+        title: t.title,
+        ep: t.ep,
+        status: t.status,
+        genre: t.genre,
+        bpm: t.bpm,
+        key: t.key,
+        vocal: t.vocal,
+        vocalCast: t.vocalCast,
+        thesis: t.thesis,
+        sunoPrompt: t.sunoPrompt,
+        negativePrompt: t.negativePrompt,
+        engineSliders: t.engineSliders,
+        webdavRoot: `${PRODUCTION_NEXTCLOUD_WEBDAV}/${t.id}`,
+        stems: stems.map(s => ({
+          passType: s.passType,
+          modelUsed: s.modelUsed,
+          webdavUrl: s.fullWebdavUrl,
+          relativePath: s.webdavRelativePath,
+          sampleRateHz: s.sampleRateHz,
+          bitDepth: s.bitDepth
+        })),
+        visuals: visuals.map(v => ({
+          assetType: v.assetType,
+          aspectRatio: v.aspectRatio,
+          title: v.title,
+          webdavUrl: v.fullWebdavUrl,
+          relativePath: v.webdavRelativePath,
+          prompt: v.prompt
+        })),
+        lyricsSnippet: t.lyrics ? t.lyrics.slice(0, 160) + '...' : ''
+      };
+    }),
+    interchangeableAssetPool: INTERCHANGEABLE_ASSET_MATRIX
+  };
+
+  return JSON.stringify(exportPayload, null, 2);
+}
+
 // 6. POSTGRESQL RELATIONAL MIGRATION SCRIPT GENERATOR
 // ==============================================================================
 export function generatePostgreSqlRelationalMigration(tracks: Track[]): string {
