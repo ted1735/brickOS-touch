@@ -30,7 +30,11 @@ const INITIAL_STEMS: MixerTrack[] = [
   { id: 4, name: "Track 4: Click & Ambient Plate", vol: 60, pan: 20, muted: false, solo: false, trimIn: 0, trimOut: 100, freq: 440, waveType: 'square', color: '#ec4899' }
 ];
 
-export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
+export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
+  track,
+  onOpenSectionGuide,
+  isDarkMode = true
+}) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [masterVolume, setMasterVolume] = useState(85);
   const [tracks, setTracks] = useState<MixerTrack[]>(INITIAL_STEMS);
@@ -375,5 +379,6 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({ track }) => {
         ))}
       </div>
     </div>
+  </div>
   );
 };

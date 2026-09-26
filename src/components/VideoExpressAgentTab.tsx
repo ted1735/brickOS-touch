@@ -292,7 +292,8 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
   isDarkMode,
   onSelectTrack,
   showToast,
-  copyToClipboard
+  copyToClipboard,
+  onOpenSectionGuide
 }) => {
   // Navigation Subview
   const [activeTabSubView, setActiveTabSubView] = useState<'guide' | 'editor' | 'factory' | 'foundations' | 'automation' | 'evidence' | 'prompt_export'>('guide');
@@ -1819,5 +1820,6 @@ runVideoExpressAutomation();`;
         </div>
       )}
     </div>
+  </div>
   );
 };

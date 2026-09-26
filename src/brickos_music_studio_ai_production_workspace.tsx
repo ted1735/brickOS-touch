@@ -74,6 +74,7 @@ import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
+import { SectionQuickHelpBanner } from './components/SectionQuickHelpBanner';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -695,7 +696,7 @@ export default function BrickOSMusicStudioWorkspace() {
     {
       id: 'msg-1',
       role: 'assistant',
-      content: "Welcome to brickOS Sovereign Studio. I am your Lead Theological & Lyrical Assistant. Let's ensure every track passes the OBI Funnel, strips all tired 'Christianese' clichés, and drives home the Throne Room Pivot by the bridge.",
+      content: "Welcome to brickOS Master Studio. I am your Lead Theological & Lyrical Assistant. Let's ensure every track passes the OBI Funnel, strips all tired 'Christianese' clichés, and drives home the Throne Room Pivot by the bridge.",
       timestamp: '01:00 AM',
       model: 'gemini-3.5-flash'
     }
@@ -1054,7 +1055,7 @@ export default function BrickOSMusicStudioWorkspace() {
 
     let systemInstruction = '';
     if (chatRole === 'lyric_assistant') {
-      systemInstruction = `You are the Lead Theological & Lyrical Assistant for brickOS Sovereign Records.
+      systemInstruction = `You are the Lead Theological & Lyrical Assistant for brickOS Master Records.
 Enforce the OBI Funnel, eliminate Christianese cliches, demand the Throne Room Pivot by the bridge, and protect the 3:1 Sonic Scar rule. Currently working on: ${selectedTrack.title} (${selectedTrack.genre}, ${selectedTrack.bpm} BPM). Thesis: ${selectedTrack.thesis}`;
     } else if (chatRole === 'mastering_engineer') {
       systemInstruction = `You are the Senior Mastering Engineer for brickOS Studio.
@@ -1344,7 +1345,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
-            title="Create New Sovereign Track"
+            title="Create New Project"
           >
             <Plus className="w-3.5 h-3.5 text-white" />
             <span>+ New Project</span>
@@ -1937,6 +1938,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               selectedEpFilter={selectedEpFilter}
               onSelectEpFilter={setSelectedEpFilter}
               onOpenCreateProject={() => setIsCreateModalOpen(true)}
+              onOpenSectionGuide={handleOpenSectionGuide}
               isDarkMode={isDarkMode}
             />
           )}
@@ -1947,6 +1949,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               track={selectedTrack}
               onUpdateTrack={handleTrackUpdate}
               onCopyText={copyToClipboard}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -1954,6 +1958,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           {activeTab === 'mixer' && (
             <MiniDawMixerTab
               track={selectedTrack}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -1962,6 +1968,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <YouTubeSEOTab
               track={selectedTrack}
               onCopyText={copyToClipboard}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -1970,6 +1978,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <OmniPostTab
               track={selectedTrack}
               onCopyText={copyToClipboard}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -1978,6 +1988,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <LiveMinistryChartsTab
               track={selectedTrack}
               onCopyText={copyToClipboard}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -1991,38 +2003,58 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               isDbConnected={isDbConnected}
               isDbSyncing={isDbSyncing}
               onSyncDatabase={handleManualSyncDatabase}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
             />
           )}
 
           {/* TAB 3: SENIOR MASTERING & A/B BUS */}
           {activeTab === 'mastering' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>Senior Mastering Engineer & Level-Matched A/B Bus</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
-                      Target: -12.0 LUFS | -1.0 dBTP
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400">Audition raw Suno gens against Billboard Top 100 reference tracks with instant LUFS gain compensation.</p>
-                </div>
+            <div className="space-y-4">
+              <SectionQuickHelpBanner
+                sectionId="mastering"
+                onOpenModalGuide={handleOpenSectionGuide}
+                isDarkMode={isDarkMode}
+              />
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Senior Mastering Engineer & Level-Matched A/B Bus</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
+                        Target: -12.0 LUFS | -1.0 dBTP
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Audition raw Suno gens against Billboard Top 100 reference tracks with instant LUFS gain compensation.</p>
+                  </div>
 
-                <button
-                  onClick={() => {
-                    const next = !isMonoCollapse;
-                    setIsMonoCollapse(next);
-                    audioMiniDaw.setMonoCollapse(next);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-                    isMonoCollapse ? 'bg-amber-600 text-white border-amber-500' : 'bg-slate-800 text-slate-300 border-slate-700'
-                  }`}
-                  title="Audit wide reverb returns for phase cancellation on mobile phones"
-                >
-                  <Activity className="w-3.5 h-3.5" />
-                  <span>{isMonoCollapse ? 'Mono Collapse ACTIVE' : 'Mono-Collapse Check'}</span>
-                </button>
-              </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSectionGuide('mastering')}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      title="Open Senior Mastering Operating Guide & SOP Rules"
+                    >
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>How To Use Mastering & SOP</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const next = !isMonoCollapse;
+                        setIsMonoCollapse(next);
+                        audioMiniDaw.setMonoCollapse(next);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                        isMonoCollapse ? 'bg-amber-600 text-white border-amber-500' : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}
+                      title="Audit wide reverb returns for phase cancellation on mobile phones"
+                    >
+                      <Activity className="w-3.5 h-3.5" />
+                      <span>{isMonoCollapse ? 'Mono Collapse ACTIVE' : 'Mono-Collapse Check'}</span>
+                    </button>
+                  </div>
+                </div>
 
               {/* A/B Bus Selector */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -2094,11 +2126,17 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 </div>
               </div>
             </div>
+            </div>
           )}
 
           {/* TAB 4: VISUALS & VEO 3 VIDEO STUDIO */}
           {activeTab === 'veo_visuals' && (
-            <div className="space-y-6">
+            <div className="space-y-4">
+              <SectionQuickHelpBanner
+                sectionId="veo_visuals"
+                onOpenModalGuide={handleOpenSectionGuide}
+                isDarkMode={isDarkMode}
+              />
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
                 <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
                   <div>
@@ -2109,6 +2147,18 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     <p className="text-xs text-slate-400">
                       Create & edit album art with Gemini Flash, and generate or animate images into cinematic video using Google Veo 3.
                     </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSectionGuide('veo_visuals')}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      title="Open Visuals & Veo 3 Operating Guide & SOP Rules"
+                    >
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>How To Use Veo Visuals</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2553,52 +2603,71 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
           {/* TAB 5: NIGHTCAFE QUEUE RUNNER */}
           {activeTab === 'nightcafe' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>NightCafe Studio Bulk Queue Runner</span>
-                    <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] font-bold border border-blue-700/50">
-                      {nightCafePrompts.length} Scenes Loaded
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400">Batch prompt dispatching for Google Veo & Flux Dev models on NightCafe Studio.</p>
+            <div className="space-y-4">
+              <SectionQuickHelpBanner
+                sectionId="nightcafe"
+                onOpenModalGuide={handleOpenSectionGuide}
+                isDarkMode={isDarkMode}
+              />
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>NightCafe Studio Bulk Queue Runner</span>
+                      <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] font-bold border border-blue-700/50">
+                        {nightCafePrompts.length} Scenes Loaded
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Batch prompt dispatching for Google Veo & Flux Dev models on NightCafe Studio.</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSectionGuide('nightcafe')}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      title="Open NightCafe Bulk Queue Operating Guide & SOP Rules"
+                    >
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>How To Use NightCafe</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const payload = JSON.stringify(nightCafePrompts, null, 2);
+                        copyToClipboard(payload, "NightCafe Queue JSON");
+                      }}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 transition"
+                    >
+                      <Zap className="w-4 h-4 text-amber-300" />
+                      <span>⚡ Copy JSON for NightCafe</span>
+                    </button>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    const payload = JSON.stringify(nightCafePrompts, null, 2);
-                    copyToClipboard(payload, "NightCafe Queue JSON");
-                  }}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 transition"
-                >
-                  <Zap className="w-4 h-4 text-amber-300" />
-                  <span>⚡ Copy JSON for NightCafe</span>
-                </button>
-              </div>
-
-              {/* Prompt Table */}
-              <div className="border border-slate-800 rounded-xl bg-slate-950 overflow-hidden max-h-[400px] overflow-y-auto custom-scrollbar">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-900 border-b border-slate-800 sticky top-0 text-slate-400">
-                    <tr>
-                      <th className="py-2.5 px-3 w-10 text-center">#</th>
-                      <th className="py-2.5 px-3 w-36">Song</th>
-                      <th className="py-2.5 px-3 w-36">Scene Title</th>
-                      <th className="py-2.5 px-3">Cinematic Prompt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-slate-300">
-                    {nightCafePrompts.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-900/60 transition">
-                        <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">{idx + 1}</td>
-                        <td className="py-2 px-3 font-semibold text-blue-300">{item.song}</td>
-                        <td className="py-2 px-3 font-medium text-slate-200">{item.title}</td>
-                        <td className="py-2 px-3 font-mono text-[11px] text-slate-300">{item.prompt}</td>
+                {/* Prompt Table */}
+                <div className="border border-slate-800 rounded-xl bg-slate-950 overflow-hidden max-h-[400px] overflow-y-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-900 border-b border-slate-800 sticky top-0 text-slate-400">
+                      <tr>
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3 w-36">Song</th>
+                        <th className="py-2.5 px-3 w-36">Scene Title</th>
+                        <th className="py-2.5 px-3">Cinematic Prompt</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {nightCafePrompts.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-900/60 transition">
+                          <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-2 px-3 font-semibold text-blue-300">{item.song}</td>
+                          <td className="py-2 px-3 font-medium text-slate-200">{item.title}</td>
+                          <td className="py-2 px-3 font-mono text-[11px] text-slate-300">{item.prompt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2612,50 +2681,70 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onSelectTrack={(track) => setSelectedTrack(track)}
               showToast={showToast}
               copyToClipboard={copyToClipboard}
+              onOpenSectionGuide={handleOpenSectionGuide}
             />
           )}
 
           {/* TAB 6: TELEMETRY & SURVIVAL LOOP */}
           {activeTab === 'telemetry' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span>T+60m Inbound Telemetry & Brutal Metric Loop</span>
-                  <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[10px] font-bold border border-purple-700/50">
-                    Active Audit
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-400">Automated retention scoring. Videos with ≥70% completion trigger 10s video extensions instantly.</p>
-              </div>
+            <div className="space-y-4">
+              <SectionQuickHelpBanner
+                sectionId="telemetry"
+                onOpenModalGuide={handleOpenSectionGuide}
+                isDarkMode={isDarkMode}
+              />
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>T+60m Inbound Telemetry & Brutal Metric Loop</span>
+                      <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[10px] font-bold border border-purple-700/50">
+                        Active Audit
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Automated retention scoring. Videos with ≥70% completion trigger 10s video extensions instantly.</p>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-400 uppercase">Track: Meet Me Here (TRK-13)</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-mono font-bold">VIRAL WINNER</span>
-                  </div>
-                  <div className="text-xs text-slate-300 space-y-1 font-mono">
-                    <div>3s Retention: <strong className="text-white">74.2%</strong> (&gt;65% Pass)</div>
-                    <div>Completion Rate: <strong className="text-white">71.5%</strong> (&gt;70% Winner)</div>
-                    <div>1h Views: <strong className="text-white">2,680</strong></div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 font-mono">
-                    <strong>Action Triggered:</strong> Generated 3 seamless 10-second video extensions (Scenes 4, 5, 6) via Gemini Flash.
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSectionGuide('telemetry')}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    title="Open Telemetry Operating Guide & SOP Rules"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>How To Use Telemetry</span>
+                  </button>
                 </div>
 
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-rose-400 uppercase">Track: Calvary Grit (TRK-09)</span>
-                    <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] font-mono font-bold">KILL CONCEPT</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-400 uppercase">Track: Meet Me Here (TRK-13)</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-mono font-bold">VIRAL WINNER</span>
+                    </div>
+                    <div className="text-xs text-slate-300 space-y-1 font-mono">
+                      <div>3s Retention: <strong className="text-white">74.2%</strong> (&gt;65% Pass)</div>
+                      <div>Completion Rate: <strong className="text-white">71.5%</strong> (&gt;70% Winner)</div>
+                      <div>1h Views: <strong className="text-white">2,680</strong></div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 font-mono">
+                      <strong>Action Triggered:</strong> Generated 3 seamless 10-second video extensions (Scenes 4, 5, 6) via Gemini Flash.
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-300 space-y-1 font-mono">
-                    <div>3s Retention: <strong className="text-white">58.2%</strong> (&lt;65% Kill)</div>
-                    <div>Completion Rate: <strong className="text-white">44.1%</strong></div>
-                    <div>1h Views: <strong className="text-white">640</strong></div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200 font-mono">
-                    <strong>Action Triggered:</strong> Campaign archived. Log weak visual hook in changelog.
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-rose-400 uppercase">Track: Calvary Grit (TRK-09)</span>
+                      <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] font-mono font-bold">KILL CONCEPT</span>
+                    </div>
+                    <div className="text-xs text-slate-300 space-y-1 font-mono">
+                      <div>3s Retention: <strong className="text-white">58.2%</strong> (&lt;65% Kill)</div>
+                      <div>Completion Rate: <strong className="text-white">44.1%</strong></div>
+                      <div>1h Views: <strong className="text-white">640</strong></div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200 font-mono">
+                      <strong>Action Triggered:</strong> Campaign archived. Log weak visual hook in changelog.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2664,155 +2753,191 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
           {/* TAB 7: STUDIO CO-PRODUCER AI (GEMINI CHATBOT) */}
           {activeTab === 'coproducer' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 flex flex-col h-[640px]">
-              <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-teal-400" />
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Studio Co-Producer AI (Multi-Turn Chatbot)</h3>
-                    <p className="text-[11px] text-slate-400">Contextually aware of {selectedTrack.title} ({selectedTrack.genre})</p>
-                  </div>
-                </div>
-
-                {/* Role and Model Selectors */}
-                <div className="flex items-center gap-2">
-                  <select
-                    value={chatRole}
-                    onChange={(e) => setChatRole(e.target.value as any)}
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 font-bold focus:outline-none"
-                  >
-                    <option value="lyric_assistant">Lyric & Theological Assistant</option>
-                    <option value="mastering_engineer">Senior Mastering Engineer</option>
-                    <option value="omnipost_strategist">Omnipost Social Strategist</option>
-                  </select>
-
-                  <select
-                    value={chatModel}
-                    onChange={(e) => setChatModel(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none"
-                  >
-                    <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-                    <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Message Thread */}
-              <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-950 rounded-xl border border-slate-800/80 custom-scrollbar">
-                {chatMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1 text-[10px] text-slate-500 font-mono">
-                      <span>{msg.role === 'user' ? 'You' : 'brickOS AI'}</span>
-                      <span>•</span>
-                      <span>{msg.timestamp}</span>
-                      {msg.model && <span>({msg.model})</span>}
+            <div className="space-y-4">
+              <SectionQuickHelpBanner
+                sectionId="coproducer"
+                onOpenModalGuide={handleOpenSectionGuide}
+                isDarkMode={isDarkMode}
+              />
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 flex flex-col h-[640px]">
+                <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-teal-400" />
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Studio Co-Producer AI (Multi-Turn Chatbot)</h3>
+                      <p className="text-[11px] text-slate-400">Contextually aware of {selectedTrack.title} ({selectedTrack.genre})</p>
                     </div>
-                    <div
-                      className={`p-3.5 rounded-2xl max-w-2xl text-xs leading-relaxed whitespace-pre-wrap ${
-                        msg.role === 'user'
-                          ? 'bg-indigo-600 text-white rounded-br-none'
-                          : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md font-mono'
-                      }`}
+                  </div>
+
+                  {/* Role, Model Selectors and Guide button */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSectionGuide('coproducer')}
+                      className="px-3 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      title="Open Studio Co-Producer AI Operating Guide & SOP Rules"
                     >
-                      {msg.content}
-                    </div>
-                  </div>
-                ))}
-                {isChatLoading && (
-                  <div className="flex items-center gap-2 text-xs text-slate-500 font-mono p-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
-                    <span>Thinking with {chatModel}...</span>
-                  </div>
-                )}
-              </div>
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>How To Use Co-Producer</span>
+                    </button>
 
-              {/* Chat Input */}
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder={`Ask ${chatRole.replace('_', ' ')} anything about ${selectedTrack.title}...`}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                />
-                <button
-                  onClick={handleSendMessage}
-                  disabled={isChatLoading || !chatInput.trim()}
-                  className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Send</span>
-                </button>
+                    <select
+                      value={chatRole}
+                      onChange={(e) => setChatRole(e.target.value as any)}
+                      className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 font-bold focus:outline-none"
+                    >
+                      <option value="lyric_assistant">Lyric & Theological Assistant</option>
+                      <option value="mastering_engineer">Senior Mastering Engineer</option>
+                      <option value="omnipost_strategist">Omnipost Social Strategist</option>
+                    </select>
+
+                    <select
+                      value={chatModel}
+                      onChange={(e) => setChatModel(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none"
+                    >
+                      <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                      <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                      <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Message Thread */}
+                <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-950 rounded-xl border border-slate-800/80 custom-scrollbar">
+                  {chatMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1 text-[10px] text-slate-500 font-mono">
+                        <span>{msg.role === 'user' ? 'You' : 'brickOS AI'}</span>
+                        <span>•</span>
+                        <span>{msg.timestamp}</span>
+                        {msg.model && <span>({msg.model})</span>}
+                      </div>
+                      <div
+                        className={`p-3.5 rounded-2xl max-w-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                          msg.role === 'user'
+                            ? 'bg-indigo-600 text-white rounded-br-none'
+                            : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md font-mono'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 font-mono p-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
+                      <span>Thinking with {chatModel}...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Input */}
+                <div className="flex items-center gap-2 pt-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder={`Ask ${chatRole.replace('_', ' ')} anything about ${selectedTrack.title}...`}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={isChatLoading || !chatInput.trim()}
+                    className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* TAB 8: SEARCH GROUNDING */}
           {activeTab === 'search' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Search className="w-4 h-4 text-cyan-400" />
-                  <span>Google Search Grounding (gemini-3.5-flash with googleSearch tool)</span>
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Retrieve up-to-date Billboard Christian/Gospel charts, BPM trends, Nashville mixing standards, and theological references.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearchGrounding()}
-                  placeholder="e.g. Current top 10 Christian Hip Hop tracks tempo and 808 style 2026..."
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
-                />
-                <button
-                  onClick={handleSearchGrounding}
-                  disabled={isSearching}
-                  className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-cyan-950 disabled:opacity-50"
-                >
-                  {isSearching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                  <span>{isSearching ? 'Searching...' : 'Search Google Grounding'}</span>
-                </button>
-              </div>
-
-              {searchResult && (
-                <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-4">
-                  <div className="text-xs text-slate-200 font-mono leading-relaxed whitespace-pre-wrap">
-                    {searchResult.answer}
+            <div className="space-y-4">
+              <SectionQuickHelpBanner
+                sectionId="search"
+                onOpenModalGuide={handleOpenSectionGuide}
+                isDarkMode={isDarkMode}
+              />
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Search className="w-4 h-4 text-cyan-400" />
+                      <span>Google Search Grounding (gemini-3.5-flash with googleSearch tool)</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Retrieve up-to-date Billboard Christian/Gospel charts, BPM trends, Nashville mixing standards, and theological references.
+                    </p>
                   </div>
 
-                  {searchResult.sources && searchResult.sources.length > 0 && (
-                    <div className="pt-3 border-t border-slate-800 space-y-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">
-                        Verified Web Sources:
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {searchResult.sources.map((src, idx) => (
-                          <a
-                            key={idx}
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-cyan-400 hover:underline bg-slate-900 px-2.5 py-1 rounded border border-slate-800 flex items-center gap-1"
-                          >
-                            <span>{src.title || src.url}</span>
-                            <ExternalLink className="w-2.5 h-2.5 inline" />
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSectionGuide('search')}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    title="Open Google Search Grounding Operating Guide & SOP Rules"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>How To Use Search</span>
+                  </button>
                 </div>
-              )}
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchGrounding()}
+                    placeholder="e.g. Current top 10 Christian Hip Hop tracks tempo and 808 style 2026..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                  <button
+                    onClick={handleSearchGrounding}
+                    disabled={isSearching}
+                    className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-cyan-950 disabled:opacity-50"
+                  >
+                    {isSearching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    <span>{isSearching ? 'Searching...' : 'Search Google Grounding'}</span>
+                  </button>
+                </div>
+
+                {searchResult && (
+                  <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-4">
+                    <div className="text-xs text-slate-200 font-mono leading-relaxed whitespace-pre-wrap">
+                      {searchResult.answer}
+                    </div>
+
+                    {searchResult.sources && searchResult.sources.length > 0 && (
+                      <div className="pt-3 border-t border-slate-800 space-y-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">
+                          Verified Web Sources:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {searchResult.sources.map((src, idx) => (
+                            <a
+                              key={idx}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-cyan-400 hover:underline bg-slate-900 px-2.5 py-1 rounded border border-slate-800 flex items-center gap-1"
+                            >
+                              <span>{src.title || src.url}</span>
+                              <ExternalLink className="w-2.5 h-2.5 inline" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -2827,6 +2952,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onApplyAssetToTrack={handleApplyAssetToTrack}
               isDarkMode={isDarkMode}
               onNavigateToTab={setActiveTab}
+              onOpenSectionGuide={handleOpenSectionGuide}
             />
           )}
 
@@ -2863,6 +2989,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               }}
               showToast={showToast}
               isDarkMode={isDarkMode}
+              onOpenSectionGuide={handleOpenSectionGuide}
             />
           )}
 
@@ -2880,7 +3007,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white flex items-center gap-2">
-                    <span>Nextcloud Sovereign WebDAV Hub</span>
+                    <span>Nextcloud WebDAV Production Hub</span>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-mono text-[10px] border border-emerald-700/40">
                       Live Production
                     </span>

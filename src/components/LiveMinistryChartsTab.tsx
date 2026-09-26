@@ -27,7 +27,12 @@ interface LiveMinistryChartsTabProps {
 
 const KEYS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 
-export const LiveMinistryChartsTab: React.FC<LiveMinistryChartsTabProps> = ({ track, onCopyText }) => {
+export const LiveMinistryChartsTab: React.FC<LiveMinistryChartsTabProps> = ({
+  track,
+  onCopyText,
+  onOpenSectionGuide,
+  isDarkMode = true
+}) => {
   const [targetKey, setTargetKey] = useState<string>(track.key.split(' ')[0] || 'D');
   const [viewFormat, setViewFormat] = useState<'chordpro' | 'nashville' | 'onsong'>('chordpro');
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
