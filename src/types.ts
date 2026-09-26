@@ -96,13 +96,45 @@ export interface EPCollection {
   theme: string;
 }
 
+export type PromptModality = 'image' | 'video' | 'audio';
+
+export interface PromptItem {
+  id: string;
+  song: string;
+  trackId?: string;
+  title: string;
+  modality: PromptModality;
+  engine: string;
+  prompt: string;
+  negativePrompt?: string;
+  aspectRatio?: string;
+  
+  // Video specific
+  initialPrompt?: string;
+  extensionPrompt?: string;
+  audioCues?: string;
+  cameraMovement?: string;
+
+  // Audio specific
+  bpm?: number;
+  key?: string;
+  genre?: string;
+  vocalArchetype?: string;
+  sliders?: EngineSliders;
+
+  tags: string[];
+  isFavorite?: boolean;
+  createdAt?: string;
+  notes?: string;
+}
+
 export interface NightCafePrompt {
   song: string;
   idx: number;
   title: string;
   prompt: string;
   aspectRatio?: string;
-  type?: 'image' | 'video' | 'storyboard';
+  type?: 'image' | 'video' | 'audio' | 'storyboard';
   engine?: string;
   initialPrompt?: string;
   extensionPrompt?: string;

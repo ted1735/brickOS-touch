@@ -1078,6 +1078,32 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               </div>
             )}
 
+            {/* Prompt Engineering Library & MMH Storyboard Shortcut */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('prompt_library')}
+                className={`w-full py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-between cursor-pointer shadow-xs ${
+                  isDarkMode
+                    ? 'bg-purple-950/60 hover:bg-purple-900/80 border-purple-700/50 hover:border-purple-500 text-purple-200 hover:text-white'
+                    : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-900'
+                }`}
+                title="Launch Prompt Engineering Library & MMH Storyboard"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Prompt Library & Storyboard</span>
+                </span>
+                <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
+                  isDarkMode
+                    ? 'text-amber-400 bg-amber-950/60 border-amber-700/40'
+                    : 'text-amber-800 bg-amber-100 border-amber-300'
+                }`}>
+                  Library →
+                </span>
+              </button>
+            </div>
+
             {/* Nextcloud / WebDAV Sync Button - Dedicated to /Music-Production */}
             <div className="pt-2">
               <button

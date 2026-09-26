@@ -70,6 +70,7 @@ import { CatalogSidebar } from './components/CatalogSidebar';
 import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
 import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
+import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import {
   loadTracksFromFirestore,
   subscribeToFirestoreTracks,
@@ -105,7 +106,7 @@ export default function BrickOSMusicStudioWorkspace() {
     return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
   });
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync'
+    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
@@ -1739,6 +1740,21 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               </button>
 
               <button
+                onClick={() => setActiveTab('prompt_library')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'prompt_library'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-sm shadow-purple-950/60'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-purple-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-purple-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
+                }`}
+                title="Open Universal Prompt Engineering Library (Image, Video & Audio Storyboards across all songs)"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Prompt Library & Storyboard</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('nightcafe')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'nightcafe'
@@ -2689,6 +2705,42 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onApplyAssetToTrack={handleApplyAssetToTrack}
               isDarkMode={isDarkMode}
               onNavigateToTab={setActiveTab}
+            />
+          )}
+
+          {/* TAB: PROMPT ENGINEERING LIBRARY (IMAGE, VIDEO, AUDIO & MMH STORYBOARD) */}
+          {activeTab === 'prompt_library' && (
+            <PromptEngineeringLibraryTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              onSelectTrack={(t) => {
+                setSelectedTrack(t);
+              }}
+              onSendToImageStudio={(prompt, aspect) => {
+                setImagePrompt(prompt);
+                if (aspect) setImageAspectRatio(aspect);
+                setActiveTab('veo_visuals');
+                showToast("Loaded prompt into Image Studio", "success");
+              }}
+              onSendToVeoStudio={(prompt, aspect) => {
+                setVideoPrompt(prompt);
+                if (aspect === '9:16' || aspect === '16:9') setVideoAspectRatio(aspect);
+                setActiveTab('veo_visuals');
+                showToast("Loaded prompt into Google Veo Video Studio", "success");
+              }}
+              onSendToSuno={(trackId, prompt, negPrompt, sliders) => {
+                const targetTrack = tracks.find(t => t.id === trackId) || selectedTrack;
+                setSelectedTrack(targetTrack);
+                handleTrackUpdate('batch_update', {
+                  sunoPrompt: prompt,
+                  ...(negPrompt ? { negativePrompt: negPrompt } : {}),
+                  ...(sliders ? { engineSliders: sliders } : {})
+                });
+                setActiveTab('lyrics');
+                showToast(`Loaded prompt into Suno 4-Block for ${targetTrack.title}`, "success");
+              }}
+              showToast={showToast}
+              isDarkMode={isDarkMode}
             />
           )}
 
