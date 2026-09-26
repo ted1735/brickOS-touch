@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, X, Music, Disc, Sparkles, FileText, CheckCircle, Sliders, Database } from 'lucide-react';
-import { Track } from '../types';
+import { Plus, X, Music, Disc, Sparkles, FileText, CheckCircle, Sliders, Database, Layers, Camera } from 'lucide-react';
+import { Track, PromptItem } from '../types';
+import { buildStandardTrackPackage } from '../schema/songProductionSchema';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateProject: (newTrack: Track, openLyricEngine?: boolean) => void;
+  onCreateProject: (newTrack: Track, openLyricEngine?: boolean, generatedPrompts?: PromptItem[]) => void;
   existingTracksCount: number;
   existingTracks?: Track[];
   defaultEp?: string;
@@ -91,33 +92,20 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       }
     }
 
-    const newTrack: Track = {
+    const { track: newTrack, prompts: generatedPrompts } = buildStandardTrackPackage({
       id: nextId,
-      ep: ep,
       title: finalTitle,
-      status: 'Idea / Concept',
+      ep: ep,
       genre: finalGenre,
       bpm: Number(bpm) || 96,
       key: key,
-      vocal: vocalArchetype.split(' (')[0],
+      vocalArchetype: vocalArchetype,
       vocalCast: `${vocalArchetype} (${VOCAL_ARCHETYPES.find(v => v.name === vocalArchetype)?.desc.split(',')[0] || 'Vocal'})`,
       thesis: finalThesis,
-      sunoPrompt: `High-fidelity studio recording, ${bpm} BPM, Key of ${key}, ${finalGenre}, raw authentic vocals, dynamic Nashville acoustic and organic instrumentation`,
-      negativePrompt: 'sibilance, high-frequency hiss, piercing treble, digital artifacts, muddy bass, autotune, robotic artifacts, lo-fi, reverb wash',
-      engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
-      lyrics: finalLyrics,
-      versions: [
-        {
-          version: 'v1.0',
-          timestamp: new Date().toISOString().split('T')[0],
-          reason: 'Initial creation & lyric draft',
-          lyrics: finalLyrics
-        }
-      ],
-      selahPrayed: false
-    };
+      lyrics: finalLyrics
+    });
 
-    onCreateProject(newTrack, true);
+    onCreateProject(newTrack, true, generatedPrompts);
     onClose();
   };
 
@@ -148,9 +136,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-mono border border-indigo-800/50">
                   {nextId}
                 </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono border border-purple-800/50 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>Standard Schema & Storyboard</span>
+                </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                Configure your song details, assign EP suite, and open immediately in the Lyric Engine.
+                Shared JSON schema: auto-generates 4-phase visual/video storyboards, Suno 4-block audio treatment, and v1.0 version baseline.
               </p>
             </div>
           </div>

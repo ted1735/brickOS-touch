@@ -365,3 +365,41 @@ export interface NextcloudSyncConfig {
   lastSyncTimestamp?: string;
 }
 
+export interface VideoExpressSceneClip {
+  sceneNumber: number;
+  sceneTitle: string;
+  spokenLine: string;
+  charCount: number;
+  durationSeconds: number;
+  cameraMovement: string;
+  avatarExpression: string;
+  trimHeadSeconds: number;
+  trimTailSeconds: number;
+  audioVoiceoverId: string;
+  renderStatus: 'pending' | 'generating' | 'synced' | 'verified';
+  evidenceStatus: 'pass' | 'fail';
+}
+
+export interface VideoExpressProject {
+  id: string;
+  title: string;
+  trackId: string;
+  trackTitle: string;
+  characterName: string;
+  characterArchetype: string;
+  characterPrompt: string;
+  referenceImageLocked: boolean;
+  referenceImageSeed: number;
+  referenceImageUrl?: string;
+  voiceCloneName: string;
+  voiceModel: string;
+  aspectRatio: '9:16' | '16:9';
+  totalDurationSeconds: number;
+  deadAirTrimDefault: number;
+  scenes: VideoExpressSceneClip[];
+  systemPromptMd: string;
+  evidenceTableVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+

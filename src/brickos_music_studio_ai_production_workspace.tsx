@@ -54,7 +54,7 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
-import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset } from './types';
+import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem } from './types';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
 import { audioMiniDaw } from './utils/audioEngine';
@@ -71,6 +71,8 @@ import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
 import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
+import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
+import { getNextVersionString } from './utils/versioning';
 import {
   loadTracksFromFirestore,
   subscribeToFirestoreTracks,
@@ -106,7 +108,7 @@ export default function BrickOSMusicStudioWorkspace() {
     return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
   });
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library'
+    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
@@ -479,9 +481,39 @@ export default function BrickOSMusicStudioWorkspace() {
   const [isCatalogDrawerOpen, setIsCatalogDrawerOpen] = useState(false);
 
   // Add new track from Modal or Kanban and permanently persist to Firestore
-  const handleAddNewTrack = async (newTrack: Track, openLyricEngine = true) => {
+  const handleAddNewTrack = async (newTrack: Track, openLyricEngine = true, generatedPrompts?: PromptItem[]) => {
     setTracks(prev => [newTrack, ...prev]);
     setSelectedTrack(newTrack);
+    
+    // If standard schema prompts were generated, save to NightCafe queue and Prompt Library
+    if (generatedPrompts && generatedPrompts.length > 0) {
+      setNightCafePrompts(prev => [
+        ...generatedPrompts.map((p, idx) => ({
+          song: p.song,
+          idx: idx + 1,
+          title: p.title,
+          prompt: p.prompt,
+          aspectRatio: p.aspectRatio,
+          type: (p.modality === 'audio' ? 'storyboard' : p.modality) as 'image' | 'video' | 'storyboard',
+          engine: p.engine,
+          initialPrompt: p.initialPrompt,
+          extensionPrompt: p.extensionPrompt,
+          audioCues: p.audioCues,
+          tags: p.tags
+        })),
+        ...prev
+      ]);
+
+      try {
+        const saved = localStorage.getItem('brickos_prompt_library');
+        const existing: PromptItem[] = saved ? JSON.parse(saved) : [];
+        const updated = [...generatedPrompts, ...existing];
+        localStorage.setItem('brickos_prompt_library', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Could not store generated prompts to localStorage:', err);
+      }
+    }
+
     if (openLyricEngine) {
       setActiveTab('lyrics');
     }
@@ -489,8 +521,8 @@ export default function BrickOSMusicStudioWorkspace() {
       setIsDbSyncing(true);
       await saveTrackToFirestore(newTrack);
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      setCopiedNotification(`Created & saved "${newTrack.title}" (${newTrack.id}) to Cloud Firestore!`);
-      setTimeout(() => setCopiedNotification(''), 4000);
+      setCopiedNotification(`Created & saved "${newTrack.title}" (${newTrack.id}) with 4-Phase Storyboard Prompts to Cloud Firestore!`);
+      setTimeout(() => setCopiedNotification(''), 4500);
     } catch (err) {
       console.error('Failed to save new track to cloud Firestore:', err);
     } finally {
@@ -666,14 +698,16 @@ export default function BrickOSMusicStudioWorkspace() {
     const updated = tracks.map(t => {
       if (t.id === selectedTrack.id) {
         if (field === 'version_commit') {
-          const nextVerNum = (t.versions.length + 1).toFixed(1);
-          const versionLabel = value?.version || `v${nextVerNum}`;
+          const versionLabel = value?.version || getNextVersionString(t.versions);
           const versionLyrics = value?.lyrics !== undefined ? value.lyrics : t.lyrics;
           const newVersion: TrackVersion = {
             version: versionLabel,
             timestamp: value?.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19),
             reason: value?.reason || 'Manual snapshot checkpoint',
-            lyrics: versionLyrics
+            lyrics: versionLyrics,
+            bpm: value?.bpm || t.bpm,
+            genre: value?.genre || t.genre,
+            vocal: value?.vocal || t.vocal
           };
           const newVersions = [...t.versions, newVersion];
           const modified = { 
@@ -1769,6 +1803,21 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               </button>
 
               <button
+                onClick={() => setActiveTab('video_express')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                  activeTab === 'video_express'
+                    ? 'bg-gradient-to-r from-rose-600 to-purple-600 border-rose-400 text-white shadow-sm shadow-rose-950/60'
+                    : isDarkMode
+                    ? 'bg-slate-900 border-slate-800 text-rose-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-rose-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
+                }`}
+                title="Launch VideoExpress.ai Consistent Character Talking Avatar Agent (<100 Chars Rule & Evidence Table)"
+              >
+                <Video className="w-3.5 h-3.5 text-rose-400" />
+                <span>VideoExpress Agent</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('telemetry')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
                   activeTab === 'telemetry'
@@ -2493,6 +2542,18 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </div>
           )}
 
+          {/* TAB: VIDEOEXPRESS.AI TALKING AVATAR AGENT */}
+          {activeTab === 'video_express' && (
+            <VideoExpressAgentTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              isDarkMode={isDarkMode}
+              onSelectTrack={(track) => setSelectedTrack(track)}
+              showToast={showToast}
+              copyToClipboard={copyToClipboard}
+            />
+          )}
+
           {/* TAB 6: TELEMETRY & SURVIVAL LOOP */}
           {activeTab === 'telemetry' && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
@@ -3027,7 +3088,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       <CreateProjectModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onCreateProject={(newTrack) => handleAddNewTrack(newTrack, true)}
+        onCreateProject={(newTrack, openLyricEngine, prompts) => handleAddNewTrack(newTrack, openLyricEngine, prompts)}
         existingTracksCount={tracks.length}
         existingTracks={tracks}
         defaultEp={selectedTrack.ep}

@@ -41,6 +41,7 @@ import {
 import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage } from '../types';
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
 import { SOPRulesEditorModal } from './SOPRulesEditorModal';
+import { getNextVersionString } from '../utils/versioning';
 
 interface LyricsAndSunoTabProps {
   track: Track;
@@ -308,9 +309,8 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
     setSuccessCommitNotification(null);
 
     try {
-      // Step 1: Pre-snapshot
-      const currentVerCount = track.versions.length;
-      const preVersionLabel = `v${(currentVerCount + 0.1).toFixed(1)} (Pre-AI Snapshot)`;
+      // Step 1: Pre-snapshot (+0.1 increment)
+      const preVersionLabel = getNextVersionString(track.versions, 'Pre-AI Snapshot');
       setApplyStageMessage(`Step 1/3: Instant version ${preVersionLabel} committed before changes...`);
 
       onUpdateTrack('version_commit', {
@@ -348,11 +348,11 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
       const rewrittenLyrics = data.rewrittenLyrics;
 
-      // Step 3: Screen update and Post-AI commit
+      // Step 3: Screen update and Post-AI commit (+0.1 from the pre-snapshot)
       setApplyStageMessage('Step 3/3: Updating lyrics live & committing post-revision version...');
       onUpdateTrack('lyrics', rewrittenLyrics);
 
-      const postVersionLabel = `v${(currentVerCount + 1).toFixed(1)} (Post-AI Revision)`;
+      const postVersionLabel = getNextVersionString([...track.versions, { version: preVersionLabel, timestamp: '', reason: '', lyrics: '' }], 'Post-AI Revision');
 
       const targetId = targetFeedback ? targetFeedback.id : activeFeedbackId;
       const updatedAuditHistory = (track.auditHistory || []).map((item) => {
@@ -478,17 +478,19 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
     document.body.removeChild(element);
   };
 
-  // Save manual Checkpoint
+  // Save manual Checkpoint (+0.1 increment)
   const handleSaveCheckpoint = () => {
     if (!checkpointReason.trim()) return;
-    const nextVerNum = (track.versions.length + 1).toFixed(1);
-    const newVersionLabel = `v${nextVerNum}`;
+    const newVersionLabel = getNextVersionString(track.versions);
 
     onUpdateTrack('version_commit', {
       version: newVersionLabel,
       reason: checkpointReason,
       lyrics: track.lyrics,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      bpm: track.bpm,
+      genre: track.genre,
+      vocal: track.vocalCast || track.vocal
     });
 
     setIsCheckpointModalOpen(false);

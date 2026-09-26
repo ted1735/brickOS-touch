@@ -1104,6 +1104,32 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               </button>
             </div>
 
+            {/* VideoExpress.ai Talking Avatar Agent Shortcut */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('video_express')}
+                className={`w-full py-2.5 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-between cursor-pointer shadow-xs ${
+                  isDarkMode
+                    ? 'bg-rose-950/60 hover:bg-rose-900/80 border-rose-700/50 hover:border-rose-500 text-rose-200 hover:text-white'
+                    : 'bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-900'
+                }`}
+                title="Launch VideoExpress.ai Consistent Character Talking Avatar Agent"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Video className="w-3.5 h-3.5 text-rose-400" />
+                  <span>VideoExpress Avatar Agent</span>
+                </span>
+                <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
+                  isDarkMode
+                    ? 'text-rose-400 bg-rose-950/60 border-rose-700/40'
+                    : 'text-rose-800 bg-rose-100 border-rose-300'
+                }`}>
+                  Avatar →
+                </span>
+              </button>
+            </div>
+
             {/* Nextcloud / WebDAV Sync Button - Dedicated to /Music-Production */}
             <div className="pt-2">
               <button

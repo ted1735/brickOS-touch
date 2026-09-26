@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { PromptItem, PromptModality, Track, EngineSliders } from '../types';
 import { CANONICAL_PROMPT_LIBRARY } from '../data/promptLibraryCatalog';
+import { generateStandardStoryboardPrompts } from '../schema/songProductionSchema';
 
 interface PromptEngineeringLibraryTabProps {
   tracks: Track[];
@@ -863,8 +864,29 @@ export const PromptEngineeringLibraryTab: React.FC<PromptEngineeringLibraryTabPr
               <Layers className="w-8 h-8 mx-auto text-purple-400/50" />
               <div className="text-sm font-bold text-slate-300">No storyboard prompts found for "{activeStoryboardSong}"</div>
               <p className="text-xs max-w-md mx-auto">
-                Add your first image or video shot prompt for this track using the <strong>+ New Prompt</strong> button above to populate this song's narrative pipeline.
+                Every song in brickOS can follow the standardized 4-Phase Storyboard Pipeline (Image & Video prompts). Click below to generate the complete package automatically.
               </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const matchedTrack = tracks.find(t => t.title === activeStoryboardSong) || selectedTrack;
+                    const generated = generateStandardStoryboardPrompts(
+                      matchedTrack.id,
+                      matchedTrack.title,
+                      matchedTrack.genre,
+                      matchedTrack.thesis,
+                      matchedTrack.vocal
+                    );
+                    setPrompts(prev => [...generated, ...prev]);
+                    showToast(`Generated 4-Phase Storyboard for "${matchedTrack.title}"!`, 'success');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-purple-950/50 transition inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Generate Standard 4-Phase Storyboard Prompts</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
