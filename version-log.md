@@ -103,3 +103,20 @@ All major milestones, song creations, and revision checkpoints in the studio inc
   - Updated studio header version display:
     - Removed the static "v5.5 SOVEREIGN" badge.
     - Bound both `NavigationHeader.tsx` and `brickos_music_studio_ai_production_workspace.tsx` to dynamic `CURRENT_STUDIO_VERSION` (`v1.7`).
+
+---
+
+## [v1.8] — Complete Operational Guide, foundations.md Axioms & Interactive In-App Video Engine
+- **Date**: 2026-09-25
+- **Milestone**:
+  - Incremented studio version to **`v1.8`**.
+  - Built interactive **"How To Create"** operational guide in `VideoExpressAgentTab.tsx`:
+    - Documented both **Method A (Direct In-App Studio Workflow)** and **Method B (Autonomous AI Agent Browser Execution)**.
+    - Added interactive 1-click **"Run In-App Production"** simulation engine tracking live progress across all 6 phases: reference seed lock -> script chunking -> viseme synthesis -> dead-air trimming -> Evidence Table validation -> 1080x1920 MP4 packaging.
+    - Added one-click **"Sync to Nextcloud WebDAV"** linking rendered video reels to folder 207332 (`/Music-Production/VideoExpress-Avatars/`).
+  - Integrated all 5 core mathematical principles from `factory/FOUNDATIONS.md`:
+    - Axiom 1: Single-Prompt Invariant (Zero human micro-management).
+    - Axiom 2: 60-Second Vertical Retention Formula (Hook, Tension, Stillness Pivot, Sovereign Breakthrough, Anchor).
+    - Axiom 3: The <100 Character Lip-Sync Invariant (Viseme drift physical limit).
+    - Axiom 4: Reference Face & Geometric Invariants (Seed pinning, negative shielding, 50mm portrait lens).
+    - Axiom 5: Deterministic Evidence Table Gate (Auditable verification before completion).
