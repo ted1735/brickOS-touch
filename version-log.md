@@ -85,3 +85,21 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - **Self-Contained `SYSTEM_PROMPT.md`**: Live markdown generator to paste directly into AI browser agents (Claude Code, ChatGPT, Codex) to drive VideoExpress.ai without extra tools.
   - Added fast-access shortcut in `SideNavigationPanel.tsx` and Tier 2 navigation header.
   - Evaluated architectural trade-offs: File-based Nextcloud WebDAV + Firestore versus Relational SQL in Nextcloud.
+
+---
+
+## [v1.7] — Workflow Factory Meta-Styles, Browser Automation Playbook, UI Version Dynamic Display
+- **Date**: 2026-09-25
+- **Milestone**:
+  - Fully mapped and integrated `factory/WORKFLOW_FACTORY.md` into `VideoExpressAgentTab.tsx`:
+    - 6 Core Meta-Workflow Styles: *Talking Avatar (Photorealistic)*, *3D Cinematic Animated (Pixar/Unreal)*, *UGC Frontline / Devotional (Raw Mobile)*, *Vox-Style Motion Documentary*, *Stickman / Whiteboard Explainer*, and *Paper Cutout & Stop-Motion*.
+    - Integrated the 2-Question AI Agent interview process (Character identity & Topic/Aesthetic direction) with one-click song thesis auto-fillers.
+    - Added adaptive prompt transformer tailoring camera moves, negative prompts, aesthetic tokens, and duration pacing per style.
+  - Fully mapped and integrated `references/browser-automation.md`:
+    - Verified DOM Selectors & UI Action matrix covering authentication, project setup, consistent character toggles, seed locking, script chunking, lip-sync triggers, timeline placement, and dead-air trimming.
+    - Built-in Playwright / Puppeteer automation script generator for programmatic headless execution.
+    - Implemented automated error recovery protocols (generation timeout recovery, viseme drift prevention, dead-air trimming rules).
+  - Purged all SQL/PostgreSQL items from `future-dev.md` per explicit user directive.
+  - Updated studio header version display:
+    - Removed the static "v5.5 SOVEREIGN" badge.
+    - Bound both `NavigationHeader.tsx` and `brickos_music_studio_ai_production_workspace.tsx` to dynamic `CURRENT_STUDIO_VERSION` (`v1.7`).

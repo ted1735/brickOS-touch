@@ -1,7 +1,9 @@
 /**
- * Versioning Utility for brickOS Sovereign Studio
+ * Versioning Utility for brickOS Studio
  * Enforces strict incremental versioning (+0.1 per revision)
  */
+
+export const CURRENT_STUDIO_VERSION = 'v1.7';
 
 export function parseVersionNumber(versionStr: string): number {
   if (!versionStr) return 1.0;

@@ -10,7 +10,6 @@ This file tracks all planned features, upcoming revisions, architectural expansi
 - [ ] **Automated Storyboard Shot-List Importer**: Allow one-click generation of 8 to 12 image shots per song directly from lyrical timestamps.
 - [ ] **Batch Schema Migration Tool**: Provide a one-click button in the Database & Matrix tab to convert legacy JSON tracks into the strict `SongPackageSchema` standard.
 - [ ] **Audio Waveform Preview for Sessions**: Render an interactive Web Audio waveform inside the session snapshot card.
-- [ ] **Nextcloud PostgreSQL Dual-Sync Bridge**: Optional automated sync daemon writing JSON metadata directly into relational Postgres tables while preserving WebDAV audio stems.
 
 ### 2. Prompt Engineering Library & Video Workflows
 - [ ] **VideoExpress Headless Browser Runner**: Direct WebSocket connection to automate VideoExpress.ai in headless Chrome without manual prompt copy/paste.

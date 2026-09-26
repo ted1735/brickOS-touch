@@ -16,6 +16,7 @@ import {
   Moon
 } from 'lucide-react';
 import { Track } from '../types';
+import { CURRENT_STUDIO_VERSION } from '../utils/versioning';
 
 interface NavigationHeaderProps {
   selectedTrack: Track;
@@ -72,7 +73,7 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
               brickOS MASTER STUDIO
             </h1>
             <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/30">
-              v5.5 SOVEREIGN
+              {CURRENT_STUDIO_VERSION}
             </span>
             <button
               onClick={() => setActiveTab('nextcloud_sync')}

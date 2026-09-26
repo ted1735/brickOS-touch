@@ -72,7 +72,7 @@ import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
-import { getNextVersionString } from './utils/versioning';
+import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
   subscribeToFirestoreTracks,
@@ -1148,7 +1148,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 brickOS MASTER STUDIO
               </h1>
               <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/30">
-                v5.5 SOVEREIGN
+                {CURRENT_STUDIO_VERSION}
               </span>
               <button
                 type="button"

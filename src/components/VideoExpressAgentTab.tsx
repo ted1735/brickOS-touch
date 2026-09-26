@@ -21,7 +21,16 @@ import {
   ExternalLink,
   Film,
   Zap,
-  Play
+  Play,
+  Terminal,
+  Code2,
+  Wand2,
+  Cpu,
+  BookOpen,
+  ArrowRight,
+  ShieldAlert,
+  Smartphone,
+  Sparkle
 } from 'lucide-react';
 import { Track, VideoExpressProject, VideoExpressSceneClip } from '../types';
 
@@ -33,6 +42,169 @@ interface VideoExpressAgentTabProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
   copyToClipboard: (text: string, label: string) => void;
 }
+
+// 6 Core Factory Styles from factory/WORKFLOW_FACTORY.md
+export interface WorkflowFactoryStyle {
+  id: string;
+  name: string;
+  badge: string;
+  description: string;
+  cameraMovementStyle: string;
+  negativePrompt: string;
+  aestheticTokens: string;
+  idealDuration: string;
+  fps: number;
+}
+
+const WORKFLOW_FACTORY_STYLES: WorkflowFactoryStyle[] = [
+  {
+    id: 'talking_avatar',
+    name: 'Talking Avatar (Photorealistic)',
+    badge: 'Core Reference Lock',
+    description: 'Ultra-realistic single character locked reference, 50mm portrait lens, natural Rembrandt chiaroscuro, steady eye-contact with subtle head turns.',
+    cameraMovementStyle: 'Slow dramatic push-in to eye level (0.5% scale/sec), locked horizon, no sudden zoom',
+    negativePrompt: 'cartoon, CGI, plastic glossy skin, floating teeth, deformed hands, morphing collar, oversaturated neon, extra fingers',
+    aestheticTokens: 'photorealistic 8k, documentary cinematography, shallow depth of field, natural skin texture, 50mm anamorphic lens',
+    idealDuration: '60s (6-8 scenes)',
+    fps: 30
+  },
+  {
+    id: 'cinematic_3d',
+    name: '3D Cinematic Animated (Pixar / Unreal)',
+    badge: 'Stylized 3D Rig',
+    description: 'Expressive 3D animated character with locked stylized facial geometry, volumetric rim lighting, rich textural materials, and dynamic emotive framing.',
+    cameraMovementStyle: 'Dynamic arc tracking shot (15-degree orbit), smooth ease-in-out crane movement',
+    negativePrompt: '2D flat, low-poly, untextured mesh, uncanny valley realism, blurry textures, broken topology',
+    aestheticTokens: 'Pixar render style, Unreal Engine 5 cinematic, subsurface scattering, subsurface skin glow, soft volumetric lighting',
+    idealDuration: '45-60s',
+    fps: 24
+  },
+  {
+    id: 'ugc_devotional',
+    name: 'UGC Frontline / Devotional (Raw Mobile)',
+    badge: 'Authentic Smartphone',
+    description: 'Direct-to-camera vertical smartphone recording, natural ambient indoor or vehicle lighting, authentic micro-movements, raw relatable emotional connection.',
+    cameraMovementStyle: 'Authentic subtle hand-held float, occasional conversational reposition, front selfie camera fov',
+    negativePrompt: 'studio backdrops, professional ring lights, staged acting, glossy corporate polish, cinematic lens flare',
+    aestheticTokens: 'iPhone 15 Pro front camera 4K, authentic room tone, natural day-lit window light, raw micro-expressions',
+    idealDuration: '50-60s',
+    fps: 30
+  },
+  {
+    id: 'vox_documentary',
+    name: 'Vox-Style Motion Documentary',
+    badge: 'Kinetic Graphics',
+    description: 'Split-screen storytelling combining talking avatar with kinetic typography punch-ins, archival historical photo parallax, and animated audio waveforms.',
+    cameraMovementStyle: 'Smooth 2.5D Ken Burns zoom on archival elements, quick snap-zoom on key thematic words',
+    negativePrompt: 'static unmoving text, cheesy transitions, low resolution graphics, mismatched color palettes',
+    aestheticTokens: 'Vox motion graphics aesthetic, bold Helvetica Neue typography, high-contrast duo-tone maps, warm paper texture overlay',
+    idealDuration: '60s',
+    fps: 30
+  },
+  {
+    id: 'stickman_explainer',
+    name: 'Stickman / Whiteboard Explainer',
+    badge: 'Pedagogical Line Art',
+    description: 'Minimalist hand-drawn illustrations on textured chalkboard or kraft paper, sequential line-drawing synchronized strictly to spoken syllables.',
+    cameraMovementStyle: 'Top-down flatlay perspective, smooth pan following the active drawing hand or chalk marker',
+    negativePrompt: '3D glossy models, realistic skin, complex gradient shading, photographic backgrounds',
+    aestheticTokens: 'clean black-line ink on kraft paper, minimalist chalk drawing, hand-drawn vector simplicity, high legibility',
+    idealDuration: '45-60s',
+    fps: 24
+  },
+  {
+    id: 'paper_cutout',
+    name: 'Paper Cutout & Stop-Motion',
+    badge: 'Tactile Artisan Collage',
+    description: 'Layered textured construction paper and parchment collage, 12fps tactile stop-motion animation, cast shadow depth, artisanal handcrafted warmth.',
+    cameraMovementStyle: 'Fixed macro perspective with stepped frame stutter (12fps capture cadence), soft overhead daylight',
+    negativePrompt: 'smooth digital interpolation, plastic renders, computer vector perfection, artificial neon glows',
+    aestheticTokens: 'torn-edge parchment paper, textured recycled cardboard, cast drop shadows, stop-motion 12fps aesthetic',
+    idealDuration: '50-60s',
+    fps: 12
+  }
+];
+
+// Verified Browser Automation Selectors from references/browser-automation.md
+const VERIFIED_BROWSER_SELECTORS = [
+  {
+    step: 'Auth & Ready Check',
+    element: 'User Dashboard / Canvas Ready',
+    selector: '[data-testid="user-profile-menu"], .project-workspace-canvas',
+    action: 'Wait for Element (timeout: 15000ms)',
+    fallback: 'window.location.pathname.includes("/editor")'
+  },
+  {
+    step: 'Project Initialization',
+    element: 'New Project Button',
+    selector: 'button[data-testid="create-new-project-btn"], #btn-new-project',
+    action: 'Click & Wait for Navigation',
+    fallback: 'a[href="/editor/new"]'
+  },
+  {
+    step: 'Aspect Ratio Selection',
+    element: 'Vertical 9:16 Mode',
+    selector: 'button[data-aspect-ratio="9:16"], .aspect-ratio-selector-vertical',
+    action: 'Click (ensures 1080x1920 layout)',
+    fallback: 'input[name="project-format"][value="9:16"]'
+  },
+  {
+    step: 'Character Reference Lock',
+    element: 'Consistent Character Mode Toggle',
+    selector: '#consistent-character-mode-toggle, [data-testid="toggle-consistent-character"]',
+    action: 'Set Checked = true',
+    fallback: 'input[name="consistent_mode"]'
+  },
+  {
+    step: 'Reference Image Upload',
+    element: 'Avatar Seed / Image Dropzone',
+    selector: 'input[type="file"][accept*="image"], #avatar-reference-dropzone',
+    action: 'Upload locked character reference asset',
+    fallback: '.character-upload-input'
+  },
+  {
+    step: 'Seed Input',
+    element: 'Generation Seed Numeric Input',
+    selector: 'input[name="generation-seed"], [data-testid="seed-input-field"]',
+    action: 'Set Value (e.g. 428901) & Click #btn-lock-seed',
+    fallback: '#seed-lock-control'
+  },
+  {
+    step: 'Script Chunk Injection',
+    element: 'Scene Spoken Line Input (<100 chars)',
+    selector: 'textarea[data-testid="scene-dialogue-input"], .scene-text-editor',
+    action: 'Type Text strictly < 100 characters per line',
+    fallback: '#input-dialogue-line'
+  },
+  {
+    step: 'Voice Clone / Audio Viseme',
+    element: 'Lip-Sync Trigger Button',
+    selector: 'button[data-action="sync-audio-visemes"], #btn-generate-lipsync',
+    action: 'Click & Poll Progress Bar until 100%',
+    fallback: '.btn-generate-audio-sync'
+  },
+  {
+    step: 'Timeline Placement',
+    element: 'Clip Snapping to Story Sequence',
+    selector: '.timeline-container .timeline-clip-drop-target',
+    action: 'Append clip in story order, snap to previous clip tail',
+    fallback: '.timeline-track-primary'
+  },
+  {
+    step: 'Dead-Air Pacing Trim',
+    element: 'Head & Tail Dead Air Offset',
+    selector: 'input[data-field="trim-head-offset"], input[data-field="trim-tail-offset"]',
+    action: 'Set trim values (0.2s - 0.3s) to eliminate lead/tail silence',
+    fallback: '.clip-trim-handle-left, .clip-trim-handle-right'
+  },
+  {
+    step: 'Final MP4 Export',
+    element: 'Export Video Dispatch Button',
+    selector: 'button[data-action="export-project-video"], #btn-export-1080p',
+    action: 'Click, poll export modal, capture download URL',
+    fallback: '.export-trigger-btn'
+  }
+];
 
 const CHARACTER_PRESETS = [
   {
@@ -81,6 +253,9 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
   showToast,
   copyToClipboard
 }) => {
+  // Navigation Subview
+  const [activeTabSubView, setActiveTabSubView] = useState<'editor' | 'evidence' | 'factory' | 'automation' | 'prompt_export'>('editor');
+
   // Selected character preset or custom
   const [selectedPresetId, setSelectedPresetId] = useState<string>('nashville_producer');
   const [characterName, setCharacterName] = useState<string>('The Nashville Engineer');
@@ -90,6 +265,20 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
   const [characterAvatarUrl, setCharacterAvatarUrl] = useState<string>(CHARACTER_PRESETS[0].avatarUrl);
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9'>('9:16');
   
+  // Factory Style Selection
+  const [selectedFactoryStyleId, setSelectedFactoryStyleId] = useState<string>('talking_avatar');
+  const activeFactoryStyle = useMemo(() => {
+    return WORKFLOW_FACTORY_STYLES.find(s => s.id === selectedFactoryStyleId) || WORKFLOW_FACTORY_STYLES[0];
+  }, [selectedFactoryStyleId]);
+
+  // 2-Question Interview State for Workflow Factory
+  const [interviewCharacterAnswer, setInterviewCharacterAnswer] = useState<string>(
+    `The lead artisan from "${selectedTrack.title}" — a craftsman reflecting on surrendered labor.`
+  );
+  const [interviewTopicAnswer, setInterviewTopicAnswer] = useState<string>(
+    `The pivotal moment when human striving yields to sovereign grace (${selectedTrack.thesis}).`
+  );
+
   // Script and voice configuration
   const [topicInput, setTopicInput] = useState<string>(
     `The hidden story behind "${selectedTrack.title}": why human striving fails until you hit the Throne Room Pivot.`
@@ -199,9 +388,6 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
     }
   ]);
 
-  // Active view mode
-  const [activeTabSubView, setActiveTabSubView] = useState<'editor' | 'evidence' | 'prompt_export'>('editor');
-
   // Handle preset selection
   const handleSelectPreset = (presetId: string) => {
     const found = CHARACTER_PRESETS.find(p => p.id === presetId);
@@ -234,7 +420,6 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
   // Re-generate script from current selected track
   const handleAutoScriptFromTrack = () => {
     const title = selectedTrack.title;
-    const thesis = selectedTrack.thesis || 'Sovereignty over self-reliance.';
     
     setTopicInput(`Inside "${title}": Transforming raw labor into eternal worship.`);
     setScenes([
@@ -244,7 +429,7 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
         spokenLine: `What happens when you give everything you have, and it still feels incomplete?`,
         charCount: 75,
         durationSeconds: 7.5,
-        cameraMovement: 'Slow dramatic push-in to eye level',
+        cameraMovement: activeFactoryStyle.cameraMovementStyle,
         avatarExpression: 'Serious, direct gaze, calm authority',
         trimHeadSeconds: deadAirTrim,
         trimTailSeconds: deadAirTrim,
@@ -350,28 +535,37 @@ export const VideoExpressAgentTab: React.FC<VideoExpressAgentTabProps> = ({
     };
   }, [scenes, referenceLocked, totalDuration]);
 
-  // Generate the self-contained SYSTEM_PROMPT.md exactly as formatted in the strontiumplatform repo
+  // Generate the self-contained SYSTEM_PROMPT.md adapting to the Workflow Factory Style
   const systemPromptMarkdown = useMemo(() => {
     return `# VideoExpress.ai Consistent-Character Talking Avatar Workflow
-## Project: ${selectedTrack.title} — 60s Talking Avatar Reel
-Generated by brickOS Sovereign Studio (v1.6)
+## Project: ${selectedTrack.title} — 60s Reel
+### Meta-Workflow Factory Style: ${activeFactoryStyle.name} (${activeFactoryStyle.badge})
+Generated by brickOS Studio (v1.7)
 
-### 1. CHARACTER SPECIFICATION (LOCKED REFERENCE MODE)
+### 1. FOUNDATIONAL INTERVIEW ANSWERS
+- **Character Specification**: ${interviewCharacterAnswer}
+- **Topic & Thematic Direction**: ${interviewTopicAnswer}
+- **Style Archetype**: ${activeFactoryStyle.name}
+- **Ideal Duration**: ${activeFactoryStyle.idealDuration} (Paced Net: ${totalDuration.toFixed(1)}s)
+- **Target Frame Rate**: ${activeFactoryStyle.fps} FPS
+
+### 2. CHARACTER SPECIFICATION (LOCKED REFERENCE MODE)
 - **Character Name**: ${characterName}
 - **Role / Archetype**: ${CHARACTER_PRESETS.find(p => p.id === selectedPresetId)?.archetype || 'Custom Persona'}
 - **Seed Lock**: ${referenceSeed} (LOCKED: ${referenceLocked ? 'YES' : 'NO'})
 - **Visual Description Prompt**: 
   "${characterPrompt}"
+- **Aesthetic Tokens**: "${activeFactoryStyle.aestheticTokens}"
 - **Negative Prompt**: 
-  "cartoon, CGI, glossy plastic face, floating teeth, deformed hands, inconsistent facial bone structure, morphing collar, oversaturated neon, extra fingers"
+  "${activeFactoryStyle.negativePrompt}"
 - **Aspect Ratio**: ${aspectRatio} (Vertical 1080x1920)
 
-### 2. CLONEVOICE.AI NARRATION INTEGRATION
+### 3. CLONEVOICE.AI NARRATION INTEGRATION
 - **Voice Clone Profile**: ${voiceCloneName}
 - **Pacing / Cadence**: 140 words per minute, steady cadence
 - **Dead-Air Pacing Trim**: Head -${deadAirTrim}s, Tail -${deadAirTrim}s per clip
 
-### 3. DETERMINISTIC SCENE BREAKDOWN (STRICT < 100 CHARS PER LINE)
+### 4. DETERMINISTIC SCENE BREAKDOWN (STRICT < 100 CHARS PER LINE)
 ${scenes.map(s => `#### Scene ${s.sceneNumber}: ${s.sceneTitle}
 - **Spoken Line** (${s.charCount} chars): "${s.spokenLine}"
 - **Camera Direction**: ${s.cameraMovement}
@@ -380,7 +574,7 @@ ${scenes.map(s => `#### Scene ${s.sceneNumber}: ${s.sceneTitle}
 - **Trim Timing**: Head: -${s.trimHeadSeconds}s | Tail: -${s.trimTailSeconds}s
 `).join('\n')}
 
-### 4. EVIDENCE TABLE & WORKFLOW VERIFICATION (GATES)
+### 5. EVIDENCE TABLE & WORKFLOW VERIFICATION (GATES)
 | Scene # | Spoken Line | Chars (<100) | Locked Seed | Net Duration | Audio Voice ID | Status |
 |---|---|---|---|---|---|---|
 ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${s.charCount} (${s.charCount < 100 ? 'PASS' : 'FAIL'}) | ${referenceSeed} | ${(s.durationSeconds - s.trimHeadSeconds - s.trimTailSeconds).toFixed(1)}s | ${s.audioVoiceoverId} | VERIFIED |`).join('\n')}
@@ -389,7 +583,66 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
 **Character Consistency Gate**: ${referenceLocked ? 'PASS (Reference Seed Locked)' : 'FAIL (Seed Unlocked)'}
 **Line Drift Gate**: ${evidenceMetrics.allCharsPass ? 'PASS (100% Lines Under 100 Chars)' : 'FAIL (Contains Lines >= 100 Chars)'}
 `;
-  }, [selectedTrack, characterName, selectedPresetId, referenceSeed, referenceLocked, characterPrompt, aspectRatio, voiceCloneName, deadAirTrim, scenes, totalDuration, evidenceMetrics]);
+  }, [selectedTrack, activeFactoryStyle, interviewCharacterAnswer, interviewTopicAnswer, totalDuration, characterName, selectedPresetId, referenceSeed, referenceLocked, characterPrompt, aspectRatio, voiceCloneName, deadAirTrim, scenes, evidenceMetrics]);
+
+  // Puppeteer / Playwright Automation Script from references/browser-automation.md
+  const playwrightAutomationCode = useMemo(() => {
+    return `/**
+ * VideoExpress.ai Browser Automation Script (Playwright / Puppeteer)
+ * Generated from references/browser-automation.md
+ * Project: ${selectedTrack.title} | Style: ${activeFactoryStyle.name}
+ */
+import { chromium } from 'playwright';
+
+async function runVideoExpressAutomation() {
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 }
+  });
+  const page = await context.newPage();
+
+  console.log('Step 1: Navigating to VideoExpress.ai...');
+  await page.goto('https://app.videoexpress.ai/editor');
+  await page.waitForSelector('[data-testid="user-profile-menu"]', { timeout: 15000 });
+
+  console.log('Step 2: Selecting 9:16 Vertical Ratio...');
+  await page.click('button[data-aspect-ratio="9:16"]');
+
+  console.log('Step 3: Enabling Consistent Character Mode...');
+  const consistentToggle = await page.waitForSelector('#consistent-character-mode-toggle');
+  await consistentToggle.check();
+
+  console.log('Step 4: Locking Generation Seed #${referenceSeed}...');
+  await page.fill('input[name="generation-seed"]', '${referenceSeed}');
+  await page.click('#btn-lock-seed');
+
+  const scenes = ${JSON.stringify(scenes.map(s => ({
+    scene: s.sceneNumber,
+    line: s.spokenLine,
+    trimHead: s.trimHeadSeconds,
+    trimTail: s.trimTailSeconds
+  })), null, 2)};
+
+  for (const item of scenes) {
+    console.log(\`Rendering Scene #\${item.scene} (\${item.line.length} chars)...\`);
+    await page.fill('textarea[data-testid="scene-dialogue-input"]', item.line);
+    await page.click('button[data-action="sync-audio-visemes"]');
+    
+    // Wait for viseme generation
+    await page.waitForSelector(\`[data-scene-status="\${item.scene}"][data-state="ready"]\`, { timeout: 120000 });
+
+    // Apply dead-air head and tail trim offsets
+    await page.fill('input[data-field="trim-head-offset"]', item.trimHead.toString());
+    await page.fill('input[data-field="trim-tail-offset"]', item.trimTail.toString());
+  }
+
+  console.log('Step 5: Dispatching Final 1080x1920 MP4 Export...');
+  await page.click('button[data-action="export-project-video"]');
+  console.log('Waiting for render completion & WebDAV delivery...');
+}
+
+runVideoExpressAutomation();`;
+  }, [selectedTrack, activeFactoryStyle, referenceSeed, scenes]);
 
   return (
     <div className={`p-6 rounded-2xl border space-y-6 transition-colors duration-200 ${
@@ -413,9 +666,12 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                   &lt;100 Chars Rule
                 </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Factory & Automation Playbook
+                </span>
               </div>
               <p className="text-xs text-slate-400">
-                Automated 60-second vertical talking-avatar reels with reference-locked faces, CloneVoice.ai narration, and deterministic evidence table verification.
+                Full implementation of <code>strontiumplatform/VideoExpress.ai</code> including Workflow Factory (<code>WORKFLOW_FACTORY.md</code>) and verified Browser Automation (<code>browser-automation.md</code>).
               </p>
             </div>
           </div>
@@ -444,7 +700,8 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
             </select>
           </div>
 
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+          {/* Navigation Pill Bar */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 flex-wrap gap-1">
             <button
               onClick={() => setActiveTabSubView('editor')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
@@ -454,7 +711,31 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
-              <span>Studio Timeline</span>
+              <span>Timeline</span>
+            </button>
+            <button
+              onClick={() => setActiveTabSubView('factory')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                activeTabSubView === 'factory'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Workflow Factory: 6 Video Styles & Interview Generator"
+            >
+              <Wand2 className="w-3.5 h-3.5 text-amber-300" />
+              <span>Workflow Factory</span>
+            </button>
+            <button
+              onClick={() => setActiveTabSubView('automation')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                activeTabSubView === 'automation'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Browser Automation: Verified DOM Selectors & Playwright Script"
+            >
+              <Terminal className="w-3.5 h-3.5 text-indigo-300" />
+              <span>Automation DOM</span>
             </button>
             <button
               onClick={() => setActiveTabSubView('evidence')}
@@ -481,7 +762,7 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>SYSTEM_PROMPT.md</span>
+              <span>SYSTEM_PROMPT</span>
             </button>
           </div>
         </div>
@@ -506,14 +787,13 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
         <div className={`p-3.5 rounded-xl border flex items-center gap-3 ${
           isDarkMode ? 'bg-slate-950/70 border-slate-800' : 'bg-slate-50 border-slate-200'
         }`}>
-          <div className="w-9 h-9 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
-            <Lock className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+            <Wand2 className="w-4 h-4" />
           </div>
           <div>
-            <div className="text-[11px] text-slate-400 font-mono">Character Lock</div>
-            <div className="text-sm font-black text-purple-300 font-mono flex items-center gap-1.5">
-              <span>Seed {referenceSeed}</span>
-              <span className="text-[10px] text-emerald-400 font-bold">LOCKED</span>
+            <div className="text-[11px] text-slate-400 font-mono">Factory Style</div>
+            <div className="text-xs font-black text-amber-300 font-mono truncate max-w-[140px]">
+              {activeFactoryStyle.name.split(' (')[0]}
             </div>
           </div>
         </div>
@@ -550,6 +830,217 @@ ${scenes.map(s => `| ${s.sceneNumber} | ${s.spokenLine.substring(0, 35)}... | ${
           </div>
         </div>
       </div>
+
+      {/* SUBVIEW: WORKFLOW FACTORY (from factory/WORKFLOW_FACTORY.md) */}
+      {activeTabSubView === 'factory' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold tracking-wide flex items-center gap-2 text-amber-400">
+                <Wand2 className="w-4 h-4" />
+                <span>Meta-Workflow Factory Engine (factory/WORKFLOW_FACTORY.md)</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Empowers AI agents to generate custom video workflow archetypes, adapt the gold-standard system prompt, and conduct the 2-question interview process.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-xl bg-amber-950/60 border border-amber-700/50 text-amber-300 font-mono text-xs font-bold">
+              6 Built-In Meta-Styles
+            </span>
+          </div>
+
+          {/* 6 Factory Styles Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {WORKFLOW_FACTORY_STYLES.map((style) => (
+              <div
+                key={style.id}
+                onClick={() => {
+                  setSelectedFactoryStyleId(style.id);
+                  showToast(`Selected Workflow Style: ${style.name}`, 'info');
+                }}
+                className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                  selectedFactoryStyleId === style.id
+                    ? 'bg-amber-950/40 border-amber-500 shadow-md shadow-amber-950/50 ring-1 ring-amber-500'
+                    : isDarkMode
+                    ? 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-white">{style.name}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-amber-300 font-bold">
+                      {style.badge}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    {style.description}
+                  </p>
+                </div>
+
+                <div className="text-[10px] space-y-1 font-mono text-slate-400 pt-2 border-t border-slate-800/80">
+                  <div><strong className="text-slate-300">Camera:</strong> {style.cameraMovementStyle}</div>
+                  <div className="flex items-center justify-between text-slate-500 pt-1">
+                    <span>Target: {style.idealDuration}</span>
+                    <span className="text-amber-400 font-bold">{style.fps} FPS</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* The 2-Question Interview Engine */}
+          <div className={`p-5 rounded-2xl border space-y-4 ${
+            isDarkMode ? 'bg-slate-950/70 border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              <span>The 2-Question AI Agent Interview (Adaptive Meta-Workflow)</span>
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                  <span>Question 1: Who is the character / subject?</span>
+                  <button
+                    type="button"
+                    onClick={() => setInterviewCharacterAnswer(`The lead vocalist of "${selectedTrack.title}" (${selectedTrack.vocalCast})`)}
+                    className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                  >
+                    Auto-Fill Track Vocalist
+                  </button>
+                </label>
+                <textarea
+                  value={interviewCharacterAnswer}
+                  onChange={(e) => setInterviewCharacterAnswer(e.target.value)}
+                  rows={2}
+                  className={`w-full p-2.5 rounded-xl border text-xs font-sans transition focus:outline-hidden ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
+                  }`}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                  <span>Question 2: What is the topic & visual style?</span>
+                  <button
+                    type="button"
+                    onClick={() => setInterviewTopicAnswer(`Theological thesis of "${selectedTrack.title}": ${selectedTrack.thesis}`)}
+                    className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                  >
+                    Auto-Fill Song Thesis
+                  </button>
+                </label>
+                <textarea
+                  value={interviewTopicAnswer}
+                  onChange={(e) => setInterviewTopicAnswer(e.target.value)}
+                  rows={2}
+                  className={`w-full p-2.5 rounded-xl border text-xs font-sans transition focus:outline-hidden ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-800'
+                  }`}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-slate-400">
+                Active Style: <strong className="text-amber-300">{activeFactoryStyle.name}</strong> ({activeFactoryStyle.badge})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  showToast(`Applied ${activeFactoryStyle.name} to SYSTEM_PROMPT.md!`, 'success');
+                  setActiveTabSubView('prompt_export');
+                }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md shadow-amber-950/40"
+              >
+                <span>Generate Adapted Meta-Prompt</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBVIEW: BROWSER AUTOMATION PLAYBOOK (from references/browser-automation.md) */}
+      {activeTabSubView === 'automation' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold tracking-wide flex items-center gap-2 text-indigo-400">
+                <Terminal className="w-4 h-4" />
+                <span>Verified Browser Automation Playbook (references/browser-automation.md)</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Exact verified DOM selectors, event triggers, timeline clip snapping, and error recovery protocols for AI browser control (Claude Code / Codex / Playwright).
+              </p>
+            </div>
+            <button
+              onClick={() => copyToClipboard(playwrightAutomationCode, 'Playwright Script')}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copy Playwright Script</span>
+            </button>
+          </div>
+
+          {/* Verified Selectors Table */}
+          <div className="border border-slate-800 rounded-xl bg-slate-950 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse font-mono">
+                <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[11px]">
+                  <tr>
+                    <th className="py-2.5 px-3 w-36">Automation Step</th>
+                    <th className="py-2.5 px-3 w-44">Target Element</th>
+                    <th className="py-2.5 px-3">Verified DOM Selector</th>
+                    <th className="py-2.5 px-3 w-48">Agent Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-300">
+                  {VERIFIED_BROWSER_SELECTORS.map((s, idx) => (
+                    <tr key={idx} className="hover:bg-slate-900/60 transition">
+                      <td className="py-2 px-3 font-bold text-indigo-300">{s.step}</td>
+                      <td className="py-2 px-3 font-semibold text-slate-200">{s.element}</td>
+                      <td className="py-2 px-3 text-[11px] text-amber-300 select-all font-bold">
+                        <code>{s.selector}</code>
+                      </td>
+                      <td className="py-2 px-3 text-slate-400 text-[11px]">{s.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Runnable Playwright Automation Script */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-indigo-400" />
+                <span>Generated Playwright Automation Script</span>
+              </h4>
+              <span className="text-[10px] font-mono text-slate-500">Node.js ES6 Script</span>
+            </div>
+            <div className="border border-slate-800 rounded-xl bg-slate-950 p-4 font-mono text-xs text-indigo-200 whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto custom-scrollbar">
+              {playwrightAutomationCode}
+            </div>
+          </div>
+
+          {/* Error Recovery Protocols */}
+          <div className={`p-4 rounded-xl border space-y-2 ${
+            isDarkMode ? 'bg-indigo-950/30 border-indigo-700/40 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-900'
+          }`}>
+            <h5 className="text-xs font-bold flex items-center gap-2 text-indigo-300">
+              <ShieldAlert className="w-4 h-4" />
+              <span>Automated Error Recovery Protocols from Repository</span>
+            </h5>
+            <ul className="text-xs space-y-1 list-disc list-inside text-slate-300">
+              <li><strong>Generation Timeout (&gt; 120s):</strong> Agent automatically triggers canvas refresh via <code>window.location.reload()</code> without clearing uploaded character references.</li>
+              <li><strong>Viseme Drift Prevention:</strong> The strict &lt;100 characters per line rule guarantees lip-sync models never drift across cuts.</li>
+              <li><strong>Dead-Air Removal:</strong> Automatically trims 0.25s of dead lead-in silence from each clip's head and tail before timeline snap.</li>
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* SUBVIEW 1: STUDIO TIMELINE & AVATAR ENGINE */}
       {activeTabSubView === 'editor' && (
