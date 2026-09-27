@@ -38,9 +38,11 @@ import {
   Info,
   Settings
 } from 'lucide-react';
-import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage } from '../types';
+import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset } from '../types';
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
 import { SOPRulesEditorModal } from './SOPRulesEditorModal';
+import { SoundPresetLibraryModal } from './SoundPresetLibraryModal';
+import { loadPresetsFromFirestore, subscribeToFirestorePresets, getLocalCachedPresets, isFirebaseConfigured } from '../lib/firebase';
 import { getNextVersionString } from '../utils/versioning';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
@@ -117,6 +119,44 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   // Nashville SOP Rules Manager State (Direct Markdown & Text Editing)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [sopRules, setSopRules] = useState<SOPRulesPackage>(() => getLocalCachedSOPRules());
+
+  // Sound Preset Library State (4-Block Engine Configurations)
+  const [isPresetLibraryOpen, setIsPresetLibraryOpen] = useState(false);
+  const [presets, setPresets] = useState<SoundPreset[]>(() => getLocalCachedPresets());
+  const [activePresetName, setActivePresetName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    loadPresetsFromFirestore().then((loaded) => {
+      if (loaded && loaded.length > 0) setPresets(loaded);
+    });
+    const unsub = subscribeToFirestorePresets((updated) => {
+      if (updated && updated.length > 0) setPresets(updated);
+    });
+    if (unsub) unsubscribe = unsub;
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const handleApplyPreset = (
+    preset: SoundPreset,
+    options?: { applyVocalCast?: boolean; applyBpm?: boolean; applyKey?: boolean }
+  ) => {
+    onUpdateTrack('sunoPrompt', preset.sunoPrompt);
+    onUpdateTrack('negativePrompt', preset.negativePrompt);
+    onUpdateTrack('engineSliders', preset.engineSliders);
+    if (options?.applyVocalCast && preset.vocalCast) {
+      onUpdateTrack('vocalCast', preset.vocalCast);
+    }
+    if (options?.applyBpm && preset.targetBpm) {
+      onUpdateTrack('bpm', preset.targetBpm);
+    }
+    if (options?.applyKey && preset.targetKey) {
+      onUpdateTrack('key', preset.targetKey);
+    }
+    setActivePresetName(preset.name);
+  };
 
   useEffect(() => {
     loadSOPRulesFromCloud().then((loaded) => {
@@ -558,6 +598,16 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsPresetLibraryOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 via-indigo-600 to-purple-600 hover:from-amber-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950 transition cursor-pointer"
+            title="Open Sound Preset Library (4-Block Engine Configurations)"
+          >
+            <Sliders className="w-3.5 h-3.5 text-amber-300" />
+            <span>Sound Presets ({presets.length})</span>
+          </button>
+
           {onOpenSectionGuide && (
             <button
               type="button"
@@ -1302,10 +1352,35 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {activePresetName && (
+              <div className="px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700/60 text-amber-300 text-xs font-mono font-bold flex items-center gap-1.5 shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Active Preset: <strong>{activePresetName}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => setActivePresetName(null)}
+                  className="ml-1 hover:text-white text-slate-400 text-xs"
+                  title="Clear Preset Tag"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsPresetLibraryOpen(true)}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 transition cursor-pointer"
+              title="Open Sound Preset Library for Suno 4-Block Engine"
+            >
+              <Sliders className="w-3.5 h-3.5 text-amber-200" />
+              <span>Sound Presets ({presets.length})</span>
+            </button>
+
             <button
               type="button"
               onClick={handleCopyAllBlocks}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950/40 transition cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>Copy All 4-Blocks Bundle</span>
@@ -1626,6 +1701,32 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           setSopRules(newRules);
           await saveSOPRulesToCloud(newRules);
         }}
+      />
+
+      {/* SOUND PRESET LIBRARY MODAL (4-BLOCK SUNO ENGINE FORMULAS) */}
+      <SoundPresetLibraryModal
+        isOpen={isPresetLibraryOpen}
+        onClose={() => setIsPresetLibraryOpen(false)}
+        activeTrack={track}
+        presets={presets}
+        onApplyPreset={(preset, options) => {
+          onUpdateTrack('sunoPrompt', preset.sunoPrompt);
+          onUpdateTrack('negativePrompt', preset.negativePrompt);
+          onUpdateTrack('engineSliders', preset.engineSliders);
+          if (options?.applyVocalCast && preset.vocalCast) {
+            onUpdateTrack('vocalCast', preset.vocalCast);
+          }
+          if (options?.applyBpm && preset.targetBpm) {
+            onUpdateTrack('bpm', preset.targetBpm);
+          }
+          if (options?.applyKey && preset.targetKey) {
+            onUpdateTrack('key', preset.targetKey);
+          }
+          setActivePresetName(preset.name);
+        }}
+        onCopyText={onCopyText}
+        isFirestoreConnected={isFirebaseConfigured()}
+        isDarkMode={isDarkMode}
       />
 
     </div>

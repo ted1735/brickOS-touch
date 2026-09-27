@@ -42,6 +42,27 @@
         "createdAt": { "type": "string", "description": "ISO timestamp when session was created" },
         "updatedAt": { "type": "string", "description": "ISO timestamp of last session update" }
       }
+    },
+    "sound_presets": {
+      "description": "Custom and factory sound presets for the Suno 4-block engine, including style prompts, artifact exclusions, engine slider weights, and vocal casting",
+      "fields": {
+        "id": { "type": "string", "description": "Unique preset ID" },
+        "name": { "type": "string", "description": "Sound preset title" },
+        "category": { "type": "string", "description": "Genre / vibe category tag" },
+        "description": { "type": "string", "description": "Detailed sound and production description" },
+        "vocalCast": { "type": "string", "description": "Recommended vocal archetype casting" },
+        "sunoPrompt": { "type": "string", "description": "Block 2 style prompt" },
+        "negativePrompt": { "type": "string", "description": "Block 3 excluded styles" },
+        "engineSliders": { "type": "object", "description": "Block 4 engine sliders (weirdness, styleInfluence, voiceAudio)" },
+        "targetBpm": { "type": "number", "description": "Recommended BPM tempo" },
+        "targetKey": { "type": "string", "description": "Recommended musical key" },
+        "tags": { "type": "array", "description": "Search and filter tags" },
+        "isFavorite": { "type": "boolean", "description": "Favorite preset bookmark" },
+        "isFactory": { "type": "boolean", "description": "Whether this is a built-in factory preset" },
+        "author": { "type": "string", "description": "Preset author or engineer name" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      }
     }
   }
 }

@@ -347,7 +347,7 @@ export const SECTION_GUIDES: Record<StudioSectionId, SectionGuideItem> = {
     badge: 'Harmonic & Asset Matrix',
     icon: Database,
     summary: 'Dynamic Camelot harmonic key analyzer, BPM compatibility matcher, vocal archetype pairing engine, and Nextcloud WebDAV stem resolution hub.',
-    purpose: 'Identify compatible songs for seamless DJ transitions, mashups, stem sharing, and export full catalog JSON backups without SQL overhead.',
+    purpose: 'Identify compatible songs for seamless DJ transitions, mashups, stem sharing, and export full catalog JSON backups with instant document graph synchronization.',
     keySteps: [
       'Select any reference track to automatically rank all 25 other catalog songs by compatibility score.',
       'Inspect Harmonic Match (Camelot Wheel: 100% exact key lock, 95% relative major/minor, 90% adjacent 5th modulation).',

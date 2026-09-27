@@ -271,7 +271,7 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
               Master Catalog & Cross-Asset Matching Matrix
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-3xl leading-relaxed">
-              Real-time harmonic Camelot key analysis, BPM compatibility ranking, vocal archetype pairing, and live Nextcloud WebDAV stem resolution for your 26 songs. Zero SQL overhead.
+              Real-time harmonic Camelot key analysis, BPM compatibility ranking, vocal archetype pairing, and live Nextcloud WebDAV stem resolution for your 26 songs.
             </p>
           </div>
 
@@ -959,7 +959,7 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
       )}
 
       {/* ========================================================================= */}
-      {/* 5. CATALOG JSON BACKUP & SCHEMA (REPLACES SQL EXPORTER) */}
+      {/* 5. CATALOG JSON BACKUP & SCHEMA (DOCUMENT GRAPH EXPORTER) */}
       {/* ========================================================================= */}
       {activeSubView === 'json_sync' && (
         <div className="space-y-4">
@@ -996,7 +996,7 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-[11px] font-mono text-slate-400">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>Format: Pure JSON Schema v2.5 • Zero SQL</span>
+                <span>Format: Pure JSON Schema v2.5 • Document Graph</span>
               </div>
               <span>~{generatedJson.split('\n').length} lines • UTF-8</span>
             </div>
@@ -1065,7 +1065,7 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
       )}
 
       {/* ========================================================================= */}
-      {/* 7. CATALOG ARCHITECTURE & DATA MODEL (CLEAN NO-SQL SCHEMA) */}
+      {/* 7. CATALOG ARCHITECTURE & DATA MODEL (DOCUMENT GRAPH SCHEMA) */}
       {/* ========================================================================= */}
       {activeSubView === 'schema' && (
         <div className="space-y-4">

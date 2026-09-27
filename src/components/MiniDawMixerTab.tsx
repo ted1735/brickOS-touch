@@ -16,6 +16,7 @@ import { Track, MixerTrack } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { HelpCircle } from 'lucide-react';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
+import { MiniDawRealtimeChart } from './MiniDawRealtimeChart';
 
 interface MiniDawMixerTabProps {
   track: Track;
@@ -286,6 +287,15 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
           <span>SR: 48,000 Hz</span>
         </div>
       </div>
+
+      {/* Real-time Recharts Bar Chart: Track Levels & Frequency Analysis */}
+      <MiniDawRealtimeChart
+        tracks={tracks}
+        masterVolume={masterVolume}
+        isPlaying={isPlaying}
+        analyser={audioMiniDaw.getAnalyser()}
+        isDarkMode={isDarkMode}
+      />
 
       {/* 4 Track Strips */}
       <div className="space-y-3">

@@ -403,3 +403,31 @@ export interface VideoExpressProject {
   updatedAt: string;
 }
 
+export type SoundPresetCategory = 
+  | 'Blue Collar Rock' 
+  | 'Trap Worship' 
+  | 'Modern Country' 
+  | 'Acoustic Folk' 
+  | 'Gospel Soul' 
+  | 'Ambient Drone' 
+  | 'Custom';
+
+export interface SoundPreset {
+  id: string;
+  name: string;
+  category: SoundPresetCategory;
+  description: string;
+  vocalCast?: string;
+  sunoPrompt: string; // Block 2 Style Prompt
+  negativePrompt: string; // Block 3 Excluded Styles
+  engineSliders: EngineSliders; // Block 4 Engine Sliders
+  targetBpm?: number;
+  targetKey?: string;
+  tags: string[];
+  isFavorite?: boolean;
+  isFactory?: boolean;
+  author?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+

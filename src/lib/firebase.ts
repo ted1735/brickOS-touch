@@ -11,13 +11,16 @@ import {
   writeBatch,
   Unsubscribe
 } from 'firebase/firestore';
-import { Track, CompositionSession } from '../types';
+import { Track, CompositionSession, SoundPreset } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { CANONICAL_SOUND_PRESETS } from '../data/canonicalSoundPresets';
 
 const TRACKS_COLLECTION = 'tracks';
 const LOCAL_STORAGE_KEY = 'brickos_catalog_cloud_cache_v1';
 const SESSIONS_COLLECTION = 'composition_sessions';
 const SESSIONS_LOCAL_STORAGE_KEY = 'brickos_sessions_cloud_cache_v1';
+const PRESETS_COLLECTION = 'sound_presets';
+const PRESETS_LOCAL_STORAGE_KEY = 'brickos_sound_presets_cache_v1';
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
@@ -400,4 +403,203 @@ export async function seedInitialSessions(sessions: CompositionSession[]): Promi
     console.error('Failed to seed sessions into Firestore:', err);
   }
 }
+
+// ==============================================================================
+// SOUND PRESET LIBRARY (4-BLOCK ENGINE CONFIGURATIONS)
+// ==============================================================================
+
+/**
+ * Fallback helper to get local cached sound presets
+ */
+export const getLocalCachedPresets = (): SoundPreset[] => {
+  try {
+    const raw = localStorage.getItem(PRESETS_LOCAL_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  return CANONICAL_SOUND_PRESETS;
+};
+
+/**
+ * Fallback helper to save local cached sound presets
+ */
+export const setLocalCachedPresets = (presets: SoundPreset[]) => {
+  try {
+    localStorage.setItem(PRESETS_LOCAL_STORAGE_KEY, JSON.stringify(presets));
+  } catch (err) {
+    console.warn('Failed to update local sound presets cache:', err);
+  }
+};
+
+/**
+ * Load sound presets from Firestore
+ */
+export async function loadPresetsFromFirestore(): Promise<SoundPreset[]> {
+  const cached = getLocalCachedPresets();
+  if (!db) {
+    return cached;
+  }
+
+  try {
+    const colRef = collection(db, PRESETS_COLLECTION);
+    const snapshot = await getDocs(colRef);
+
+    if (snapshot.empty) {
+      // Seed default canonical presets if cloud collection is empty
+      console.log('No presets found in Firestore. Seeding default factory presets...');
+      await seedInitialPresets(CANONICAL_SOUND_PRESETS);
+      setLocalCachedPresets(CANONICAL_SOUND_PRESETS);
+      return CANONICAL_SOUND_PRESETS;
+    }
+
+    const cloudPresets: SoundPreset[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() as SoundPreset;
+      cloudPresets.push({
+        ...data,
+        id: data.id || docSnap.id
+      });
+    });
+
+    cloudPresets.sort((a, b) => {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      if (a.isFactory && !b.isFactory) return -1;
+      if (!a.isFactory && b.isFactory) return 1;
+      return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+    });
+
+    setLocalCachedPresets(cloudPresets);
+    return cloudPresets;
+  } catch (err) {
+    console.warn('Failed to load presets from Firestore, using local fallback:', err);
+    return cached;
+  }
+}
+
+/**
+ * Real-time subscription to sound presets in Firestore
+ */
+export function subscribeToFirestorePresets(
+  onPresetsUpdated: (presets: SoundPreset[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe | null {
+  if (!db) return null;
+
+  try {
+    const colRef = collection(db, PRESETS_COLLECTION);
+    return onSnapshot(
+      colRef,
+      snapshot => {
+        if (snapshot.empty) {
+          // If empty, return local cached
+          onPresetsUpdated(getLocalCachedPresets());
+          return;
+        }
+
+        const presets: SoundPreset[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as SoundPreset;
+          presets.push({
+            ...data,
+            id: data.id || docSnap.id
+          });
+        });
+
+        presets.sort((a, b) => {
+          if (a.isFavorite && !b.isFavorite) return -1;
+          if (!a.isFavorite && b.isFavorite) return 1;
+          if (a.isFactory && !b.isFactory) return -1;
+          if (!a.isFactory && b.isFactory) return 1;
+          return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+        });
+
+        setLocalCachedPresets(presets);
+        onPresetsUpdated(presets);
+      },
+      error => {
+        console.warn('Firestore sound presets subscription error:', error);
+        if (onError) onError(error);
+      }
+    );
+  } catch (err: any) {
+    console.warn('Could not establish Firestore sound presets subscription:', err);
+    return null;
+  }
+}
+
+/**
+ * Upsert a sound preset into Firestore
+ */
+export async function savePresetToFirestore(preset: SoundPreset): Promise<void> {
+  const cached = getLocalCachedPresets();
+  const existingIdx = cached.findIndex(p => p.id === preset.id);
+  let updatedCache: SoundPreset[];
+  if (existingIdx >= 0) {
+    updatedCache = [...cached];
+    updatedCache[existingIdx] = preset;
+  } else {
+    updatedCache = [preset, ...cached];
+  }
+  setLocalCachedPresets(updatedCache);
+
+  if (!db) return;
+
+  try {
+    const presetDocRef = doc(db, PRESETS_COLLECTION, preset.id);
+    const payload = {
+      ...preset,
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(presetDocRef, payload, { merge: true });
+  } catch (err) {
+    console.error(`Failed to save preset ${preset.id} to Firestore:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Delete a sound preset from Firestore
+ */
+export async function deletePresetFromFirestore(presetId: string): Promise<void> {
+  const cached = getLocalCachedPresets();
+  setLocalCachedPresets(cached.filter(p => p.id !== presetId));
+
+  if (!db) return;
+
+  try {
+    const presetDocRef = doc(db, PRESETS_COLLECTION, presetId);
+    await deleteDoc(presetDocRef);
+  } catch (err) {
+    console.error(`Failed to delete preset ${presetId} from Firestore:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Batch seed initial sound presets into Firestore
+ */
+export async function seedInitialPresets(presets: SoundPreset[]): Promise<void> {
+  if (!db || presets.length === 0) return;
+
+  try {
+    const batch = writeBatch(db);
+    for (const preset of presets) {
+      const presetDocRef = doc(db, PRESETS_COLLECTION, preset.id);
+      batch.set(presetDocRef, {
+        ...preset,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+    await batch.commit();
+    console.log(`Successfully seeded ${presets.length} sound presets into Firestore.`);
+  } catch (err) {
+    console.error('Failed to seed sound presets into Firestore:', err);
+  }
+}
+
 
