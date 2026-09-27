@@ -87,8 +87,10 @@ class MiniDawEngine {
 
     // 7. Master Analyser
     this.analyser = this.ctx.createAnalyser();
-    this.analyser.fftSize = 256;
-    this.analyser.smoothingTimeConstant = 0.8;
+    this.analyser.fftSize = 1024;
+    this.analyser.minDecibels = -90;
+    this.analyser.maxDecibels = -10;
+    this.analyser.smoothingTimeConstant = 0.82;
 
     // Wiring Audio Graph:
     // masterGain -> eqLow -> eqMid -> eqHigh -> tapeDrive -> compressor -> makeupGain
@@ -127,6 +129,99 @@ class MiniDawEngine {
 
   public getAnalyser(): AnalyserNode | null {
     return this.analyser;
+  }
+
+  public getAudioContext(): AudioContext | null {
+    return this.ctx;
+  }
+
+  public setAnalyserSmoothing(smoothing: number): void {
+    if (this.analyser) {
+      this.analyser.smoothingTimeConstant = Math.max(0.05, Math.min(0.98, smoothing));
+    }
+  }
+
+  public setFftSize(size: number): void {
+    if (this.analyser && [256, 512, 1024, 2048].includes(size)) {
+      this.analyser.fftSize = size;
+    }
+  }
+
+  private testSignalNode: { osc?: OscillatorNode; source?: AudioBufferSourceNode; gain: GainNode } | null = null;
+
+  public playTestTone(toneType: '1k' | '440' | 'pink' | 'sweep' = '1k') {
+    this.init();
+    if (!this.ctx || !this.masterGain) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+    this.stopTestTone();
+
+    const gainNode = this.ctx.createGain();
+    gainNode.gain.setValueAtTime(0.18, this.ctx.currentTime);
+    gainNode.connect(this.masterGain);
+
+    if (toneType === 'pink') {
+      // 2-second pink noise buffer
+      const bufferSize = this.ctx.sampleRate * 2;
+      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.09;
+        b6 = white * 0.115926;
+      }
+      const source = this.ctx.createBufferSource();
+      source.buffer = noiseBuffer;
+      source.loop = true;
+      source.connect(gainNode);
+      source.start();
+      this.testSignalNode = { source, gain: gainNode };
+    } else {
+      const osc = this.ctx.createOscillator();
+      if (toneType === '1k') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, this.ctx.currentTime);
+      } else if (toneType === '440') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+      } else if (toneType === 'sweep') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(40, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(12000, this.ctx.currentTime + 3.0);
+      }
+      osc.connect(gainNode);
+      osc.start();
+      this.testSignalNode = { osc, gain: gainNode };
+    }
+  }
+
+  public stopTestTone() {
+    if (this.testSignalNode) {
+      try {
+        if (this.testSignalNode.osc) {
+          this.testSignalNode.osc.stop();
+          this.testSignalNode.osc.disconnect();
+        }
+        if (this.testSignalNode.source) {
+          this.testSignalNode.source.stop();
+          this.testSignalNode.source.disconnect();
+        }
+        this.testSignalNode.gain.disconnect();
+      } catch (_) {}
+      this.testSignalNode = null;
+    }
+  }
+
+  public isTestTonePlaying(): boolean {
+    return this.testSignalNode !== null;
   }
 
   public getEffects(): DawEffectsState {
@@ -303,6 +398,7 @@ class MiniDawEngine {
   }
 
   public stopPlayback() {
+    this.stopTestTone();
     this.trackNodes.forEach((node) => {
       try {
         node.osc.stop();
