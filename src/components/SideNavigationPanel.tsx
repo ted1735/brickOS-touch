@@ -31,11 +31,14 @@ import {
   ChevronDown,
   RefreshCw,
   Folder,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
 import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { audioMiniDaw } from '../utils/audioEngine';
+import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studioNavigationData';
 
 interface SideNavigationPanelProps {
   tracks: Track[];
@@ -174,61 +177,211 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
     setIsCreatingSession(false);
   };
 
+  const [sidebarHoverItem, setSidebarHoverItem] = useState<{
+    item: StudioNavItem;
+    rect: DOMRect;
+  } | null>(null);
+
   if (isCollapsed) {
     return (
-      <aside className="w-14 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-4 space-y-4 h-full flex-shrink-0 z-30 shadow-xl transition-all duration-200">
+      <aside className="w-18 sm:w-20 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3.5 space-y-3 h-full flex-shrink-0 z-30 shadow-xl transition-all duration-200 overflow-y-auto custom-scrollbar">
+        {/* Expand Button */}
         <button
           onClick={onToggleCollapse}
-          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-          title="Expand Side Navigation Panel"
+          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shadow-sm border border-slate-700/50"
+          title="Expand Side Navigation Panel (Full View)"
         >
           <ChevronRight className="w-4 h-4 text-indigo-400" />
         </button>
 
-        <div className="h-px w-8 bg-slate-800 my-1" />
+        <div className="h-px w-10 bg-slate-800 my-0.5" />
 
-        {/* Tab Quick Toggles */}
-        <button
-          onClick={() => {
-            onSetActivePanelTab('projects');
-            onToggleCollapse();
-          }}
-          className={`p-2.5 rounded-xl transition cursor-pointer relative ${
-            activePanelTab === 'projects' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          }`}
-          title={`Projects (${tracks.length})`}
-        >
-          <Disc className="w-4 h-4" />
-          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400" />
-        </button>
+        {/* Tab Quick Toggles: Projects, Sessions, Assets */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={() => {
+              onSetActivePanelTab('projects');
+              onToggleCollapse();
+            }}
+            className={`p-2 rounded-xl transition cursor-pointer relative ${
+              activePanelTab === 'projects' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+            title={`Projects Catalog (${tracks.length} Master Tracks) — Click to expand`}
+          >
+            <Disc className="w-4 h-4" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400" />
+          </button>
 
-        <button
-          onClick={() => {
-            onSetActivePanelTab('sessions');
-            onToggleCollapse();
-          }}
-          className={`p-2.5 rounded-xl transition cursor-pointer relative ${
-            activePanelTab === 'sessions' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          }`}
-          title={`Sessions (${sessions.length})`}
-        >
-          <FolderKanban className="w-4 h-4" />
-          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-purple-400" />
-        </button>
+          <button
+            onClick={() => {
+              onSetActivePanelTab('sessions');
+              onToggleCollapse();
+            }}
+            className={`p-2 rounded-xl transition cursor-pointer relative ${
+              activePanelTab === 'sessions' ? 'bg-purple-600 text-white shadow-md shadow-purple-950/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+            title={`Composition Sessions (${sessions.length} Snapshots) — Click to expand`}
+          >
+            <FolderKanban className="w-4 h-4" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-purple-400" />
+          </button>
 
-        <button
-          onClick={() => {
-            onSetActivePanelTab('assets');
-            onToggleCollapse();
-          }}
-          className={`p-2.5 rounded-xl transition cursor-pointer relative ${
-            activePanelTab === 'assets' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          }`}
-          title="Studio Assets (Stems, Art, Media)"
-        >
-          <HardDrive className="w-4 h-4" />
-          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-cyan-400" />
-        </button>
+          <button
+            onClick={() => {
+              onSetActivePanelTab('assets');
+              onToggleCollapse();
+            }}
+            className={`p-2 rounded-xl transition cursor-pointer relative ${
+              activePanelTab === 'assets' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+            title="Studio Assets (Stems, Artworks, Video Reels) — Click to expand"
+          >
+            <HardDrive className="w-4 h-4" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-cyan-400" />
+          </button>
+        </div>
+
+        <div className="h-px w-10 bg-slate-800 my-0.5" />
+
+        {/* TWO-COLUMN / TWO-ROW QUICK LAUNCHER ICONS (TIER 1 & TIER 2) */}
+        <div className="w-full px-1.5 flex flex-col items-center space-y-1.5">
+          <div className="flex items-center justify-between w-full px-1 text-[8px] font-mono uppercase font-black text-slate-500">
+            <span title="Tier 1: Audio Engine">T1</span>
+            <span title="Tier 2: Visuals & Copilots">T2</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 w-full">
+            {/* Col 1: Tier 1 Audio Icons */}
+            <div className="flex flex-col gap-1.5 items-center">
+              {TIER_1_NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={`side-t1-${item.id}`}
+                    onClick={() => onNavigateToTab(item.id)}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setSidebarHoverItem({ item, rect });
+                    }}
+                    onMouseLeave={() => setSidebarHoverItem(null)}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition cursor-pointer border relative group ${
+                      isActive
+                        ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ring-2 ring-white/20`
+                        : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                    title={`${item.name} (${item.tierLabel}): ${item.description}`}
+                    aria-label={item.name}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : item.accentColor}`} />
+                    {isActive && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 border border-slate-950 animate-pulse" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Col 2: Tier 2 Visuals Icons */}
+            <div className="flex flex-col gap-1.5 items-center">
+              {TIER_2_NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={`side-t2-${item.id}`}
+                    onClick={() => onNavigateToTab(item.id)}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setSidebarHoverItem({ item, rect });
+                    }}
+                    onMouseLeave={() => setSidebarHoverItem(null)}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition cursor-pointer border relative group ${
+                      isActive
+                        ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ring-2 ring-white/20`
+                        : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                    title={`${item.name} (${item.tierLabel}): ${item.description}`}
+                    aria-label={item.name}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : item.accentColor}`} />
+                    {isActive && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 border border-slate-950 animate-pulse" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* SIDEBAR FLOATING HOVER CARD */}
+        {sidebarHoverItem && (
+          <div
+            style={{
+              position: 'fixed',
+              left: `${sidebarHoverItem.rect.right + 12}px`,
+              top: `${Math.min(Math.max(sidebarHoverItem.rect.top - 20, 16), typeof window !== 'undefined' ? window.innerHeight - 260 : 300)}px`,
+              zIndex: 9999
+            }}
+            className="w-[320px] pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="p-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl bg-slate-900/95 border-slate-700/80 text-white shadow-indigo-950/80 ring-1 ring-white/10 relative">
+              {/* Arrow pointing left back to the icon */}
+              <div className="absolute left-[-6px] top-6 w-3 h-3 rotate-45 border-l border-b border-slate-700/80 bg-slate-900" />
+
+              <div className="flex items-start gap-2.5 mb-2 relative z-10">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                  activeTab === sidebarHoverItem.item.id
+                    ? `${sidebarHoverItem.item.activeBg} text-white`
+                    : 'bg-slate-800 text-indigo-400 border border-slate-700'
+                }`}>
+                  {React.createElement(sidebarHoverItem.item.icon, { className: 'w-4 h-4' })}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-black tracking-wide truncate">
+                    {sidebarHoverItem.item.name}
+                  </h4>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-semibold ${sidebarHoverItem.item.tierBadgeColor}`}>
+                      {sidebarHoverItem.item.tierLabel}
+                    </span>
+                    {activeTab === sidebarHoverItem.item.id && (
+                      <span className="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.2 rounded border border-amber-400/30 font-mono">
+                        <CheckCircle2 className="w-3 h-3 text-amber-400" />
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] leading-relaxed text-slate-300 mb-2 relative z-10">
+                {sidebarHoverItem.item.description}
+              </p>
+
+              {sidebarHoverItem.item.sopRule && (
+                <div className="p-2 rounded-xl border text-[10px] leading-tight flex items-start gap-1.5 mb-2 bg-amber-950/40 border-amber-800/40 text-amber-300 relative z-10">
+                  <span className="font-bold">SOP:</span>
+                  <span>{sidebarHoverItem.item.sopRule}</span>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400 relative z-10">
+                <span className="text-indigo-400 font-bold flex items-center gap-1">
+                  <ArrowRight className="w-3 h-3" />
+                  <span>Click to open workspace</span>
+                </span>
+                {sidebarHoverItem.item.shortcut && (
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">
+                    {sidebarHoverItem.item.shortcut}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </aside>
     );
   }
