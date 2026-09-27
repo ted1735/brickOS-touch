@@ -3198,3 +3198,194 @@ Every candle's victory,
 For the woman you chose to be.`
   }
 ];
+
+export interface SongVersionEntry {
+  id: string;
+  versionTag: string;
+  updatedAt: string;
+  content: string;
+}
+
+export interface SongVersionCatalogItem {
+  id: string;
+  title: string;
+  versions: SongVersionEntry[];
+}
+
+export const songVersionsCatalog: Record<string, SongVersionCatalogItem> = {
+  'song-001': {
+    id: 'song-001',
+    title: 'Standing in the Holy Place (Sample Baseline)',
+    versions: [
+      {
+        id: 'v1',
+        versionTag: 'v1.0 - Initial Suno Acoustic Draft',
+        updatedAt: '2026-03-01',
+        content: `[Verse 1]
+Standing in the quiet place
+Shadows fall across my face
+Whisper through the broken stone
+Tell me I am not alone
+
+[Chorus]
+You are the rock that will not shake
+The only promise that won't break
+Through fire and the raging sea
+Your sovereign hand is holding me`
+      },
+      {
+        id: 'v2',
+        versionTag: 'v2.0 - Studio Cinematic Rewrite',
+        updatedAt: '2026-03-05',
+        content: `[Verse 1]
+Standing in the hollow space
+Echoes fall across my face
+Whisper through the shattered stone
+Declare that I am not alone
+
+[Chorus]
+You are the rock that will not bend
+The faithful author to the end
+Through towering flame and rising sea
+Your holy hand is holding me`
+      },
+      {
+        id: 'v3',
+        versionTag: 'v3.0 - Ministry Live Final Master',
+        updatedAt: '2026-03-10',
+        content: `[Verse 1] (Key: Abm | BPM: 128)
+Standing in the holy place
+Glory falling on my face
+Crying through the altar stone
+Jesus, I am not alone
+
+[Chorus] (Drums Build Full)
+You are the rock that will not move
+Every promise You will prove
+Through trial, fire, and storming sea
+Your mighty hand delivers me`
+      }
+    ]
+  },
+  'TRK-09': {
+    id: 'TRK-09',
+    title: "The Work Ain't Done",
+    versions: THE_WORK_AINT_DONE_VERSIONS.map((v, i) => ({
+      id: `twad-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-10': {
+    id: 'TRK-10',
+    title: 'Check Your Heart Light',
+    versions: CHECK_YOUR_HEART_LIGHT_VERSIONS.map((v, i) => ({
+      id: `cyhl-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-11': {
+    id: 'TRK-11',
+    title: 'Nothing But the Blood',
+    versions: NOTHING_BUT_THE_BLOOD_VERSIONS.map((v, i) => ({
+      id: `nbtb-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-12': {
+    id: 'TRK-12',
+    title: 'Meet Me Here',
+    versions: MEET_ME_HERE_VERSIONS.map((v, i) => ({
+      id: `mmh-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-13': {
+    id: 'TRK-13',
+    title: 'Calvary Grit',
+    versions: CALVARY_GRIT_VERSIONS.map((v, i) => ({
+      id: `cg-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-14': {
+    id: 'TRK-14',
+    title: 'Ghost in the Machine',
+    versions: GHOST_IN_THE_MACHINE_VERSIONS.map((v, i) => ({
+      id: `gitm-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-15': {
+    id: 'TRK-15',
+    title: 'Confident and Consistent',
+    versions: CONFIDENT_AND_CONSISTENT_VERSIONS.map((v, i) => ({
+      id: `cac-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-16': {
+    id: 'TRK-16',
+    title: 'Blindfold Blessing',
+    versions: BLINDFOLD_BLESSING_VERSIONS.map((v, i) => ({
+      id: `bb-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-17': {
+    id: 'TRK-17',
+    title: 'Trading in the Mask',
+    versions: TRADING_IN_THE_MASK_VERSIONS.map((v, i) => ({
+      id: `titm-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-18': {
+    id: 'TRK-18',
+    title: 'Leaning Not Leaving',
+    versions: LEANING_NOT_LEAVING_VERSIONS.map((v, i) => ({
+      id: `lnl-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-19': {
+    id: 'TRK-19',
+    title: "The Master's Hand",
+    versions: THE_MASTERS_HAND_VERSIONS.map((v, i) => ({
+      id: `tmh-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-20': {
+    id: 'TRK-20',
+    title: "Every Candle's Victory",
+    versions: EVERY_CANDLES_VICTORY_VERSIONS.map((v, i) => ({
+      id: `ecv-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  }
+};
+

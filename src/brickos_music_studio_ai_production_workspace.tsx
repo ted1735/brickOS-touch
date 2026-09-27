@@ -78,6 +78,7 @@ import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts';
 import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
+import { SongVersionCompareTab } from './components/SongVersionCompareTab';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
 import { SectionQuickHelpBanner } from './components/SectionQuickHelpBanner';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
@@ -116,7 +117,7 @@ export default function BrickOSMusicStudioWorkspace() {
     return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
   });
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library'
+    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
@@ -1830,6 +1831,21 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onCopyText={copyToClipboard}
               onOpenSectionGuide={handleOpenSectionGuide}
               isDarkMode={isDarkMode}
+            />
+          )}
+
+          {/* TAB: SONG VERSION MATRIX (3-WAY STACKING) */}
+          {activeTab === 'version-matrix' && (
+            <SongVersionCompareTab
+              activeTrack={selectedTrack}
+              onUpdateTrackLyrics={(lyrics, versionTag) => {
+                handleTrackUpdate('lyrics', lyrics);
+                showToast(`Loaded ${versionTag || 'version'} into Lyric & Suno Studio!`, 'success');
+                setActiveTab('lyrics');
+              }}
+              onNavigateToTab={setActiveTab}
+              isDarkMode={isDarkMode}
+              showToast={showToast}
             />
           )}
 

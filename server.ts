@@ -205,6 +205,73 @@ Output the full rewritten lyrics now:`;
   }
 });
 
+// 3c. 3-Way Song Version Comparative Audit Engine
+app.post('/api/gemini/compare-versions', async (req, res) => {
+  try {
+    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-3.1-pro-preview' } = req.body;
+    if (!versions || !Array.isArray(versions) || versions.length < 2) {
+      return res.status(400).json({ error: 'At least 2 versions are required for comparative audit' });
+    }
+
+    const ai = getGenAI();
+    const systemPrompt = `You are the Executive Theological Producer and Nashville A&R Director for brickOS Sovereign Records.
+Your mandate is to perform a rigorous 3-way comparative audit across multiple song versions (e.g. initial draft vs rewrite vs master).
+
+Evaluation Framework:
+1. THEOLOGICAL PROGRESSION: Did subsequent rewrites deepen biblical resonance, or did they accidentally dilute the theological thesis into generic praise cliches?
+2. THE 'CHRISTIANESE' FILTER: Compare how colloquial, blue-collar authenticity and concrete imagery evolved vs tired religious jargon.
+3. THE THRONE ROOM PIVOT: Inspect the Bridge across all versions. Does it execute a clear horizontal-to-vertical shift into worship by the bridge?
+4. CADENCE & VOCAL PRIMACY: Evaluate rhythm, syllable count, and Suno arrangement bracket tags ([Verse], [Chorus], [Build], [Drop]).
+5. GOLDEN MASTER SYNTHESIS: Propose the ideal hybrid combination of the strongest stanzas across all versions.
+
+Format your output with clear markdown headings:
+- ### 🏆 Comparative Verdict & Version Ranking
+- ### 📜 Version Evolution & Line-by-Line Changes
+- ### 🛡️ Theological & Christianese Audit
+- ### 👑 Throne Room Pivot Audit (Bridge)
+- ### ⚡ Golden Master Synthesis (Recommended Combined Lyrics)`;
+
+    const versionBlocks = versions
+      .map((v: any, idx: number) => `--- VERSION ${idx + 1}: ${v.versionTag || `v${idx + 1}`} (Updated: ${v.updatedAt || 'N/A'}) ---\n${v.content}`)
+      .join('\n\n');
+
+    const prompt = `${systemPrompt}
+
+TRACK CONTEXT:
+Title: ${title || 'Active Track'}
+EP Suite: ${ep || 'Sovereign Records'}
+Genre: ${genre || 'Christian Hip Hop / Modern Worship'} (${bpm || 96} BPM)
+Vocal Archetype: ${vocal || 'Primary Vocal'}
+Thesis: ${thesis || 'Brokenness Redeemed In Christ'}
+
+VERSIONS SUBMITTED FOR AUDIT:
+${versionBlocks}
+
+Deliver your comprehensive comparative audit now:`;
+
+    let responseText = '';
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+      responseText = response.text || '';
+    } catch (primaryErr) {
+      console.warn(`Version compare with ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
+      const fallback = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+      });
+      responseText = fallback.text || '';
+    }
+
+    res.json({ audit: responseText });
+  } catch (err: any) {
+    console.error('Version compare error:', err);
+    res.status(500).json({ error: err.message || 'Version comparison failed' });
+  }
+});
+
 // 4. Multi-Turn Gemini Chatbot (with custom roles)
 app.post('/api/gemini/chat', async (req, res) => {
   try {

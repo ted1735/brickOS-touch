@@ -24,7 +24,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Search,
-  Copy
+  Copy,
+  Columns
 } from 'lucide-react';
 
 export type StudioSectionId =
@@ -43,7 +44,8 @@ export type StudioSectionId =
   | 'database'
   | 'telemetry'
   | 'coproducer'
-  | 'search';
+  | 'search'
+  | 'version-matrix';
 
 interface SectionInstructionModalProps {
   isOpen: boolean;
@@ -433,6 +435,29 @@ export const SECTION_GUIDES: Record<StudioSectionId, SectionGuideItem> = {
       'Verify commercial production claims against documented audio engineering standards.'
     ],
     relatedTabs: ['coproducer', 'lyrics', 'youtube']
+  },
+  'version-matrix': {
+    id: 'version-matrix',
+    title: 'Song Version Matrix (3-Way Stacking)',
+    badge: 'Version Compare',
+    icon: Columns,
+    summary: 'Direct 3-way side-by-side song version comparison matrix with synchronized scrolling, raw markdown editing, and structured arrangement card views.',
+    purpose: 'Compare drafts, revisions, and master takes across production stages, evaluate lyrical iterations, and copy structured markdown instantly.',
+    keySteps: [
+      'Select a song from the catalog dropdown or edit the 3 stacked versions directly.',
+      'Toggle "Sync Scroll" to keep all 3 columns aligned during deep lyric comparison.',
+      'Switch between "Raw Editor" and "Arrangement Cards" to inspect structured bracketed sections.',
+      'Edit version tags and contents in real-time or copy any column directly to your clipboard.'
+    ],
+    bestPractices: [
+      'Use bracket notation like [Verse 1], [Chorus], [Bridge] to generate arrangement cards.',
+      'Keep column 1 for early drafts, column 2 for rewrites, and column 3 for master takes.'
+    ],
+    sopRules: [
+      'Ensure lyrical edits preserve theological integrity across iterations.',
+      'Verify vocal delivery cues and BPM notes are documented in the master column.'
+    ],
+    relatedTabs: ['lyrics', 'database', 'kanban']
   }
 };
 

@@ -15,7 +15,8 @@ import {
   Zap,
   Video,
   MessageSquare,
-  Search
+  Search,
+  Columns
 } from 'lucide-react';
 
 export interface StudioNavItem {
@@ -70,6 +71,23 @@ export const TIER_1_NAV_ITEMS: StudioNavItem[] = [
     sopRule: 'Rule 2: Enforce the Throne Room Pivot by the bridge; zero Christianese.',
     badge: 'Suno v5.5',
     shortcut: 'Alt+2'
+  },
+  {
+    id: 'version-matrix',
+    name: 'Song Version Matrix (3-Way Stacking)',
+    shortName: 'Version Matrix',
+    tier: 'tier1',
+    tierLabel: 'Tier 1 • Audio Engine',
+    tierBadgeColor: 'bg-indigo-950/80 text-indigo-400 border-indigo-800/40',
+    icon: Columns,
+    accentColor: 'text-indigo-400',
+    activeBg: 'bg-indigo-600',
+    activeBorder: 'border-indigo-400',
+    glowColor: 'shadow-indigo-500/30',
+    description: 'Direct 3-way side-by-side song version comparison matrix with synchronized scrolling, raw markdown editing, and structured arrangement card views.',
+    sopRule: 'Rule 2b: Multi-version matrix comparison required before locking final masters.',
+    badge: '3-Way MD',
+    shortcut: 'Alt+V'
   },
   {
     id: 'database',
