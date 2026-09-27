@@ -27,6 +27,7 @@ import { audioMiniDaw } from '../utils/audioEngine';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { MiniDawRealtimeChart } from './MiniDawRealtimeChart';
 import { MiniDawSpectrumVisualizer } from './MiniDawSpectrumVisualizer';
+import { MasteringRack } from './MasteringRack';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 
 interface MiniDawMixerTabProps {
@@ -417,409 +418,249 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         keySignature={track.key}
       />
 
-      {/* EXPANDABLE MASTER BUS FX & SONIC SCULPTING RACK */}
+      {/* EXPANDABLE MASTER BUS FX & MASTERING RACK */}
       {showFxRack && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl transition-all">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-                Master Bus Audio Engine Processing (Live Web Audio DSP)
-              </h4>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-mono">
-              <span className="text-slate-400">ACTIVE CHAIN:</span>
-              <span className="text-emerald-400 font-bold">
-                Master Gain ➔ 3-Band EQ ➔ Tape Saturation ➔ VCA Dynamics ➔ Plate Reverb ➔ 1024 FFT
-              </span>
-              <button
-                onClick={handleResetFx}
-                className="hover:text-amber-400 flex items-center gap-1 transition ml-2 text-slate-400"
-                title="Reset FX to Clean Default"
-              >
-                <RotateCcw className="w-2.5 h-2.5" />
-                <span>Reset FX</span>
-              </button>
-            </div>
-          </div>
+        <div className="space-y-4">
+          {/* DEDICATED MASTERING RACK (EQ • COMPRESSOR • LIMITER) */}
+          <MasteringRack
+            effects={effects}
+            onUpdateEffect={handleUpdateEffect}
+            lufsData={lufsData}
+            isDarkMode={isDarkMode}
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-            {/* Module 1: 3-Band Parametric EQ */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                  3-Band Master EQ
-                </span>
+          {/* AUXILIARY BUS COLOR & SPATIAL PROCESSORS */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Auxiliary Color & Spatial Processors (Tape Saturation • Stereo Spread • Plate Reverb)
+                </h4>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] font-mono">
+                <span className="text-slate-400">STATUS:</span>
+                <span className="text-amber-400 font-bold">Parallel Saturation & Spatializer Active</span>
                 <button
-                  onClick={() => handleUpdateEffect('eq', 'enabled', !effects.eq.enabled)}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition ${
-                    effects.eq.enabled ? 'bg-cyan-950 text-cyan-300 border border-cyan-700/50' : 'bg-slate-800 text-slate-500'
-                  }`}
+                  onClick={handleResetFx}
+                  className="hover:text-amber-400 flex items-center gap-1 transition ml-2 text-slate-400 cursor-pointer"
+                  title="Reset FX to Clean Default"
                 >
-                  {effects.eq.enabled ? 'Active' : 'Bypass'}
+                  <RotateCcw className="w-2.5 h-2.5" />
+                  <span>Reset All</span>
                 </button>
               </div>
+            </div>
 
-              {/* Low Shelf */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">LOW (80 Hz Shelf):</span>
-                  <span className={`font-bold ${effects.eq.low > 0 ? 'text-cyan-300' : effects.eq.low < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
-                    {effects.eq.low > 0 ? `+${effects.eq.low.toFixed(1)}` : effects.eq.low.toFixed(1)} dB
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Module: Analog Tape Drive & Stereo Width */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    Tape Drive & Stereo Width
+                  </span>
+                  <button
+                    onClick={() => handleUpdateEffect('tapeDrive', 'enabled', !effects.tapeDrive.enabled)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition cursor-pointer ${
+                      effects.tapeDrive.enabled ? 'bg-amber-950 text-amber-300 border border-amber-700/50' : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {effects.tapeDrive.enabled ? 'Active' : 'Bypass'}
+                  </button>
+                </div>
+
+                {/* Drive Saturation */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Tape Saturation:</span>
+                    <span className="font-bold text-amber-300">{effects.tapeDrive.drive}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={effects.tapeDrive.drive}
+                    onChange={(e) => handleUpdateEffect('tapeDrive', 'drive', parseInt(e.target.value))}
+                    disabled={!effects.tapeDrive.enabled}
+                    className="w-full accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
+                  />
+                </div>
+
+                {/* Stereo Width */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Stereo Spread:</span>
+                    <span className="font-bold text-amber-300">{effects.stereo.width}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    value={effects.stereo.width}
+                    onChange={(e) => handleUpdateEffect('stereo', 'width', parseInt(e.target.value))}
+                    className="w-full accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Mono Collapse Button */}
+                <div className="pt-1">
+                  <button
+                    onClick={() => handleUpdateEffect('stereo', 'isMonoCollapse', !effects.stereo.isMonoCollapse)}
+                    className={`w-full py-1 rounded text-[10px] font-mono font-bold transition border cursor-pointer ${
+                      effects.stereo.isMonoCollapse
+                        ? 'bg-rose-950/80 border-rose-600 text-rose-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Check phase cancellation with Mono summing"
+                  >
+                    {effects.stereo.isMonoCollapse ? '⚠ MONO COLLAPSE ENGAGED' : 'Mono Compatibility Check'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Module: Studio Reverb Space & Bus Routing */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                    <span className="w-2 h-2 rounded-full bg-rose-400" />
+                    Studio Plate Reverb
+                  </span>
+                  <button
+                    onClick={() => handleUpdateEffect('reverb', 'enabled', !effects.reverb.enabled)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition cursor-pointer ${
+                      effects.reverb.enabled ? 'bg-rose-950 text-rose-300 border border-rose-700/50' : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {effects.reverb.enabled ? 'Active' : 'Bypass'}
+                  </button>
+                </div>
+
+                {/* Reverb Mix */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Wet/Dry Mix:</span>
+                    <span className="font-bold text-rose-300">{effects.reverb.mix}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="60"
+                    value={effects.reverb.mix}
+                    onChange={(e) => handleUpdateEffect('reverb', 'mix', parseInt(e.target.value))}
+                    disabled={!effects.reverb.enabled}
+                    className="w-full accent-rose-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
+                  />
+                </div>
+
+                {/* Reverb Decay */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Decay Time:</span>
+                    <span className="font-bold text-rose-300">{effects.reverb.decay.toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="5.0"
+                    step="0.1"
+                    value={effects.reverb.decay}
+                    onChange={(e) => handleUpdateEffect('reverb', 'decay', parseFloat(e.target.value))}
+                    disabled={!effects.reverb.enabled}
+                    className="w-full accent-rose-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
+                  />
+                </div>
+
+                {/* Bus Routing */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[10px] font-mono text-slate-400 block">Bus Routing Solo:</span>
+                  <select
+                    value={effects.busRouting}
+                    onChange={(e) => {
+                      const bus = e.target.value as any;
+                      handleUpdateEffect('busRouting', '', bus);
+                      audioMiniDaw.updateBusRouting(bus, tracks);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
+                  >
+                    <option value="master">All Stems (Master Bus)</option>
+                    <option value="vocal">Vocal Isolation (Stem 2)</option>
+                    <option value="instrumental">Instrumental Bus (Stem 1+4)</option>
+                    <option value="suno">Suno Master Bus (Stem 1)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Module: Target Loudness & Auto-Trim Normalizer */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                    <span className="w-2 h-2 rounded-full bg-purple-400" />
+                    Target Loudness Spec
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-purple-950 text-purple-300 border border-purple-700/50">
+                    BS.1770-4
                   </span>
                 </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  step="0.5"
-                  value={effects.eq.low}
-                  onChange={(e) => handleUpdateEffect('eq', 'low', parseFloat(e.target.value))}
-                  disabled={!effects.eq.enabled}
-                  className="w-full accent-cyan-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
 
-              {/* Mid Bell */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">MID (1 kHz Bell):</span>
-                  <span className={`font-bold ${effects.eq.mid > 0 ? 'text-teal-300' : effects.eq.mid < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
-                    {effects.eq.mid > 0 ? `+${effects.eq.mid.toFixed(1)}` : effects.eq.mid.toFixed(1)} dB
-                  </span>
+                {/* Target Standard Selector */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-mono text-slate-400 block">Streaming / Broadcast Spec:</span>
+                  <select
+                    value={effects.targetLufs || -12.0}
+                    onChange={(e) => {
+                      const target = parseFloat(e.target.value);
+                      handleUpdateEffect('targetLufs' as any, '', target);
+                      audioMiniDaw.setTargetLufs(target, effects.truePeakCeilingDb || -1.0);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
+                  >
+                    <option value="-14">Spotify / YouTube (-14.0 LUFS)</option>
+                    <option value="-16">Apple Music / Spatial (-16.0 LUFS)</option>
+                    <option value="-12">Nashville Radio (-12.0 LUFS)</option>
+                    <option value="-9">Club / EDM Slam (-9.0 LUFS)</option>
+                    <option value="-10.5">Stadium Rock (-10.5 LUFS)</option>
+                    <option value="-23">Broadcast EBU R128 (-23.0 LUFS)</option>
+                    <option value="-18">Acoustic Audiophile (-18.0 LUFS)</option>
+                  </select>
                 </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  step="0.5"
-                  value={effects.eq.mid}
-                  onChange={(e) => handleUpdateEffect('eq', 'mid', parseFloat(e.target.value))}
-                  disabled={!effects.eq.enabled}
-                  className="w-full accent-teal-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
 
-              {/* High Shelf */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">HIGH (10 kHz Shelf):</span>
-                  <span className={`font-bold ${effects.eq.high > 0 ? 'text-emerald-300' : effects.eq.high < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
-                    {effects.eq.high > 0 ? `+${effects.eq.high.toFixed(1)}` : effects.eq.high.toFixed(1)} dB
-                  </span>
+                {/* Correction Trim Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-400">Post-Limiter Trim:</span>
+                    <span className={`font-bold ${
+                      (effects.correctionGainDb || 0) > 0 ? 'text-emerald-300' : (effects.correctionGainDb || 0) < 0 ? 'text-rose-400' : 'text-slate-300'
+                    }`}>
+                      {(effects.correctionGainDb || 0) > 0 ? `+${(effects.correctionGainDb || 0).toFixed(1)}` : (effects.correctionGainDb || 0).toFixed(1)} dB
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-12"
+                    max="12"
+                    step="0.5"
+                    value={effects.correctionGainDb || 0}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      handleUpdateEffect('correctionGainDb' as any, '', val);
+                      audioMiniDaw.setCorrectionGain(val);
+                    }}
+                    className="w-full accent-purple-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  step="0.5"
-                  value={effects.eq.high}
-                  onChange={(e) => handleUpdateEffect('eq', 'high', parseFloat(e.target.value))}
-                  disabled={!effects.eq.enabled}
-                  className="w-full accent-emerald-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-            </div>
 
-            {/* Module 2: VCA Dynamics Bus Compressor */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  VCA Bus Compressor
-                </span>
-                <button
-                  onClick={() => handleUpdateEffect('compressor', 'enabled', !effects.compressor.enabled)}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition ${
-                    effects.compressor.enabled ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/50' : 'bg-slate-800 text-slate-500'
-                  }`}
-                >
-                  {effects.compressor.enabled ? 'Active' : 'Bypass'}
-                </button>
-              </div>
-
-              {/* Threshold */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Threshold:</span>
-                  <span className="font-bold text-indigo-300">{effects.compressor.threshold} dB</span>
+                {/* Auto-Correct Button */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAutoCorrectLufs}
+                    className="w-full py-1.5 rounded text-[10px] font-mono font-bold transition bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <Zap className="w-3 h-3 fill-current" />
+                    <span>Auto-Match Target LUFS</span>
+                  </button>
                 </div>
-                <input
-                  type="range"
-                  min="-40"
-                  max="0"
-                  step="1"
-                  value={effects.compressor.threshold}
-                  onChange={(e) => handleUpdateEffect('compressor', 'threshold', parseFloat(e.target.value))}
-                  disabled={!effects.compressor.enabled}
-                  className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-
-              {/* Ratio */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Ratio:</span>
-                  <span className="font-bold text-indigo-300">{effects.compressor.ratio.toFixed(1)}:1</span>
-                </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="0.5"
-                  value={effects.compressor.ratio}
-                  onChange={(e) => handleUpdateEffect('compressor', 'ratio', parseFloat(e.target.value))}
-                  disabled={!effects.compressor.enabled}
-                  className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-
-              {/* Makeup Gain */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Makeup Gain:</span>
-                  <span className="font-bold text-indigo-300">+{effects.compressor.makeup.toFixed(1)} dB</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="8"
-                  step="0.5"
-                  value={effects.compressor.makeup}
-                  onChange={(e) => handleUpdateEffect('compressor', 'makeup', parseFloat(e.target.value))}
-                  disabled={!effects.compressor.enabled}
-                  className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-            </div>
-
-            {/* Module 3: Analog Tape Drive & Stereo Width */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-amber-400" />
-                  Tape Drive & Stereo
-                </span>
-                <button
-                  onClick={() => handleUpdateEffect('tapeDrive', 'enabled', !effects.tapeDrive.enabled)}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition ${
-                    effects.tapeDrive.enabled ? 'bg-amber-950 text-amber-300 border border-amber-700/50' : 'bg-slate-800 text-slate-500'
-                  }`}
-                >
-                  {effects.tapeDrive.enabled ? 'Active' : 'Bypass'}
-                </button>
-              </div>
-
-              {/* Drive Saturation */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Tape Saturation:</span>
-                  <span className="font-bold text-amber-300">{effects.tapeDrive.drive}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={effects.tapeDrive.drive}
-                  onChange={(e) => handleUpdateEffect('tapeDrive', 'drive', parseInt(e.target.value))}
-                  disabled={!effects.tapeDrive.enabled}
-                  className="w-full accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-
-              {/* Stereo Width */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Stereo Spread:</span>
-                  <span className="font-bold text-amber-300">{effects.stereo.width}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="50"
-                  max="150"
-                  value={effects.stereo.width}
-                  onChange={(e) => handleUpdateEffect('stereo', 'width', parseInt(e.target.value))}
-                  className="w-full accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Mono Collapse Button */}
-              <div className="pt-1">
-                <button
-                  onClick={() => handleUpdateEffect('stereo', 'isMonoCollapse', !effects.stereo.isMonoCollapse)}
-                  className={`w-full py-1 rounded text-[10px] font-mono font-bold transition border ${
-                    effects.stereo.isMonoCollapse
-                      ? 'bg-rose-950/80 border-rose-600 text-rose-300'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="Check phase cancellation with Mono summing"
-                >
-                  {effects.stereo.isMonoCollapse ? '⚠ MONO COLLAPSE ENGAGED' : 'Mono Compatibility Check'}
-                </button>
-              </div>
-            </div>
-
-            {/* Module 4: Studio Reverb Space & Bus Routing */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-rose-400" />
-                  Studio Plate Reverb
-                </span>
-                <button
-                  onClick={() => handleUpdateEffect('reverb', 'enabled', !effects.reverb.enabled)}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase transition ${
-                    effects.reverb.enabled ? 'bg-rose-950 text-rose-300 border border-rose-700/50' : 'bg-slate-800 text-slate-500'
-                  }`}
-                >
-                  {effects.reverb.enabled ? 'Active' : 'Bypass'}
-                </button>
-              </div>
-
-              {/* Reverb Mix */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Wet/Dry Mix:</span>
-                  <span className="font-bold text-rose-300">{effects.reverb.mix}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="60"
-                  value={effects.reverb.mix}
-                  onChange={(e) => handleUpdateEffect('reverb', 'mix', parseInt(e.target.value))}
-                  disabled={!effects.reverb.enabled}
-                  className="w-full accent-rose-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-
-              {/* Reverb Decay */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Decay Time:</span>
-                  <span className="font-bold text-rose-300">{effects.reverb.decay.toFixed(1)}s</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="5.0"
-                  step="0.1"
-                  value={effects.reverb.decay}
-                  onChange={(e) => handleUpdateEffect('reverb', 'decay', parseFloat(e.target.value))}
-                  disabled={!effects.reverb.enabled}
-                  className="w-full accent-rose-500 h-1 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
-                />
-              </div>
-
-              {/* Bus Routing */}
-              <div className="space-y-1 pt-1">
-                <span className="text-[10px] font-mono text-slate-400 block">Bus Routing Solo:</span>
-                <select
-                  value={effects.busRouting}
-                  onChange={(e) => {
-                    const bus = e.target.value as any;
-                    handleUpdateEffect('busRouting', '', bus);
-                    audioMiniDaw.updateBusRouting(bus, tracks);
-                  }}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
-                >
-                  <option value="master">All Stems (Master Bus)</option>
-                  <option value="vocal">Vocal Isolation (Stem 2)</option>
-                  <option value="instrumental">Instrumental Bus (Stem 1+4)</option>
-                  <option value="suno">Suno Master Bus (Stem 1)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Module 5: LUFS Normalization & Limiter Ceiling Guard */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
-                  LUFS Normalizer
-                </span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-purple-950 text-purple-300 border border-purple-700/50">
-                  BS.1770
-                </span>
-              </div>
-
-              {/* Target Standard Selector */}
-              <div className="space-y-1">
-                <span className="text-[10px] font-mono text-slate-400 block">Target Standard:</span>
-                <select
-                  value={effects.targetLufs || -12.0}
-                  onChange={(e) => {
-                    const target = parseFloat(e.target.value);
-                    handleUpdateEffect('targetLufs' as any, '', target);
-                    audioMiniDaw.setTargetLufs(target, effects.truePeakCeilingDb || -1.0);
-                  }}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
-                >
-                  <option value="-14">Spotify / YouTube (-14.0 LUFS)</option>
-                  <option value="-16">Apple Music / Spatial (-16.0 LUFS)</option>
-                  <option value="-12">Nashville Radio (-12.0 LUFS)</option>
-                  <option value="-9">Club / EDM Slam (-9.0 LUFS)</option>
-                  <option value="-10.5">Stadium Rock (-10.5 LUFS)</option>
-                  <option value="-23">Broadcast EBU R128 (-23.0 LUFS)</option>
-                  <option value="-18">Acoustic Audiophile (-18.0 LUFS)</option>
-                </select>
-              </div>
-
-              {/* Ceiling Selector */}
-              <div className="space-y-1">
-                <span className="text-[10px] font-mono text-slate-400 block">True Peak Ceiling:</span>
-                <select
-                  value={effects.truePeakCeilingDb || -1.0}
-                  onChange={(e) => {
-                    const ceiling = parseFloat(e.target.value);
-                    handleUpdateEffect('truePeakCeilingDb' as any, '', ceiling);
-                    audioMiniDaw.setTargetLufs(effects.targetLufs || -12.0, ceiling);
-                  }}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
-                >
-                  <option value="-1.0">-1.0 dBTP (Universal Streaming)</option>
-                  <option value="-0.8">-0.8 dBTP (Radio / Billboard)</option>
-                  <option value="-0.3">-0.3 dBTP (Club / Dancefloor)</option>
-                  <option value="-2.0">-2.0 dBTP (Audiophile Dynamic)</option>
-                </select>
-              </div>
-
-              {/* Correction Trim Slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-slate-400">Gain Trim:</span>
-                  <span className={`font-bold ${
-                    (effects.correctionGainDb || 0) > 0 ? 'text-emerald-300' : (effects.correctionGainDb || 0) < 0 ? 'text-rose-400' : 'text-slate-300'
-                  }`}>
-                    {(effects.correctionGainDb || 0) > 0 ? `+${(effects.correctionGainDb || 0).toFixed(1)}` : (effects.correctionGainDb || 0).toFixed(1)} dB
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  step="0.5"
-                  value={effects.correctionGainDb || 0}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    handleUpdateEffect('correctionGainDb' as any, '', val);
-                    audioMiniDaw.setCorrectionGain(val);
-                  }}
-                  className="w-full accent-purple-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Auto-Correct Button */}
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={handleAutoCorrectLufs}
-                  className="w-full py-1.5 rounded text-[10px] font-mono font-bold transition bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Zap className="w-3 h-3 fill-current" />
-                  <span>Auto-Correct Gain</span>
-                </button>
               </div>
             </div>
           </div>

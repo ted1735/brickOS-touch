@@ -451,6 +451,14 @@ export interface DawCompressor {
   enabled: boolean;
 }
 
+export interface DawLimiter {
+  ceiling: number; // -3.0dB to 0.0dB True Peak ceiling
+  threshold: number; // -12.0dB to 0.0dB drive into limiter
+  release: number; // 0.01s to 0.5s release time
+  lookahead?: number; // lookahead in ms (0-10ms)
+  enabled: boolean;
+}
+
 export interface DawReverb {
   mix: number; // 0% to 100% Wet
   decay: number; // 0.5s to 8.0s
@@ -472,6 +480,7 @@ export interface DawStereoWidth {
 export interface DawEffectsState {
   eq: DawMasterEq;
   compressor: DawCompressor;
+  limiter?: DawLimiter;
   reverb: DawReverb;
   tapeDrive: DawTapeDrive;
   stereo: DawStereoWidth;

@@ -22,6 +22,13 @@ export const DEFAULT_DAW_EFFECTS: DawEffectsState = {
     makeup: 2.0,
     enabled: true
   },
+  limiter: {
+    ceiling: -1.0,
+    threshold: -1.0,
+    release: 0.05,
+    lookahead: 5,
+    enabled: true
+  },
   reverb: {
     mix: 20,
     decay: 2.2,

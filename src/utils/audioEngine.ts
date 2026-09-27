@@ -17,6 +17,10 @@ class MiniDawEngine {
   private reverbFeedbackGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
 
+  // Mastering Limiter (Brickwall Dynamics Compressor & True Peak Ceiling Guard)
+  private limiterNode: DynamicsCompressorNode | null = null;
+  private limiterCeilingGain: GainNode | null = null;
+
   // ITU-R BS.1770 K-Weighting Loudness Filter Chain & LUFS Measurement
   private kWeightShelf: BiquadFilterNode | null = null;
   private kWeightHighPass: BiquadFilterNode | null = null;
@@ -95,6 +99,17 @@ class MiniDawEngine {
     this.correctionGainNode = this.ctx.createGain();
     this.correctionGainNode.gain.value = Math.pow(10, this.correctionGainDb / 20);
 
+    // 5c. Precision Mastering Limiter (Brickwall Dynamics & Ceiling Guard)
+    this.limiterNode = this.ctx.createDynamicsCompressor();
+    this.limiterNode.threshold.value = -1.0;
+    this.limiterNode.knee.value = 0.0;
+    this.limiterNode.ratio.value = 20.0;
+    this.limiterNode.attack.value = 0.001; // 1ms brickwall attack
+    this.limiterNode.release.value = 0.05;  // 50ms transparent release
+
+    this.limiterCeilingGain = this.ctx.createGain();
+    this.limiterCeilingGain.gain.value = Math.pow(10, -1.0 / 20);
+
     // 6. Plate Reverb Simulation (Delay + Feedback + Lowpass filter matrix)
     this.reverbSendGain = this.ctx.createGain();
     this.reverbSendGain.gain.value = 0.20;
@@ -155,12 +170,16 @@ class MiniDawEngine {
     this.makeupGainNode.connect(this.correctionGainNode);
     this.reverbReturnGain.connect(this.correctionGainNode);
 
-    // Correction Gain feeds the Master Analyser, which connects to Destination
-    this.correctionGainNode.connect(this.analyser);
+    // Correction Gain feeds the Mastering Limiter stage
+    this.correctionGainNode.connect(this.limiterNode);
+    this.limiterNode.connect(this.limiterCeilingGain);
+
+    // Post-Limiter signal feeds the Master Analyser, which connects to Destination
+    this.limiterCeilingGain.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
 
-    // Tap K-Weighting filters from Correction Gain node for precise LUFS reading
-    this.correctionGainNode.connect(this.kWeightShelf);
+    // Tap K-Weighting filters from post-Limiter Ceiling Gain node for precise final LUFS reading
+    this.limiterCeilingGain.connect(this.kWeightShelf);
     this.kWeightShelf.connect(this.kWeightHighPass);
     this.kWeightHighPass.connect(this.kWeightAnalyser);
 
@@ -343,6 +362,25 @@ class MiniDawEngine {
 
     // Stereo & Mono Collapse
     this.setMonoCollapse(effects.stereo.isMonoCollapse || effects.stereo.width === 0);
+
+    // Limiter (Brickwall True Peak Ceiling)
+    if (this.limiterNode && this.limiterCeilingGain) {
+      const lim = effects.limiter;
+      if (lim && lim.enabled) {
+        this.limiterNode.threshold.setTargetAtTime(lim.threshold ?? -1.0, now, 0.01);
+        this.limiterNode.ratio.setTargetAtTime(20.0, now, 0.01);
+        this.limiterNode.attack.setTargetAtTime(0.001, now, 0.01);
+        this.limiterNode.release.setTargetAtTime(lim.release ?? 0.05, now, 0.01);
+        this.limiterNode.knee.setTargetAtTime(0.0, now, 0.01);
+        const ceilingVal = Math.pow(10, (lim.ceiling ?? -1.0) / 20);
+        this.limiterCeilingGain.gain.setTargetAtTime(ceilingVal, now, 0.01);
+      } else {
+        // Limiter bypassed (transparent unity gain and no threshold)
+        this.limiterNode.threshold.setTargetAtTime(0, now, 0.01);
+        this.limiterNode.ratio.setTargetAtTime(1.0, now, 0.01);
+        this.limiterCeilingGain.gain.setTargetAtTime(1.0, now, 0.01);
+      }
+    }
 
     // LUFS Target & Correction settings
     if (effects.targetLufs !== undefined) {
@@ -556,6 +594,16 @@ class MiniDawEngine {
       const linear = Math.pow(10, this.correctionGainDb / 20);
       this.correctionGainNode.gain.setTargetAtTime(linear, this.ctx.currentTime, 0.06);
     }
+  }
+
+  public getCompressorGainReduction(): number {
+    if (!this.compressorNode) return 0;
+    return Math.abs(this.compressorNode.reduction);
+  }
+
+  public getLimiterGainReduction(): number {
+    if (!this.limiterNode) return 0;
+    return Math.abs(this.limiterNode.reduction);
   }
 
   public resetCorrectionGain() {
@@ -801,13 +849,31 @@ class MiniDawEngine {
     const correctionGain = offlineCtx.createGain();
     correctionGain.gain.value = Math.pow(10, (corrGainDb || 0) / 20);
 
+    // Limiter node in offline render
+    const limiterNode = offlineCtx.createDynamicsCompressor();
+    const limiterGain = offlineCtx.createGain();
+    if (activeEffects.limiter?.enabled) {
+      limiterNode.threshold.value = activeEffects.limiter.threshold ?? -1.0;
+      limiterNode.knee.value = 0.0;
+      limiterNode.ratio.value = 20.0;
+      limiterNode.attack.value = 0.001;
+      limiterNode.release.value = activeEffects.limiter.release ?? 0.05;
+      limiterGain.gain.value = Math.pow(10, (activeEffects.limiter.ceiling ?? -1.0) / 20);
+    } else {
+      limiterNode.threshold.value = 0;
+      limiterNode.ratio.value = 1.0;
+      limiterGain.gain.value = 1.0;
+    }
+
     masterGain.connect(eqLow);
     eqLow.connect(eqMid);
     eqMid.connect(eqHigh);
     eqHigh.connect(comp);
     comp.connect(makeup);
     makeup.connect(correctionGain);
-    correctionGain.connect(offlineCtx.destination);
+    correctionGain.connect(limiterNode);
+    limiterNode.connect(limiterGain);
+    limiterGain.connect(offlineCtx.destination);
 
     const rootNotes = [110, 220, 330, 440];
     tracks.forEach((t) => {
