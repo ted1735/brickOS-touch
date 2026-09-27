@@ -83,6 +83,24 @@
         "createdAt": { "type": "string", "description": "ISO timestamp when snapshot was created" },
         "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
       }
+    },
+    "whiteboard_canvases": {
+      "description": "BlockSuite infinite whiteboard canvases and dual-mode document trees for song brainstorming, arrangement block mapping, and Nextcloud backup",
+      "fields": {
+        "id": { "type": "string", "description": "Unique whiteboard document ID (matching trackId or custom ID)" },
+        "title": { "type": "string", "description": "Brainstorming canvas title" },
+        "trackId": { "type": "string", "description": "Associated Track Identifier" },
+        "trackTitle": { "type": "string", "description": "Track title at creation time" },
+        "ep": { "type": "string", "description": "EP suite classification" },
+        "activeMode": { "type": "string", "description": "Isomorphic editor view mode: 'edgeless' | 'page'" },
+        "blocks": { "type": "array", "description": "List of BlockSuite blocks (sections, sticky notes, chords, theological checks, Suno style blocks)" },
+        "connectors": { "type": "array", "description": "List of directional connectors linking arrangement blocks" },
+        "viewport": { "type": "object", "description": "Saved pan and zoom coordinates { panX, panY, zoom }" },
+        "gridType": { "type": "string", "description": "Visual grid style: 'dots' | 'grid' | 'blueprint' | 'blank'" },
+        "nextcloudSyncStatus": { "type": "object", "description": "Last Nextcloud WebDAV export timestamp, path, and sync status" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      }
     }
   }
 }

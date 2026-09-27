@@ -80,6 +80,7 @@ import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
 import { SongVersionCompareTab } from './components/SongVersionCompareTab';
+import { BlockSuiteBrainstormingTab } from './components/BlockSuiteBrainstormingTab';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
 import { SectionQuickHelpBanner } from './components/SectionQuickHelpBanner';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
@@ -118,7 +119,7 @@ export default function BrickOSMusicStudioWorkspace() {
     return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
   });
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix'
+    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix' | 'brainstorming'
   >('kanban');
   const [copiedNotification, setCopiedNotification] = useState('');
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
@@ -1767,7 +1768,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           {/* ENHANCED WORKBENCH TWO-ROW NAVIGATION (COLLAPSIBLE DOWN TO ICONS WITH HOVER DESCRIPTIONS) */}
           <StudioTwoRowNavigation
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={(tab: string) => setActiveTab(tab as any)}
             isDarkMode={isDarkMode}
             onOpenSectionGuide={handleOpenSectionGuide}
             onOpenShortcutsCheatSheet={openCheatSheet}
@@ -1814,7 +1815,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               }}
               onUpdateTrackStatus={handleUpdateTrackStatus}
               onAddNewTrack={handleAddNewTrack}
-              onNavigateToTab={setActiveTab}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               epCollections={EP_COLLECTIONS}
               selectedEpFilter={selectedEpFilter}
               onSelectEpFilter={setSelectedEpFilter}
@@ -1831,6 +1832,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onUpdateTrack={handleTrackUpdate}
               onCopyText={copyToClipboard}
               onOpenSectionGuide={handleOpenSectionGuide}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               isDarkMode={isDarkMode}
             />
           )}
@@ -1844,9 +1846,24 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 showToast(`Loaded ${versionTag || 'version'} into Lyric & Suno Studio!`, 'success');
                 setActiveTab('lyrics');
               }}
-              onNavigateToTab={setActiveTab}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               isDarkMode={isDarkMode}
               showToast={showToast}
+            />
+          )}
+
+          {/* TAB: BLOCKSUITE INFINITE WHITEBOARD & BRAINSTORMING */}
+          {activeTab === 'brainstorming' && (
+            <BlockSuiteBrainstormingTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              onSelectTrack={setSelectedTrack}
+              onUpdateTrackLyrics={(lyrics, versionTag) => {
+                handleTrackUpdate('lyrics', lyrics);
+                showToast(`Compiled Whiteboard into ${selectedTrack.title} Lyrics!`, 'success');
+              }}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -2737,7 +2754,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               }}
               onApplyAssetToTrack={handleApplyAssetToTrack}
               isDarkMode={isDarkMode}
-              onNavigateToTab={setActiveTab}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               onOpenSectionGuide={handleOpenSectionGuide}
             />
           )}

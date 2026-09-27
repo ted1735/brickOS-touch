@@ -36,7 +36,8 @@ import {
   Layers,
   HelpCircle,
   Info,
-  Settings
+  Settings,
+  Grid
 } from 'lucide-react';
 import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset } from '../types';
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
@@ -51,6 +52,7 @@ interface LyricsAndSunoTabProps {
   onUpdateTrack: (field: string, value: any) => void;
   onCopyText: (text: string, label: string) => void;
   onOpenSectionGuide?: (sectionId?: any) => void;
+  onNavigateToTab?: (tab: string) => void;
   isDarkMode?: boolean;
 }
 
@@ -59,6 +61,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   onUpdateTrack,
   onCopyText,
   onOpenSectionGuide,
+  onNavigateToTab,
   isDarkMode = true
 }) => {
   // Multi-pane comparison layout state (up to 3 panes side-by-side)
@@ -607,6 +610,18 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
             <Sliders className="w-3.5 h-3.5 text-amber-300" />
             <span>Sound Presets ({presets.length})</span>
           </button>
+
+          {onNavigateToTab && (
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('brainstorming')}
+              className="px-3.5 py-2 rounded-xl bg-purple-900/60 hover:bg-purple-800/80 text-purple-200 font-bold text-xs border border-purple-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open BlockSuite Infinite Whiteboard Canvas for visual brainstorming & arrangement"
+            >
+              <Grid className="w-3.5 h-3.5 text-purple-400" />
+              <span>Open in Whiteboard</span>
+            </button>
+          )}
 
           {onOpenSectionGuide && (
             <button

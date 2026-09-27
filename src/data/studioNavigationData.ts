@@ -16,7 +16,8 @@ import {
   Video,
   MessageSquare,
   Search,
-  Columns
+  Columns,
+  Grid
 } from 'lucide-react';
 
 export interface StudioNavItem {
@@ -88,6 +89,23 @@ export const TIER_1_NAV_ITEMS: StudioNavItem[] = [
     sopRule: 'Rule 2b: Multi-version matrix comparison required before locking final masters.',
     badge: '3-Way MD',
     shortcut: 'Alt+V'
+  },
+  {
+    id: 'brainstorming',
+    name: 'BlockSuite Infinite Whiteboard',
+    shortName: 'Whiteboard',
+    tier: 'tier1',
+    tierLabel: 'Tier 1 • Audio Engine',
+    tierBadgeColor: 'bg-indigo-950/80 text-indigo-400 border-indigo-800/40',
+    icon: Grid,
+    accentColor: 'text-indigo-400',
+    activeBg: 'bg-indigo-600',
+    activeBorder: 'border-indigo-400',
+    glowColor: 'shadow-indigo-500/30',
+    description: 'BlockSuite AFFiNE-powered infinite 2D whiteboard canvas & dual-mode document editor with real-time Firestore sync and Nextcloud WebDAV backups.',
+    sopRule: 'Rule 2c: Map song sections, theological thesis, and harmonic flow onto the infinite canvas before final tracking.',
+    badge: 'BlockSuite',
+    shortcut: 'Alt+B'
   },
   {
     id: 'database',

@@ -15,7 +15,7 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
-import { Track, CompositionSession, SoundPreset, SessionSnapshot } from '../types';
+import { Track, CompositionSession, SoundPreset, SessionSnapshot, WhiteboardCanvasDoc } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { CANONICAL_SOUND_PRESETS } from '../data/canonicalSoundPresets';
 
@@ -605,6 +605,127 @@ export async function seedInitialPresets(presets: SoundPreset[]): Promise<void> 
     console.log(`Successfully seeded ${presets.length} sound presets into Firestore.`);
   } catch (err) {
     console.error('Failed to seed sound presets into Firestore:', err);
+  }
+}
+
+// ==============================================================================
+// BLOCKSUITE & INFINITE WHITEBOARD PERSISTENCE
+// ==============================================================================
+
+const WHITEBOARD_COLLECTION = 'whiteboard_canvases';
+const WHITEBOARD_CACHE_PREFIX = 'brickos_whiteboard_canvas_v1_';
+
+export const getLocalCachedWhiteboard = (trackId: string): WhiteboardCanvasDoc | null => {
+  try {
+    const raw = localStorage.getItem(`${WHITEBOARD_CACHE_PREFIX}${trackId}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (_) {}
+  return null;
+};
+
+export const setLocalCachedWhiteboard = (canvas: WhiteboardCanvasDoc) => {
+  try {
+    localStorage.setItem(`${WHITEBOARD_CACHE_PREFIX}${canvas.trackId}`, JSON.stringify(canvas));
+  } catch (err) {
+    console.warn('Failed to update local whiteboard cache:', err);
+  }
+};
+
+/**
+ * Load whiteboard canvas document for a track from Firestore.
+ */
+export async function loadWhiteboardFromFirestore(trackId: string): Promise<WhiteboardCanvasDoc | null> {
+  const cached = getLocalCachedWhiteboard(trackId);
+  if (!db) {
+    return cached;
+  }
+
+  try {
+    const docRef = doc(db, WHITEBOARD_COLLECTION, trackId);
+    const docSnap = await getDocFromFirestore(docRef);
+    if (docSnap && docSnap.exists()) {
+      const data = docSnap.data() as WhiteboardCanvasDoc;
+      const result = {
+        ...data,
+        id: data.id || docSnap.id
+      };
+      setLocalCachedWhiteboard(result);
+      return result;
+    }
+    return cached;
+  } catch (err) {
+    console.warn(`Failed to load whiteboard for track ${trackId} from Firestore, using cache:`, err);
+    return cached;
+  }
+}
+
+// Helper wrapper to get single doc
+async function getDocFromFirestore(docRef: any) {
+  try {
+    const { getDoc } = await import('firebase/firestore');
+    return await getDoc(docRef);
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Real-time subscription to whiteboard canvas changes for collaborative brainstorming.
+ */
+export function subscribeToFirestoreWhiteboard(
+  trackId: string,
+  onUpdate: (canvas: WhiteboardCanvasDoc) => void,
+  onError?: (err: Error) => void
+): Unsubscribe | null {
+  if (!db) return null;
+
+  try {
+    const docRef = doc(db, WHITEBOARD_COLLECTION, trackId);
+    return onSnapshot(
+      docRef,
+      docSnap => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as WhiteboardCanvasDoc;
+          const canvas: WhiteboardCanvasDoc = {
+            ...data,
+            id: data.id || docSnap.id
+          };
+          setLocalCachedWhiteboard(canvas);
+          onUpdate(canvas);
+        }
+      },
+      err => {
+        console.warn('Firestore whiteboard subscription error:', err);
+        if (onError) onError(err);
+      }
+    );
+  } catch (err: any) {
+    console.warn('Could not establish Firestore whiteboard subscription:', err);
+    return null;
+  }
+}
+
+/**
+ * Save whiteboard canvas document into Firestore.
+ */
+export async function saveWhiteboardToFirestore(canvas: WhiteboardCanvasDoc): Promise<void> {
+  // Update local cache immediately
+  setLocalCachedWhiteboard(canvas);
+
+  if (!db) return;
+
+  try {
+    const docRef = doc(db, WHITEBOARD_COLLECTION, canvas.trackId);
+    const payload = {
+      ...canvas,
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(docRef, payload, { merge: true });
+  } catch (err) {
+    console.error(`Failed to save whiteboard for track ${canvas.trackId} to Firestore:`, err);
+    throw err;
   }
 }
 

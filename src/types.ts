@@ -578,3 +578,69 @@ export interface SessionSnapshot {
   updatedAt: string;
 }
 
+// ==============================================================================
+// BLOCKSUITE & INFINITE WHITEBOARD DATA STRUCTURES
+// ==============================================================================
+
+export type BlockSuiteBlockType = 
+  | 'song_section'   // [Verse], [Chorus], [Bridge], [Pre-Chorus], [Outro], [Intro], [Drop]
+  | 'sticky_note'    // Quick brainstorm note / colorful sticky
+  | 'chords_prog'    // Musical chord chart / Camelot harmonic flow
+  | 'theology_sop'   // Nashville SOP & Throne Room rule check
+  | 'suno_prompt'    // AI Style & Audio synthesis block
+  | 'heading'        // Document heading (H1, H2, H3)
+  | 'paragraph'      // Freeform lyric or production text
+  | 'checklist';     // Task / milestone checklist block
+
+export interface BlockSuiteConnector {
+  id: string;
+  sourceBlockId: string;
+  targetBlockId: string;
+  label?: string;
+  color?: string;
+  style?: 'curved' | 'straight' | 'orthogonal';
+}
+
+export interface BlockSuiteBlock {
+  id: string;
+  type: BlockSuiteBlockType;
+  title: string;
+  subtitle?: string;
+  content: string;
+  x: number;
+  y: number;
+  width: number;
+  height?: number;
+  color: string;
+  tags?: string[];
+  chords?: string;
+  isLocked?: boolean;
+  orderIndex: number;
+  sectionTag?: string; // e.g. '[Verse 1]', '[Chorus]', '[Bridge]'
+  completed?: boolean;
+}
+
+export interface WhiteboardCanvasDoc {
+  id: string;
+  title: string;
+  trackId: string;
+  trackTitle: string;
+  ep?: string;
+  activeMode: 'edgeless' | 'page'; // BlockSuite isomorphic mode
+  blocks: BlockSuiteBlock[];
+  connectors: BlockSuiteConnector[];
+  viewport: {
+    panX: number;
+    panY: number;
+    zoom: number;
+  };
+  gridType: 'dots' | 'grid' | 'blueprint' | 'blank';
+  nextcloudSyncStatus?: {
+    lastExportTime?: string;
+    remotePath?: string;
+    status: 'synced' | 'pending' | 'idle' | 'failed';
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+

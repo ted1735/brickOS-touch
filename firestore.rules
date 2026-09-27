@@ -20,5 +20,9 @@ service cloud.firestore {
     match /session_snapshots/{snapshotId} {
       allow read, write: if true;
     }
+
+    match /whiteboard_canvases/{canvasId} {
+      allow read, write: if true;
+    }
   }
 }

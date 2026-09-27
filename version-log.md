@@ -120,3 +120,30 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Axiom 3: The <100 Character Lip-Sync Invariant (Viseme drift physical limit).
     - Axiom 4: Reference Face & Geometric Invariants (Seed pinning, negative shielding, 50mm portrait lens).
     - Axiom 5: Deterministic Evidence Table Gate (Auditable verification before completion).
+
+---
+
+## [v1.9] — BlockSuite Infinite Whiteboard, Firestore Sync & Nextcloud WebDAV Backups
+- **Date**: 2026-09-27
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v1.9`**.
+  - **BlockSuite Isomorphic Dual-Mode Editor Flow**:
+    - **Edgeless Mode (Infinite Whiteboard Canvas)**:
+      - 2D Infinite Canvas with smooth panning, continuous zoom (25% - 200%), zoom fit-to-screen, and multiple grid themes (AFFiNE dots, blueprint, graph grid, blank).
+      - Visual block palette: Song Sections ([Verse], [Chorus], [Bridge], [Pre-Chorus], [Outro]), Sticky Notes, Chord Charts, Theological SOP Audits, and Suno AI Prompt blocks.
+      - Dynamic visual SVG Bezier connectors with direction arrowheads linking song sections.
+      - Free card drag & drop repositioning, resizing, color coding, inline editing, and deletion.
+      - Real-time Canvas Radar / Minimap.
+    - **Page Mode (Structured Linear Document)**:
+      - Clean, linear, distraction-free document editor rendering the exact same underlying block tree with zero data loss.
+  - **Firebase Firestore Persistent Cloud Database**:
+    - Real-time bidirectional synchronization with collection `whiteboard_canvases`.
+    - Auto-save debounce with live Firestore connection status badge.
+    - Updated `firestore.rules` and deployed to user project.
+  - **Nextcloud WebDAV Export & Backup Engine**:
+    - One-click **"Backup to Nextcloud"** sending formatted Markdown and BlockSuite JSON to Nextcloud WebDAV (`/Music-Production/brainstorming/`).
+    - Standard browser download export options for `.md` and `.json`.
+  - **Deep Lyric Suite & Studio Integration**:
+    - One-click **"Compile to Lyrics"** compiling whiteboard blocks into active song lyrics.
+    - Added **"Open in Whiteboard"** quick launcher to the Lyric Suite header action bar.

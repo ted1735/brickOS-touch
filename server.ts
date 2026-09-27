@@ -791,6 +791,66 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
   }
 });
 
+// 13. Nextcloud WebDAV File Upload / Backup Endpoint (PUT)
+app.post('/api/nextcloud/upload-file', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      serverUrl = 'https://nextcloud.moyercloud.com',
+      username = 'ncted',
+      password = '',
+      filePath = '/remote.php/dav/files/ncted/Music-Production/brainstorming/canvas_backup.md',
+      content = '',
+      contentType = 'text/markdown; charset=utf-8'
+    } = req.body;
+
+    const cleanPath = filePath.startsWith('/') ? filePath : '/' + filePath;
+    const targetUrl = `${serverUrl.replace(/\/$/, '')}${cleanPath}`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+      'Content-Type': contentType,
+    };
+
+    if (password) {
+      const authString = Buffer.from(`${username}:${password}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    const response = await fetch(targetUrl, {
+      method: 'PUT',
+      headers,
+      body: content,
+    });
+
+    const latencyMs = Date.now() - startTime;
+    const isSuccess = response.status >= 200 && response.status < 300;
+
+    res.json({
+      success: isSuccess,
+      status: response.status,
+      statusText: response.statusText,
+      targetUrl,
+      filePath: cleanPath,
+      latencyMs,
+      message: isSuccess
+        ? `Successfully saved to Nextcloud WebDAV at ${cleanPath} (${latencyMs}ms)`
+        : response.status === 401
+        ? `Nextcloud authentication required (HTTP 401). Please verify your Nextcloud App Password.`
+        : `Nextcloud returned HTTP ${response.status}: ${response.statusText}`
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('Nextcloud upload error:', err);
+    res.status(500).json({
+      success: false,
+      status: 0,
+      latencyMs,
+      error: err.message || 'Nextcloud upload failed'
+    });
+  }
+});
+
 // Vite middleware integration
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
