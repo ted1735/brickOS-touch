@@ -166,16 +166,29 @@ export interface MixerTrack {
 
 export interface GeneratedImage {
   id: string;
+  name?: string;
   url: string;
   prompt: string;
   aspectRatio: string;
   timestamp: string;
   mode: 'create' | 'edit';
   trackTitle?: string;
+  trackId?: string;
+  linkedTrackIds?: string[]; // Linking the same asset to other catalog projects
+  tags?: string[];
+  notes?: string;
+  category?: string;
+  geminiEditHistory?: Array<{
+    timestamp: string;
+    instruction: string;
+    previousUrl?: string;
+    newUrl?: string;
+  }>;
 }
 
 export interface GeneratedVideo {
   id: string;
+  name?: string;
   operationName: string;
   prompt: string;
   aspectRatio: '16:9' | '9:16';
@@ -184,6 +197,34 @@ export interface GeneratedVideo {
   timestamp: string;
   modelUsed: string;
   trackTitle?: string;
+  trackId?: string;
+  linkedTrackIds?: string[];
+  tags?: string[];
+  notes?: string;
+  category?: string;
+}
+
+export type UniversalAssetType = 'image' | 'video' | 'stem' | 'nextcloud' | 'lyric_checkpoint';
+
+export interface UniversalAssetItem {
+  id: string;
+  type: UniversalAssetType;
+  name: string;
+  url?: string;
+  prompt?: string;
+  notes?: string;
+  trackId: string;
+  trackTitle?: string;
+  linkedTrackIds: string[];
+  category: string;
+  aspectRatio?: string;
+  fileSizeFormatted?: string;
+  format?: string;
+  bpm?: number;
+  key?: string;
+  tags: string[];
+  timestamp: string;
+  originalRef?: any;
 }
 
 export interface YouTubeSEOReport {
@@ -351,6 +392,9 @@ export interface NextcloudFolderAsset {
   previewAudioType?: 'vocal' | 'harmony' | 'instrumental' | 'drums' | 'sawtooth';
   previewImageUrl?: string;
   notes?: string;
+  name?: string;
+  linkedTrackIds?: string[]; // Cross-catalog project links
+  tags?: string[];
   lastSyncedAt: string;
 }
 

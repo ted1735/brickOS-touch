@@ -33,12 +33,16 @@ import {
   Folder,
   ShieldCheck,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  Edit3,
+  Link as LinkIcon,
+  Wand2
 } from 'lucide-react';
-import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo } from '../types';
+import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo, UniversalAssetItem } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studioNavigationData';
+import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
 
 interface SideNavigationPanelProps {
   tracks: Track[];
@@ -55,6 +59,12 @@ interface SideNavigationPanelProps {
   onTogglePinSession: (session: CompositionSession) => Promise<void>;
   generatedImages?: GeneratedImage[];
   generatedVideos?: GeneratedVideo[];
+  onUpdateImage?: (updatedImage: GeneratedImage) => void;
+  onDeleteImage?: (imageId: string) => void;
+  onAddImage?: (newImage: GeneratedImage) => void;
+  onUpdateVideo?: (updatedVideo: GeneratedVideo) => void;
+  onDeleteVideo?: (videoId: string) => void;
+  onAddVideo?: (newVideo: GeneratedVideo) => void;
   isDbSyncing?: boolean;
   activeTab: string;
   onNavigateToTab: (tab: any) => void;
@@ -81,6 +91,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   onTogglePinSession,
   generatedImages = [],
   generatedVideos = [],
+  onUpdateImage,
+  onDeleteImage,
+  onAddImage,
+  onUpdateVideo,
+  onDeleteVideo,
+  onAddVideo,
   isDbSyncing = false,
   activeTab,
   onNavigateToTab,
@@ -108,6 +124,172 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   // Asset Manager state
   const [assetFilter, setAssetFilter] = useState<'all' | 'stems' | 'lyrics' | 'visuals' | 'videos'>('all');
   const [playingStemId, setPlayingStemId] = useState<number | null>(null);
+
+  // Universal Asset Editor Modal State
+  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+  const [editingAssetItem, setEditingAssetItem] = useState<UniversalAssetItem | null>(null);
+  const [assetModalMode, setAssetModalMode] = useState<'edit' | 'add' | 'gemini'>('edit');
+
+  // Editable Stems state
+  const [customStems, setCustomStems] = useState<Array<{ id: number; name: string; type: string; size: string; format: string; trackId?: string; linkedTrackIds?: string[] }>>([
+    { id: 1, name: 'Lead Vocals (UVR5 Isolated)', type: 'vocal', size: '24.2 MB', format: 'WAV 24-bit/48kHz', trackId: selectedTrack.id },
+    { id: 2, name: 'Backing Harmonies & Ad-libs', type: 'harmony', size: '18.6 MB', format: 'WAV 24-bit/48kHz', trackId: selectedTrack.id },
+    { id: 3, name: 'Acoustic Guitar & Piano Bed', type: 'instrumental', size: '36.1 MB', format: 'WAV 24-bit/48kHz', trackId: selectedTrack.id },
+    { id: 4, name: 'Sub-Bass & Kick / Percussion', type: 'drums', size: '28.4 MB', format: 'WAV 24-bit/48kHz', trackId: selectedTrack.id }
+  ]);
+
+  const handleOpenEditImage = (img: GeneratedImage, mode: 'edit' | 'gemini' = 'edit') => {
+    const item: UniversalAssetItem = {
+      id: img.id,
+      type: 'image',
+      name: img.name || img.trackTitle || selectedTrack.title,
+      url: img.url,
+      prompt: img.prompt,
+      notes: img.notes || '',
+      trackId: img.trackId || selectedTrack.id,
+      trackTitle: img.trackTitle || selectedTrack.title,
+      linkedTrackIds: img.linkedTrackIds || [],
+      category: img.category || 'Cover Art',
+      aspectRatio: img.aspectRatio || '1:1',
+      tags: img.tags || ['Visual', 'Cover Art'],
+      timestamp: img.timestamp || new Date().toISOString().split('T')[0],
+      originalRef: img
+    };
+    setEditingAssetItem(item);
+    setAssetModalMode(mode);
+    setIsAssetModalOpen(true);
+  };
+
+  const handleOpenEditVideo = (vid: GeneratedVideo, mode: 'edit' | 'gemini' = 'edit') => {
+    const item: UniversalAssetItem = {
+      id: vid.id,
+      type: 'video',
+      name: vid.name || `Veo: ${vid.prompt.slice(0, 24)}...`,
+      url: vid.videoUrl || '',
+      prompt: vid.prompt,
+      notes: vid.notes || '',
+      trackId: vid.trackId || selectedTrack.id,
+      trackTitle: vid.trackTitle || selectedTrack.title,
+      linkedTrackIds: vid.linkedTrackIds || [],
+      category: vid.category || 'Veo Reel',
+      aspectRatio: vid.aspectRatio || '16:9',
+      tags: vid.tags || ['Veo', 'Video Reel'],
+      timestamp: vid.timestamp || new Date().toISOString().split('T')[0],
+      originalRef: vid
+    };
+    setEditingAssetItem(item);
+    setAssetModalMode(mode);
+    setIsAssetModalOpen(true);
+  };
+
+  const handleOpenEditStem = (stem: typeof customStems[0]) => {
+    const item: UniversalAssetItem = {
+      id: String(stem.id),
+      type: 'stem',
+      name: stem.name,
+      url: '',
+      prompt: '',
+      notes: `${stem.format} • ${stem.size}`,
+      trackId: stem.trackId || selectedTrack.id,
+      trackTitle: selectedTrack.title,
+      linkedTrackIds: stem.linkedTrackIds || [],
+      category: 'UVR5 Isolated Stem',
+      format: stem.format,
+      fileSizeFormatted: stem.size,
+      tags: ['Audio Stem', stem.type],
+      timestamp: new Date().toISOString().split('T')[0],
+      originalRef: stem
+    };
+    setEditingAssetItem(item);
+    setAssetModalMode('edit');
+    setIsAssetModalOpen(true);
+  };
+
+  const handleOpenAddAsset = (assetType: 'image' | 'video' | 'stem' = 'image') => {
+    const item: UniversalAssetItem = {
+      id: `asset-${assetType}-${Date.now()}`,
+      type: assetType,
+      name: assetType === 'image' ? 'New Studio Artwork' : assetType === 'video' ? 'New Veo Video Reel' : 'New Isolated Audio Stem',
+      url: '',
+      prompt: assetType === 'image' ? 'Cinematic album cover for sovereign faith album, weathered cedar wood, warm dramatic lighting, 8k photorealistic' : '',
+      notes: '',
+      trackId: selectedTrack.id,
+      trackTitle: selectedTrack.title,
+      linkedTrackIds: [],
+      category: assetType === 'image' ? 'Cover Art' : assetType === 'video' ? 'Video Reel' : 'UVR5 Stem',
+      aspectRatio: assetType === 'video' ? '16:9' : '1:1',
+      tags: [assetType.toUpperCase(), 'Studio'],
+      timestamp: new Date().toISOString().split('T')[0]
+    };
+    setEditingAssetItem(item);
+    setAssetModalMode('add');
+    setIsAssetModalOpen(true);
+  };
+
+  const handleSaveAssetFromModal = (updated: UniversalAssetItem) => {
+    if (updated.type === 'image') {
+      const imgObj: GeneratedImage = {
+        id: updated.id,
+        name: updated.name,
+        url: updated.url || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800',
+        prompt: updated.prompt || '',
+        aspectRatio: updated.aspectRatio || '1:1',
+        timestamp: updated.timestamp,
+        mode: 'create',
+        trackTitle: updated.trackTitle || selectedTrack.title,
+        trackId: updated.trackId,
+        linkedTrackIds: updated.linkedTrackIds,
+        tags: updated.tags,
+        notes: updated.notes,
+        category: updated.category
+      };
+      if (onUpdateImage && generatedImages.some(img => img.id === updated.id)) {
+        onUpdateImage(imgObj);
+      } else if (onAddImage) {
+        onAddImage(imgObj);
+      }
+    } else if (updated.type === 'video') {
+      const vidObj: GeneratedVideo = {
+        id: updated.id,
+        name: updated.name,
+        operationName: `op-${updated.id}`,
+        prompt: updated.prompt || '',
+        aspectRatio: (updated.aspectRatio === '9:16' ? '9:16' : '16:9'),
+        videoUrl: updated.url,
+        status: 'ready',
+        timestamp: updated.timestamp,
+        modelUsed: 'veo-3.1-generate-preview',
+        trackTitle: updated.trackTitle || selectedTrack.title,
+        trackId: updated.trackId,
+        linkedTrackIds: updated.linkedTrackIds,
+        tags: updated.tags,
+        notes: updated.notes
+      };
+      if (onUpdateVideo && generatedVideos.some(v => v.id === updated.id)) {
+        onUpdateVideo(vidObj);
+      } else if (onAddVideo) {
+        onAddVideo(vidObj);
+      }
+    } else if (updated.type === 'stem') {
+      setCustomStems(prev => {
+        const exists = prev.some(s => String(s.id) === updated.id);
+        if (exists) {
+          return prev.map(s => String(s.id) === updated.id ? { ...s, name: updated.name, format: updated.format || s.format, trackId: updated.trackId, linkedTrackIds: updated.linkedTrackIds } : s);
+        }
+        return [{ id: Date.now(), name: updated.name, type: 'vocal', size: updated.fileSizeFormatted || '24.0 MB', format: updated.format || 'WAV 24-bit/48kHz', trackId: updated.trackId, linkedTrackIds: updated.linkedTrackIds }, ...prev];
+      });
+    }
+  };
+
+  const handleDeleteAssetFromModal = (assetId: string) => {
+    if (onDeleteImage && generatedImages.some(img => img.id === assetId)) {
+      onDeleteImage(assetId);
+    } else if (onDeleteVideo && generatedVideos.some(v => v.id === assetId)) {
+      onDeleteVideo(assetId);
+    } else {
+      setCustomStems(prev => prev.filter(s => String(s.id) !== assetId));
+    }
+  };
 
   // Filtered tracks
   const filteredProjects = tracks.filter((t) => {
@@ -958,11 +1140,14 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         {/* ======================================================== */}
         {activePanelTab === 'assets' && (
           <div className="space-y-3.5">
-            <div className={`p-2.5 rounded-xl border space-y-1 ${
+            <div className={`p-2.5 rounded-xl border space-y-2 ${
               isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
             }`}>
               <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Active Track Assets</span>
+                <div className="flex items-center gap-1.5">
+                  <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className={`text-xs font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Track Asset Hub</span>
+                </div>
                 <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${
                   isDarkMode
                     ? 'text-cyan-400 bg-cyan-950/80 border-cyan-800/40'
@@ -972,6 +1157,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 </span>
               </div>
               <p className={`text-[10px] truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>{selectedTrack.title} ({selectedTrack.ep})</p>
+
+              {/* + Add New Asset Button */}
+              <button
+                type="button"
+                onClick={() => handleOpenAddAsset('image')}
+                className="w-full py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add New Studio Asset</span>
+              </button>
             </div>
 
             {/* Asset Category Filter Chips */}
@@ -998,7 +1193,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     : 'bg-slate-100 text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Stems (4)
+                Stems ({customStems.length})
               </button>
               <button
                 onClick={() => setAssetFilter('lyrics')}
@@ -1046,29 +1241,47 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 }`}>
                   <span className="flex items-center gap-1.5">
                     <Music className="w-3.5 h-3.5 text-cyan-500" />
-                    <span>UVR5 Isolated Stems (24-bit/48kHz)</span>
+                    <span>UVR5 Isolated Stems ({customStems.length})</span>
                   </span>
-                  <button
-                    onClick={() => onNavigateToTab('mixer')}
-                    className="text-[10px] text-cyan-500 hover:text-cyan-600 font-mono font-bold"
-                  >
-                    Open DAW →
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenAddAsset('stem')}
+                      className="px-2 py-0.5 rounded text-[10px] bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Add new audio stem"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      <span>Add</span>
+                    </button>
+                    <button
+                      onClick={() => onNavigateToTab('mixer')}
+                      className="text-[10px] text-cyan-500 hover:text-cyan-600 font-mono font-bold"
+                    >
+                      DAW →
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  {activeStems.map((stem) => (
+                  {customStems.map((stem) => (
                     <div
                       key={stem.id}
-                      className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
+                      className={`p-2 rounded-xl border flex items-center justify-between text-xs transition ${
                         isDarkMode
                           ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
                           : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
                       }`}
                     >
                       <div className="space-y-0.5 min-w-0 pr-2">
-                        <div className={`font-bold text-[11px] truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                          {stem.name}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`font-bold text-[11px] truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {stem.name}
+                          </span>
+                          {stem.linkedTrackIds && stem.linkedTrackIds.length > 0 && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950 border border-emerald-800/40 text-emerald-300 font-bold flex items-center gap-0.5">
+                              <LinkIcon className="w-2 h-2" />
+                              <span>+{stem.linkedTrackIds.length}</span>
+                            </span>
+                          )}
                         </div>
                         <div className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5">
                           <span>{stem.format}</span>
@@ -1092,22 +1305,26 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                         >
                           {playingStemId === stem.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                         </button>
-                        <a
-                          href="#download-stem"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setDownloadNotice(`Downloading ${stem.name} (${stem.format})`);
-                            setTimeout(() => setDownloadNotice(null), 3500);
-                          }}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditStem(stem)}
                           className={`p-1.5 rounded-lg transition ${
-                            isDarkMode
-                              ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                            isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                           }`}
-                          title="Download high-resolution stem WAV"
+                          title="Edit stem name, format, reassign or link to other projects"
                         >
-                          <Download className="w-3 h-3" />
-                        </a>
+                          <Edit3 className="w-3 h-3 text-indigo-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAssetFromModal(String(stem.id))}
+                          className={`p-1.5 rounded-lg transition ${
+                            isDarkMode ? 'bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400' : 'bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600'
+                          }`}
+                          title="Delete stem asset"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1188,26 +1405,115 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
                     <span>Visuals & Cover Art ({generatedImages.length})</span>
                   </span>
-                  <button
-                    onClick={() => onNavigateToTab('veo_visuals')}
-                    className="text-[10px] text-purple-500 hover:text-purple-600 font-mono font-bold"
-                  >
-                    Open Studio →
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenAddAsset('image')}
+                      className="px-2 py-0.5 rounded text-[10px] bg-purple-600 hover:bg-purple-500 text-white font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Add new visual artwork"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      <span>Add</span>
+                    </button>
+                    <button
+                      onClick={() => onNavigateToTab('veo_visuals')}
+                      className="text-[10px] text-purple-500 hover:text-purple-600 font-mono font-bold"
+                    >
+                      Open Studio →
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   {generatedImages.map((img) => (
                     <div
                       key={img.id}
-                      className={`group relative rounded-xl overflow-hidden border aspect-square ${
-                        isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-100'
+                      className={`group relative rounded-xl overflow-hidden border aspect-square cursor-pointer transition-all duration-200 ${
+                        isDarkMode
+                          ? 'border-slate-800 bg-slate-950 hover:border-purple-500/80 shadow-md ring-1 ring-purple-500/10'
+                          : 'border-slate-200 bg-slate-100 hover:border-purple-400 shadow-xs'
                       }`}
+                      onClick={() => handleOpenEditImage(img, 'edit')}
                     >
-                      <img src={img.url} alt={img.prompt} className="w-full h-full object-cover group-hover:scale-105 transition" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition p-2 flex flex-col justify-end text-[9px] text-white">
-                        <span className="font-bold truncate">{img.trackTitle || selectedTrack.title}</span>
-                        <span className="text-slate-300 font-mono">{img.aspectRatio}</span>
+                      <img src={img.url} alt={img.prompt} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+
+                      {/* Top badges */}
+                      <div className="absolute top-1.5 inset-x-1.5 flex items-center justify-between pointer-events-none z-10">
+                        <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-black/75 backdrop-blur-xs text-white border border-white/10">
+                          {img.aspectRatio || '1:1'}
+                        </span>
+                        {img.linkedTrackIds && img.linkedTrackIds.length > 0 && (
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-emerald-600/90 text-white flex items-center gap-0.5 shadow-sm border border-emerald-400/40">
+                            <LinkIcon className="w-2.5 h-2.5" />
+                            <span>+{img.linkedTrackIds.length}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Bottom static bar with track info and quick AI trigger */}
+                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-1.5 z-10 flex items-center justify-between text-[8px] text-white">
+                        <span className="font-mono font-bold text-indigo-300 truncate max-w-[70px]">
+                          {img.trackId || img.trackTitle || selectedTrack.id}
+                        </span>
+                        <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditImage(img, 'gemini')}
+                            className="p-1 rounded bg-purple-600/90 hover:bg-purple-500 text-amber-300 transition cursor-pointer shadow-xs"
+                            title="Ask Gemini to change this image"
+                          >
+                            <Sparkles className="w-2.5 h-2.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditImage(img, 'edit')}
+                            className="p-1 rounded bg-slate-800/90 hover:bg-slate-700 text-indigo-200 transition cursor-pointer"
+                            title="Edit all aspects / reassign / link"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Full hover action overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/20 opacity-0 group-hover:opacity-100 transition duration-200 p-2 flex flex-col justify-between text-[9px] text-white z-20">
+                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditImage(img, 'gemini')}
+                            className="p-1 rounded bg-purple-600 hover:bg-purple-500 text-white transition cursor-pointer shadow flex items-center gap-1 text-[8px] font-bold"
+                            title="Ask Gemini to change this image"
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-300" />
+                            <span>Ask Gemini</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditImage(img, 'edit')}
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer"
+                            title="Edit name, prompt, aspect ratio, reassign/link"
+                          >
+                            <Edit3 className="w-3 h-3 text-indigo-300" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAssetFromModal(img.id)}
+                            className="p-1 rounded bg-rose-600/80 hover:bg-rose-600 text-white transition cursor-pointer"
+                            title="Delete image asset"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        <div>
+                          <span className="font-bold truncate block text-[10px] text-white">
+                            {img.name || img.trackTitle || selectedTrack.title}
+                          </span>
+                          <span className="text-slate-300 text-[8px] line-clamp-2 opacity-90">{img.prompt}</span>
+                          <div className="flex items-center justify-between text-[8px] text-indigo-300 font-mono mt-1 pt-1 border-t border-white/10">
+                            <span>{img.trackTitle || selectedTrack.id}</span>
+                            <span className="text-amber-400 font-bold">Edit / AI →</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1227,12 +1533,22 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     <Video className="w-3.5 h-3.5 text-amber-500" />
                     <span>Veo 3 Video Generations ({generatedVideos.length})</span>
                   </span>
-                  <button
-                    onClick={() => onNavigateToTab('veo_visuals')}
-                    className="text-[10px] text-amber-500 hover:text-amber-600 font-mono font-bold"
-                  >
-                    Open Veo →
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenAddAsset('video')}
+                      className="px-2 py-0.5 rounded text-[10px] bg-amber-600 hover:bg-amber-500 text-white font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Add new video asset"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      <span>Add</span>
+                    </button>
+                    <button
+                      onClick={() => onNavigateToTab('veo_visuals')}
+                      className="text-[10px] text-amber-500 hover:text-amber-600 font-mono font-bold"
+                    >
+                      Open Veo →
+                    </button>
+                  </div>
                 </div>
 
                 {generatedVideos.length === 0 ? (
@@ -1253,21 +1569,50 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                         }`}
                       >
                         <div className="min-w-0 pr-2">
-                          <div className={`text-[10px] font-bold truncate max-w-[170px] ${
-                            isDarkMode ? 'text-white' : 'text-slate-900'
-                          }`}>{vid.prompt}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-bold truncate max-w-[150px] ${
+                              isDarkMode ? 'text-white' : 'text-slate-900'
+                            }`}>{vid.name || vid.prompt}</span>
+                            {vid.linkedTrackIds && vid.linkedTrackIds.length > 0 && (
+                              <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-950 border border-emerald-800/40 text-emerald-300 font-bold">
+                                +{vid.linkedTrackIds.length}
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[9px] font-mono text-amber-500">{vid.status.toUpperCase()} • {vid.aspectRatio}</div>
                         </div>
-                        <button
-                          onClick={() => onNavigateToTab('veo_visuals')}
-                          className={`px-2 py-1 rounded text-[9px] font-bold ${
-                            isDarkMode
-                              ? 'bg-slate-800 hover:bg-slate-700 text-amber-300'
-                              : 'bg-slate-100 hover:bg-slate-200 text-amber-800'
-                          }`}
-                        >
-                          View
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditVideo(vid, 'gemini')}
+                            className={`p-1.5 rounded text-[9px] font-bold ${
+                              isDarkMode ? 'bg-purple-950 text-amber-300 hover:bg-purple-900' : 'bg-purple-50 text-purple-800 hover:bg-purple-100'
+                            }`}
+                            title="Ask Gemini to change this video prompt"
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-400" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditVideo(vid, 'edit')}
+                            className={`p-1.5 rounded text-[9px] font-bold ${
+                              isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                            }`}
+                            title="Edit video metadata & reassign/link"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAssetFromModal(vid.id)}
+                            className={`p-1.5 rounded text-[9px] font-bold ${
+                              isDarkMode ? 'bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400' : 'bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600'
+                            }`}
+                            title="Delete video"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1378,6 +1723,21 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         )}
 
       </div>
+
+      {/* UNIVERSAL ASSET EDITOR MODAL (ADD, EDIT, ASK GEMINI, REASSIGN, LINK TO OTHER PROJECTS, DELETE) */}
+      <UniversalAssetEditorModal
+        isOpen={isAssetModalOpen}
+        onClose={() => setIsAssetModalOpen(false)}
+        asset={editingAssetItem}
+        mode={assetModalMode}
+        catalogTracks={tracks}
+        onSaveAsset={handleSaveAssetFromModal}
+        onDeleteAsset={handleDeleteAssetFromModal}
+        onDuplicateAsset={(newAsset) => {
+          handleSaveAssetFromModal(newAsset);
+        }}
+        isDarkMode={isDarkMode}
+      />
     </aside>
   );
 };

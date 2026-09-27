@@ -36,6 +36,22 @@ function stripBase64Header(dataStr: string): { cleanData: string; mimeType: stri
   return { mimeType: 'image/png', cleanData: dataStr };
 }
 
+async function resolveImageData(input: string, fallbackMime = 'image/png'): Promise<{ cleanData: string; mimeType: string }> {
+  if (!input) return { cleanData: '', mimeType: fallbackMime };
+  if (input.startsWith('http://') || input.startsWith('https://')) {
+    try {
+      const resp = await fetch(input);
+      const buffer = await resp.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString('base64');
+      const contentType = resp.headers.get('content-type') || fallbackMime;
+      return { cleanData: base64, mimeType: contentType };
+    } catch (e) {
+      console.warn('Failed to fetch image URL, proceeding as string:', e);
+    }
+  }
+  return stripBase64Header(input);
+}
+
 // 1. Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -328,12 +344,12 @@ app.post('/api/gemini/generate-image', async (req, res) => {
 
     let parts: any[] = [];
     if (mode === 'edit' && base64Image) {
-      const { cleanData, mimeType: parsedMime } = stripBase64Header(base64Image);
+      const { cleanData, mimeType: resolvedMime } = await resolveImageData(base64Image, mimeType);
       parts = [
         {
           inlineData: {
             data: cleanData,
-            mimeType: mimeType || parsedMime || 'image/png',
+            mimeType: resolvedMime || 'image/png',
           },
         },
         { text: prompt },
@@ -392,6 +408,148 @@ app.post('/api/gemini/generate-image', async (req, res) => {
   } catch (err: any) {
     console.error('Image generation error:', err);
     res.status(500).json({ error: err.message || 'Image generation failed' });
+  }
+});
+
+// 5b. Ask Gemini to Change Something about Any Asset (multimodal edit / prompt redesign / metadata enhancement)
+app.post('/api/gemini/modify-asset', async (req, res) => {
+  try {
+    const {
+      assetId,
+      assetType,
+      currentName,
+      currentPrompt,
+      currentUrl,
+      userInstruction,
+      aspectRatio = '1:1',
+      action = 'modify_image', // 'modify_image' | 'refine_prompt' | 'audit_theology'
+      targetTrackTitle,
+    } = req.body;
+
+    if (!userInstruction) {
+      return res.status(400).json({ error: 'Instruction for Gemini is required' });
+    }
+
+    const ai = getGenAI();
+
+    if (action === 'modify_image' && currentUrl) {
+      // 1. Image edit via gemini-3.1-flash-image
+      const { cleanData, mimeType: resolvedMime } = await resolveImageData(currentUrl);
+      const editPrompt = `Modify and elevate this visual asset according to these creative directives:\n${userInstruction}\n\nProject Context: ${targetTrackTitle || 'Studio Catalog Master'}. Maintain photorealistic album cover quality, dramatic lighting, and cinematic composition.`;
+
+      let imageBase64: string | null = null;
+      let outputMimeType = 'image/png';
+      let textDescription = '';
+
+      const modelCandidates = ['gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image'];
+      for (const candidate of modelCandidates) {
+        try {
+          const response = await ai.models.generateContent({
+            model: candidate,
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    data: cleanData,
+                    mimeType: resolvedMime,
+                  },
+                },
+                { text: editPrompt },
+              ],
+            },
+            config: {
+              imageConfig: {
+                aspectRatio: (['1:1', '9:16', '16:9', '4:3', '3:4'].includes(aspectRatio) ? aspectRatio : '1:1') as any,
+              },
+            },
+          });
+
+          const returnedParts = response.candidates?.[0]?.content?.parts || [];
+          for (const part of returnedParts) {
+            if (part.inlineData?.data) {
+              imageBase64 = part.inlineData.data;
+              outputMimeType = part.inlineData.mimeType || 'image/png';
+            } else if (part.text) {
+              textDescription += part.text + ' ';
+            }
+          }
+          if (imageBase64) break;
+        } catch (e) {
+          console.warn(`Model ${candidate} failed for image modification:`, e);
+        }
+      }
+
+      // Also get updated prompt / title from Gemini
+      let suggestedTitle = currentName || 'Refined Visual';
+      let refinedPrompt = currentPrompt || editPrompt;
+      try {
+        const textResponse = await ai.models.generateContent({
+          model: 'gemini-3.5-flash',
+          contents: `A music producer asked Gemini to change an album visual: "${userInstruction}".
+Original title: "${currentName || 'Album Visual'}"
+Original prompt: "${currentPrompt || ''}"
+Project: "${targetTrackTitle || ''}"
+
+Provide:
+1. An evocative 3-5 word Title
+2. A detailed 8k cinematic art prompt reflecting the modifications
+Return JSON only: { "title": "...", "prompt": "...", "tags": ["tag1", "tag2"] }`,
+          config: { responseMimeType: 'application/json' },
+        });
+        const parsed = JSON.parse(textResponse.text || '{}');
+        if (parsed.title) suggestedTitle = parsed.title;
+        if (parsed.prompt) refinedPrompt = parsed.prompt;
+      } catch (err) {
+        // Fallback
+      }
+
+      return res.json({
+        success: true,
+        newUrl: imageBase64 ? `data:${outputMimeType};base64,${imageBase64}` : null,
+        title: suggestedTitle,
+        prompt: refinedPrompt,
+        notes: textDescription.trim() || `Modified by Gemini: ${userInstruction}`,
+        explanation: `Gemini modified visual according to: "${userInstruction}"`,
+      });
+    } else {
+      // 2. Text / Metadata / Theological refinement
+      const systemInstruction = `You are the Lead Visual Designer and Music Asset Supervisor for brickOS Sovereign Records.
+The user wants to modify an asset for project: ${targetTrackTitle || 'Studio Catalog'}.
+User directive: ${userInstruction}
+Current asset name: ${currentName || 'Untitled'}
+Current prompt/notes: ${currentPrompt || ''}
+Asset type: ${assetType || 'asset'}
+
+Return actionable JSON:
+{
+  "title": "Evocative refined title",
+  "prompt": "Elevated 8k photorealistic prompt",
+  "notes": "Theological symbolism and visual breakdown",
+  "tags": ["tag1", "tag2", "tag3"]
+}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: `Process user modification request: ${userInstruction}`,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      return res.json({
+        success: true,
+        title: parsed.title || currentName,
+        prompt: parsed.prompt || currentPrompt,
+        notes: parsed.notes || '',
+        tags: parsed.tags || [],
+        explanation: `Gemini updated metadata according to: "${userInstruction}"`,
+      });
+    }
+  } catch (err: any) {
+    console.error('Modify asset error:', err);
+    res.status(500).json({ error: err.message || 'Asset modification failed' });
   }
 });
 

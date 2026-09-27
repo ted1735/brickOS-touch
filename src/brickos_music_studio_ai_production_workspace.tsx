@@ -54,9 +54,12 @@ import {
   Sun,
   Moon,
   HelpCircle,
-  Keyboard
+  Keyboard,
+  Edit3,
+  Trash2
 } from 'lucide-react';
-import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem } from './types';
+import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem, UniversalAssetItem } from './types';
+import { UniversalAssetEditorModal } from './components/UniversalAssetEditorModal';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
 import { audioMiniDaw } from './utils/audioEngine';
@@ -738,26 +741,76 @@ export default function BrickOSMusicStudioWorkspace() {
   const [imageMode, setImageMode] = useState<'create' | 'edit'>('create');
   const [imageModel, setImageModel] = useState('gemini-3.1-flash-image-preview');
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([
-    {
-      id: 'img-1',
-      url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
-      prompt: 'Weathered cedar woodshop with golden rays of morning light and sawdust motes, Nashville studio aesthetic',
-      aspectRatio: '1:1',
-      timestamp: '2026-09-06',
-      mode: 'create',
-      trackTitle: 'The Master\'s Hand'
-    },
-    {
-      id: 'img-2',
-      url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80',
-      prompt: 'Dark blue-collar truck cab at 5 AM in freezing rain, glowing amber dashboard dials',
-      aspectRatio: '9:16',
-      timestamp: '2026-09-06',
-      mode: 'create',
-      trackTitle: 'Meet Me Here'
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('brickos_studio_images');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
     }
-  ]);
+    return [
+      {
+        id: 'img-1',
+        name: "The Master's Hand (Nashville Studio)",
+        url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
+        prompt: 'Weathered cedar woodshop with golden rays of morning light and sawdust motes, Nashville studio aesthetic',
+        aspectRatio: '1:1',
+        timestamp: '2026-09-06',
+        mode: 'create',
+        trackTitle: 'The Master\'s Hand',
+        trackId: 'SOV-001',
+        category: 'Cover Art',
+        tags: ['Woodwork', 'Golden Hour', 'Nashville', 'Kintsugi']
+      },
+      {
+        id: 'img-2',
+        name: 'Meet Me Here (Blue-Collar Dawn)',
+        url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80',
+        prompt: 'Dark blue-collar truck cab at 5 AM in freezing rain, glowing amber dashboard dials',
+        aspectRatio: '9:16',
+        timestamp: '2026-09-06',
+        mode: 'create',
+        trackTitle: 'Meet Me Here',
+        trackId: 'SOV-002',
+        category: 'Social Reel Plate',
+        tags: ['Truck', 'Freezing Rain', 'Amber Glow', 'Blue-Collar']
+      }
+    ];
+  });
+
+  const handleUpdateImage = (updated: GeneratedImage) => {
+    setGeneratedImages(prev => {
+      const next = prev.map(img => (img.id === updated.id ? updated : img));
+      try {
+        localStorage.setItem('brickos_studio_images', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast(`Updated image asset "${updated.name || updated.trackTitle || 'Visual'}"`, 'success');
+  };
+
+  const handleDeleteImage = (id: string) => {
+    setGeneratedImages(prev => {
+      const next = prev.filter(img => img.id !== id);
+      try {
+        localStorage.setItem('brickos_studio_images', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast('Image asset deleted successfully', 'info');
+  };
+
+  const handleAddImage = (newImg: GeneratedImage) => {
+    setGeneratedImages(prev => {
+      const next = [newImg, ...prev];
+      try {
+        localStorage.setItem('brickos_studio_images', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast(`Added new asset "${newImg.name || 'Visual'}"`, 'success');
+  };
+
   const [selectedImageForEdit, setSelectedImageForEdit] = useState<string | null>(null);
   const [imageAnalysisPrompt, setImageAnalysisPrompt] = useState('Analyze this visual for theological depth, album cover hierarchy, and viral 3-second hook retention.');
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
@@ -769,7 +822,165 @@ export default function BrickOSMusicStudioWorkspace() {
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState<string>('idle');
-  const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
+  const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('brickos_studio_videos');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const handleUpdateVideo = (updated: GeneratedVideo) => {
+    setGeneratedVideos(prev => {
+      const next = prev.map(v => (v.id === updated.id ? updated : v));
+      try {
+        localStorage.setItem('brickos_studio_videos', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast(`Updated video asset "${updated.name || 'Veo Reel'}"`, 'success');
+  };
+
+  const handleDeleteVideo = (id: string) => {
+    setGeneratedVideos(prev => {
+      const next = prev.filter(v => v.id !== id);
+      try {
+        localStorage.setItem('brickos_studio_videos', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast('Video asset deleted', 'info');
+  };
+
+  const handleAddVideo = (newVid: GeneratedVideo) => {
+    setGeneratedVideos(prev => {
+      const next = [newVid, ...prev];
+      try {
+        localStorage.setItem('brickos_studio_videos', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast(`Added new video "${newVid.name || 'Veo Reel'}"`, 'success');
+  };
+
+  // Workspace Universal Asset Modal State
+  const [workspaceAssetModalOpen, setWorkspaceAssetModalOpen] = useState(false);
+  const [workspaceEditingAsset, setWorkspaceEditingAsset] = useState<UniversalAssetItem | null>(null);
+  const [workspaceAssetModalMode, setWorkspaceAssetModalMode] = useState<'edit' | 'add' | 'gemini'>('edit');
+
+  const handleOpenEditImageModal = (img: GeneratedImage, mode: 'edit' | 'gemini' = 'edit') => {
+    const item: UniversalAssetItem = {
+      id: img.id,
+      type: 'image',
+      name: img.name || img.trackTitle || selectedTrack.title,
+      url: img.url,
+      prompt: img.prompt,
+      notes: img.notes || '',
+      trackId: img.trackId || selectedTrack.id,
+      trackTitle: img.trackTitle || selectedTrack.title,
+      linkedTrackIds: img.linkedTrackIds || [],
+      category: img.category || 'Cover Art',
+      aspectRatio: img.aspectRatio || '1:1',
+      tags: img.tags || ['Visual', 'Cover Art'],
+      timestamp: img.timestamp || new Date().toISOString().split('T')[0],
+      originalRef: img
+    };
+    setWorkspaceEditingAsset(item);
+    setWorkspaceAssetModalMode(mode);
+    setWorkspaceAssetModalOpen(true);
+  };
+
+  const handleOpenEditVideoModal = (vid: GeneratedVideo, mode: 'edit' | 'gemini' = 'edit') => {
+    const item: UniversalAssetItem = {
+      id: vid.id,
+      type: 'video',
+      name: vid.name || `Veo: ${vid.prompt.slice(0, 24)}...`,
+      url: vid.videoUrl || '',
+      prompt: vid.prompt,
+      notes: vid.notes || '',
+      trackId: vid.trackId || selectedTrack.id,
+      trackTitle: vid.trackTitle || selectedTrack.title,
+      linkedTrackIds: vid.linkedTrackIds || [],
+      category: vid.category || 'Veo Reel',
+      aspectRatio: vid.aspectRatio || '16:9',
+      tags: vid.tags || ['Veo', 'Video Reel'],
+      timestamp: vid.timestamp || new Date().toISOString().split('T')[0],
+      originalRef: vid
+    };
+    setWorkspaceEditingAsset(item);
+    setWorkspaceAssetModalMode(mode);
+    setWorkspaceAssetModalOpen(true);
+  };
+
+  const handleOpenAddWorkspaceAsset = (type: 'image' | 'video' = 'image') => {
+    const item: UniversalAssetItem = {
+      id: `asset-${type}-${Date.now()}`,
+      type,
+      name: type === 'image' ? 'New Studio Artwork' : 'New Veo Reel',
+      url: '',
+      prompt: 'Cinematic album artwork for sovereign faith catalog, warm dramatic lighting, 8k photorealistic',
+      notes: '',
+      trackId: selectedTrack.id,
+      trackTitle: selectedTrack.title,
+      linkedTrackIds: [],
+      category: type === 'image' ? 'Cover Art' : 'Veo Reel',
+      aspectRatio: type === 'image' ? '1:1' : '16:9',
+      tags: [type.toUpperCase(), 'Studio'],
+      timestamp: new Date().toISOString().split('T')[0]
+    };
+    setWorkspaceEditingAsset(item);
+    setWorkspaceAssetModalMode('add');
+    setWorkspaceAssetModalOpen(true);
+  };
+
+  const handleSaveWorkspaceAsset = (updated: UniversalAssetItem) => {
+    if (updated.type === 'image') {
+      const imgObj: GeneratedImage = {
+        id: updated.id,
+        name: updated.name,
+        url: updated.url || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800',
+        prompt: updated.prompt || '',
+        aspectRatio: updated.aspectRatio || '1:1',
+        timestamp: updated.timestamp,
+        mode: 'create',
+        trackTitle: updated.trackTitle || selectedTrack.title,
+        trackId: updated.trackId,
+        linkedTrackIds: updated.linkedTrackIds,
+        tags: updated.tags,
+        notes: updated.notes,
+        category: updated.category
+      };
+      if (generatedImages.some(img => img.id === updated.id)) {
+        handleUpdateImage(imgObj);
+      } else {
+        handleAddImage(imgObj);
+      }
+    } else if (updated.type === 'video') {
+      const vidObj: GeneratedVideo = {
+        id: updated.id,
+        name: updated.name,
+        operationName: `op-${updated.id}`,
+        prompt: updated.prompt || '',
+        aspectRatio: (updated.aspectRatio === '9:16' ? '9:16' : '16:9'),
+        videoUrl: updated.url,
+        status: 'ready',
+        timestamp: updated.timestamp,
+        modelUsed: 'veo-3.1-generate-preview',
+        trackTitle: updated.trackTitle || selectedTrack.title,
+        trackId: updated.trackId,
+        linkedTrackIds: updated.linkedTrackIds,
+        tags: updated.tags,
+        notes: updated.notes
+      };
+      if (generatedVideos.some(v => v.id === updated.id)) {
+        handleUpdateVideo(vidObj);
+      } else {
+        handleAddVideo(vidObj);
+      }
+    }
+  };
   const [videoAnalysisPrompt, setVideoAnalysisPrompt] = useState('Audit this video clip for 3-second hook velocity, lighting chiaroscuro, and 70% retention completion likelihood.');
   const [isVideoAnalyzing, setIsVideoAnalyzing] = useState(false);
   const [videoAnalysisResult, setVideoAnalysisResult] = useState<string | null>(null);
@@ -1544,6 +1755,12 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 onTogglePinSession={handleTogglePinSession}
                 generatedImages={generatedImages}
                 generatedVideos={generatedVideos}
+                onUpdateImage={handleUpdateImage}
+                onDeleteImage={handleDeleteImage}
+                onAddImage={handleAddImage}
+                onUpdateVideo={handleUpdateVideo}
+                onDeleteVideo={handleDeleteVideo}
+                onAddVideo={handleAddVideo}
                 isDbSyncing={isDbSyncing}
                 activeTab={activeTab}
                 onNavigateToTab={setActiveTab}
@@ -2321,10 +2538,30 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
                 {/* GALLERY OF GENERATED IMAGES & VIDEOS */}
                 <div className="space-y-4 pt-2">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-400" />
-                    <span>Visual Assets & Generated Renders ({generatedImages.length + generatedVideos.length})</span>
-                  </h4>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
+                      <span>Visual Assets & Generated Renders ({generatedImages.length + generatedVideos.length})</span>
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddWorkspaceAsset('image')}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>+ Add Image</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddWorkspaceAsset('video')}
+                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>+ Add Video</span>
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     {/* Images */}
@@ -2335,25 +2572,59 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                           <div className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-mono text-white font-bold">
                             {img.aspectRatio}
                           </div>
+                          {img.linkedTrackIds && img.linkedTrackIds.length > 0 && (
+                            <div className="absolute top-2 left-2 bg-emerald-600 text-white px-1.5 py-0.2 rounded text-[8px] font-bold">
+                              +{img.linkedTrackIds.length} linked
+                            </div>
+                          )}
                         </div>
                         <div className="p-3 space-y-2 flex-1 flex flex-col justify-between text-xs">
-                          <p className="text-[11px] text-slate-300 line-clamp-2">{img.prompt}</p>
-                          <div className="flex items-center justify-between gap-1 pt-2 border-t border-slate-800">
-                            <button
-                              onClick={() => {
-                                setSelectedImageForEdit(img.url);
-                                setImageMode('edit');
-                              }}
-                              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"
-                            >
-                              Edit / Animate
-                            </button>
-                            <button
-                              onClick={() => handleAnalyzeImage(img.url)}
-                              className="text-[10px] text-purple-400 hover:text-purple-300 font-bold"
-                            >
-                              Analyze (Pro)
-                            </button>
+                          <div>
+                            <div className="font-bold text-white text-xs truncate">{img.name || img.trackTitle || 'Studio Art'}</div>
+                            <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{img.prompt}</p>
+                          </div>
+                          <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                            <div className="flex items-center justify-between gap-1">
+                              <button
+                                onClick={() => {
+                                  setSelectedImageForEdit(img.url);
+                                  setImageMode('edit');
+                                }}
+                                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"
+                              >
+                                Animate
+                              </button>
+                              <button
+                                onClick={() => handleAnalyzeImage(img.url)}
+                                className="text-[10px] text-purple-400 hover:text-purple-300 font-bold"
+                              >
+                                Analyze (Pro)
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
+                              <button
+                                onClick={() => handleOpenEditImageModal(img, 'gemini')}
+                                className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800/40 text-[9px] font-bold flex items-center gap-1"
+                                title="Ask Gemini to change this image"
+                              >
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>AI Edit</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenEditImageModal(img, 'edit')}
+                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold"
+                                title="Edit all aspects / reassign / link"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteImage(img.id)}
+                                className="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-[9px]"
+                                title="Delete image"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2375,9 +2646,35 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                             Veo {vid.aspectRatio}
                           </div>
                         </div>
-                        <div className="p-3 text-xs space-y-1">
-                          <p className="text-[11px] text-slate-300 line-clamp-2">{vid.prompt}</p>
-                          <span className="text-[9px] font-mono text-slate-500">{vid.status.toUpperCase()}</span>
+                        <div className="p-3 text-xs space-y-2 flex-1 flex flex-col justify-between">
+                          <div>
+                            <div className="font-bold text-white text-xs truncate">{vid.name || 'Veo Reel'}</div>
+                            <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{vid.prompt}</p>
+                          </div>
+                          <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800">
+                            <button
+                              onClick={() => handleOpenEditVideoModal(vid, 'gemini')}
+                              className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800/40 text-[9px] font-bold flex items-center gap-1"
+                              title="Ask Gemini to change this video prompt"
+                            >
+                              <Sparkles className="w-2.5 h-2.5" />
+                              <span>AI Edit</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditVideoModal(vid, 'edit')}
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold"
+                              title="Edit all aspects / reassign / link"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteVideo(vid.id)}
+                              className="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-[9px]"
+                              title="Delete video"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -3137,6 +3434,30 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onNextTrack={handleNextTrack}
         onOpenMiniDaw={() => setActiveTab('mixer')}
         onResetAudio={handleResetAudioEngine}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* WORKSPACE UNIVERSAL ASSET EDITOR MODAL: ADD, EDIT, ASK GEMINI, REASSIGN, LINK, DELETE */}
+      <UniversalAssetEditorModal
+        isOpen={workspaceAssetModalOpen}
+        onClose={() => setWorkspaceAssetModalOpen(false)}
+        asset={workspaceEditingAsset}
+        mode={workspaceAssetModalMode}
+        catalogTracks={tracks}
+        onSaveAsset={(updated) => {
+          handleSaveWorkspaceAsset(updated);
+        }}
+        onDeleteAsset={(id) => {
+          if (workspaceEditingAsset?.type === 'video') {
+            handleDeleteVideo(id);
+          } else {
+            handleDeleteImage(id);
+          }
+          setWorkspaceAssetModalOpen(false);
+        }}
+        onDuplicateAsset={(dup) => {
+          handleSaveWorkspaceAsset(dup);
+        }}
         isDarkMode={isDarkMode}
       />
 

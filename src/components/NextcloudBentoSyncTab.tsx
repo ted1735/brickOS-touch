@@ -33,9 +33,13 @@ import {
   Info,
   Clock,
   Eye,
-  Settings
+  Settings,
+  Edit3,
+  Trash2,
+  Plus
 } from 'lucide-react';
-import { Track, NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig } from '../types';
+import { Track, NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig, UniversalAssetItem } from '../types';
+import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
 import {
   getSavedNextcloudAssets,
   saveNextcloudAssets,
@@ -93,6 +97,14 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
+  // Folder View Width Mode: 'slim' (-65% width reduction), 'compact' (33%), 'balanced' (50%)
+  const [folderWidthMode, setFolderWidthMode] = useState<'slim' | 'compact' | 'balanced'>('slim');
+
+  // Universal Asset Editor Modal State
+  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+  const [modalAssetItem, setModalAssetItem] = useState<UniversalAssetItem | null>(null);
+  const [assetModalMode, setAssetModalMode] = useState<'edit' | 'add' | 'gemini'>('edit');
+
   // Audio Stem Preview
   const [playingAssetId, setPlayingAssetId] = useState<string | null>(null);
   const [copiedPill, setCopiedPill] = useState('');
@@ -113,6 +125,131 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
     }
     setCopiedPill(`Copied ${label}!`);
     setTimeout(() => setCopiedPill(''), 3000);
+  };
+
+  const handleOpenAddAssetModal = (defaultCategory?: NextcloudAssetCategory) => {
+    const cat = defaultCategory || (activeFilter === 'STEMS' ? 'UVR5_VOCAL_STEM' : activeFilter === 'VISUALS' ? 'VISUAL_ARTWORK' : 'MASTER_AUDIO');
+    const newId = `nc-asset-${Date.now()}`;
+    const newItem: UniversalAssetItem = {
+      id: newId,
+      type: 'nextcloud',
+      name: 'New Production Asset ' + new Date().toLocaleTimeString(),
+      url: '',
+      prompt: '',
+      notes: '',
+      trackId: selectedTrack.id,
+      trackTitle: selectedTrack.title,
+      linkedTrackIds: [],
+      category: cat,
+      tags: ['Nextcloud', cat.replace(/_/g, ' ')],
+      timestamp: new Date().toISOString().split('T')[0]
+    };
+    setModalAssetItem(newItem);
+    setAssetModalMode('add');
+    setIsAssetModalOpen(true);
+  };
+
+  const handleOpenEditAssetModal = (asset: NextcloudFolderAsset, mode: 'edit' | 'gemini' = 'edit') => {
+    const item: UniversalAssetItem = {
+      id: asset.id,
+      type: 'nextcloud',
+      name: asset.filename,
+      url: asset.previewImageUrl || asset.shareUrl || '',
+      prompt: asset.notes || '',
+      notes: asset.notes || '',
+      trackId: asset.matchedTrackId || selectedTrack.id,
+      trackTitle: asset.matchedTrackTitle || selectedTrack.title,
+      linkedTrackIds: asset.linkedTrackIds || [],
+      category: asset.category,
+      bpm: asset.bpm,
+      key: asset.key,
+      fileSizeFormatted: asset.fileSizeFormatted,
+      tags: asset.tags || ['Nextcloud', asset.category.replace(/_/g, ' ')],
+      timestamp: asset.lastSyncedAt || new Date().toISOString().split('T')[0],
+      originalRef: asset
+    };
+    setModalAssetItem(item);
+    setAssetModalMode(mode);
+    setIsAssetModalOpen(true);
+  };
+
+  const handleDeleteAsset = (assetId: string) => {
+    setAssets(prev => prev.filter(a => a.id !== assetId));
+    if (selectedAssetId === assetId) {
+      setSelectedAssetId(null);
+    }
+    setCopiedPill('Asset deleted from /Music-Production');
+    setTimeout(() => setCopiedPill(''), 3000);
+  };
+
+  const handleSaveAssetFromModal = (updated: UniversalAssetItem) => {
+    const track = tracks.find(t => t.id === updated.trackId);
+    setAssets(prev => {
+      const exists = prev.some(a => a.id === updated.id);
+      if (exists) {
+        return prev.map(a => {
+          if (a.id === updated.id) {
+            return {
+              ...a,
+              filename: updated.name || a.filename,
+              category: (updated.category as NextcloudAssetCategory) || a.category,
+              matchedTrackId: updated.trackId || undefined,
+              matchedTrackTitle: track?.title,
+              isMatched: !!updated.trackId,
+              matchConfidence: updated.trackId ? 100 : 0,
+              linkedTrackIds: updated.linkedTrackIds,
+              tags: updated.tags,
+              notes: updated.notes || updated.prompt || a.notes,
+              bpm: updated.bpm || a.bpm,
+              key: updated.key || a.key,
+              previewImageUrl: updated.url || a.previewImageUrl
+            };
+          }
+          return a;
+        });
+      } else {
+        const newAsset: NextcloudFolderAsset = {
+          id: updated.id,
+          folderId: '207332',
+          filename: updated.name,
+          mimeType: updated.type === 'image' ? 'image/png' : updated.type === 'video' ? 'video/mp4' : 'audio/wav',
+          webdavPath: `/remote.php/dav/files/${config.username}/Music-Production/${updated.name}`,
+          fileSizeFormatted: updated.fileSizeFormatted || '18.4 MB',
+          fileSizeBytes: 18400000,
+          category: (updated.category as NextcloudAssetCategory) || 'MASTER_AUDIO',
+          lastSyncedAt: updated.timestamp || new Date().toISOString().split('T')[0],
+          isMatched: !!updated.trackId,
+          matchConfidence: updated.trackId ? 100 : 0,
+          matchedTrackId: updated.trackId || undefined,
+          matchedTrackTitle: track?.title,
+          linkedTrackIds: updated.linkedTrackIds,
+          tags: updated.tags,
+          notes: updated.notes || updated.prompt || '',
+          bpm: updated.bpm,
+          key: updated.key,
+          shareUrl: `https://nextcloud.moyercloud.com/s/${updated.id}`
+        };
+        return [newAsset, ...prev];
+      }
+    });
+    setCopiedPill(`Saved asset "${updated.name}"`);
+    setTimeout(() => setCopiedPill(''), 3000);
+  };
+
+  const handleToggleLinkTrack = (assetId: string, trackIdToToggle: string) => {
+    setAssets(prev =>
+      prev.map(a => {
+        if (a.id === assetId) {
+          const currentLinks = a.linkedTrackIds || [];
+          const isLinked = currentLinks.includes(trackIdToToggle);
+          const nextLinks = isLinked
+            ? currentLinks.filter(id => id !== trackIdToToggle)
+            : [...currentLinks, trackIdToToggle];
+          return { ...a, linkedTrackIds: nextLinks };
+        }
+        return a;
+      })
+    );
   };
 
   // 1. Live WebDAV Connection Test
@@ -740,11 +877,71 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
 
       {/* MAIN FOLDER CONTENTS VIEW (FILES INSIDE /Music-Production) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: File Explorer & Audio Audition List (Col 7) */}
-        <div className="lg:col-span-7 space-y-2.5">
-          <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-mono">
-            <span>Showing {filteredAssets.length} of {totalCount} files in /Music-Production</span>
-            <span>Active Project: <strong className={isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}>{selectedTrack.id} ({selectedTrack.title})</strong></span>
+        {/* Left: File Explorer & Audio Audition List - Width controlled by folderWidthMode */}
+        <div className={`${
+          folderWidthMode === 'slim'
+            ? 'lg:col-span-3 space-y-2'
+            : folderWidthMode === 'compact'
+            ? 'lg:col-span-4 space-y-2'
+            : 'lg:col-span-6 space-y-2.5'
+        }`}>
+          {/* Folder View Toolbar: Width Selector & Add Asset */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 text-xs">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono text-slate-400 text-[11px] font-bold">
+                {filteredAssets.length} Files
+              </span>
+              <span className="text-slate-600">•</span>
+              <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[9px] font-mono">
+                <span className="text-slate-500 px-1">Width:</span>
+                <button
+                  type="button"
+                  onClick={() => setFolderWidthMode('slim')}
+                  className={`px-1.5 py-0.5 rounded font-bold transition cursor-pointer ${
+                    folderWidthMode === 'slim'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Slim view - reduces folder width by 65% for maximized workspace"
+                >
+                  Slim (-65%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFolderWidthMode('compact')}
+                  className={`px-1.5 py-0.5 rounded font-bold transition cursor-pointer ${
+                    folderWidthMode === 'compact'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Compact view - 33% width"
+                >
+                  Compact
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFolderWidthMode('balanced')}
+                  className={`px-1.5 py-0.5 rounded font-bold transition cursor-pointer ${
+                    folderWidthMode === 'balanced'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Balanced view - 50% split"
+                >
+                  50/50
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleOpenAddAssetModal()}
+              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-sm shadow-emerald-950/40"
+              title="Add new asset to /Music-Production"
+            >
+              <Plus className="w-3 h-3" />
+              <span>+ Add Asset</span>
+            </button>
           </div>
 
           {filteredAssets.length === 0 ? (
@@ -755,7 +952,15 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
               <p className={`text-sm font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                 No files found in /Music-Production matching filter
               </p>
-              <p className="text-xs text-slate-400">Click "All Categories" or clear the search query.</p>
+              <p className="text-xs text-slate-400">Click "All Categories" or clear search query.</p>
+              <button
+                type="button"
+                onClick={() => handleOpenAddAssetModal()}
+                className="mt-2 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add First Asset to /Music-Production</span>
+              </button>
             </div>
           ) : (
             filteredAssets.map(asset => {
@@ -774,19 +979,19 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                 <div
                   key={asset.id}
                   onClick={() => setSelectedAssetId(asset.id)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                     isSelected
-                      ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md'
+                      ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md bg-indigo-950/30'
                       : isDarkMode
                       ? 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
                       : 'bg-white border-slate-200 hover:border-indigo-300 shadow-2xs'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0">
                       {/* File Icon */}
                       <div
-                        className={`p-2.5 rounded-xl flex-shrink-0 ${
+                        className={`p-1.5 rounded-lg flex-shrink-0 mt-0.5 ${
                           asset.category === 'MASTER_AUDIO'
                             ? isDarkMode ? 'bg-cyan-950 text-cyan-400 border border-cyan-800/40' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
                             : asset.category === 'UVR5_VOCAL_STEM'
@@ -803,136 +1008,126 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                         }`}
                       >
                         {isAudio ? (
-                          <Music className="w-4 h-4" />
+                          <Music className="w-3.5 h-3.5" />
                         ) : asset.category === 'VISUAL_ARTWORK' ? (
-                          <ImageIcon className="w-4 h-4" />
+                          <ImageIcon className="w-3.5 h-3.5" />
                         ) : asset.category === 'VIDEO_REEL' ? (
-                          <Video className="w-4 h-4" />
+                          <Video className="w-3.5 h-3.5" />
                         ) : (
-                          <FileText className="w-4 h-4" />
+                          <FileText className="w-3.5 h-3.5" />
                         )}
                       </div>
 
-                      <div className="min-w-0 space-y-1">
-                        <div className={`font-bold text-xs truncate max-w-sm sm:max-w-md ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      <div className="min-w-0 space-y-0.5">
+                        <div className={`font-bold text-[11px] truncate leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`} title={asset.filename}>
                           {asset.filename}
                         </div>
 
-                        {/* Relative Path inside /Music-Production */}
-                        <div className="text-[10px] font-mono text-slate-400 truncate flex items-center gap-1">
-                          <Folder className="w-2.5 h-2.5 text-indigo-400 shrink-0" />
-                          <span>/Music-Production/{relativeDisplayPath}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono text-slate-400 pt-0.5">
-                          <span>{asset.fileSizeFormatted}</span>
-                          <span>•</span>
+                        <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-mono text-slate-400">
                           <span
-                            className={`px-1.5 py-0.2 rounded font-bold uppercase text-[9px] ${
+                            className={`px-1 rounded font-bold uppercase text-[8px] ${
                               asset.category === 'MASTER_AUDIO'
-                                ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300'
+                                ? 'bg-cyan-500/20 text-cyan-400'
                                 : asset.category === 'UVR5_VOCAL_STEM'
-                                ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300'
+                                ? 'bg-purple-500/20 text-purple-400'
                                 : asset.category === 'INSTRUMENTAL_STEM'
-                                ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300'
+                                ? 'bg-indigo-500/20 text-indigo-400'
                                 : asset.category === 'VISUAL_ARTWORK'
-                                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300'
+                                ? 'bg-amber-500/20 text-amber-400'
                                 : asset.category === 'VIDEO_REEL'
-                                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300'
-                                : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
+                                ? 'bg-rose-500/20 text-rose-400'
+                                : 'bg-emerald-500/20 text-emerald-400'
                             }`}
                           >
                             {asset.category.replace(/_/g, ' ')}
                           </span>
 
+                          <span>{asset.fileSizeFormatted}</span>
+
                           {asset.bpm && (
-                            <>
-                              <span>•</span>
-                              <span className="text-cyan-500 font-bold">{asset.bpm} BPM</span>
-                            </>
+                            <span className="text-cyan-400 font-bold">{asset.bpm}BPM</span>
                           )}
                           {asset.key && (
-                            <>
-                              <span>•</span>
-                              <span className="text-amber-500 font-bold">{asset.key}</span>
-                            </>
+                            <span className="text-amber-400 font-bold">{asset.key}</span>
                           )}
                         </div>
 
-                        {/* Matched Track Indicator */}
-                        <div className="pt-0.5 flex items-center gap-1.5 flex-wrap">
+                        {/* Matched & Linked Indicator */}
+                        <div className="flex items-center gap-1 flex-wrap pt-0.5">
                           {asset.isMatched && asset.matchedTrackId ? (
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                              isDarkMode
-                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/40'
-                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            }`}>
-                              <CheckCircle className="w-3 h-3 text-emerald-500" />
-                              <span>Matched: {asset.matchedTrackId} ({asset.matchedTrackTitle})</span>
-                              <span className="text-emerald-600 font-mono">[{asset.matchConfidence}%]</span>
+                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">
+                              <CheckCircle className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>{asset.matchedTrackId}</span>
                             </span>
                           ) : (
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                              isDarkMode
-                                ? 'bg-amber-950/80 text-amber-300 border-amber-800/40'
-                                : 'bg-amber-50 text-amber-800 border-amber-200'
-                            }`}>
-                              <AlertCircle className="w-3 h-3 text-amber-500" />
-                              <span>Suggest: {asset.suggestedTrackId || 'None'}</span>
-                              {asset.matchConfidence > 0 && (
-                                <span className="text-amber-600 font-mono">[{asset.matchConfidence}%]</span>
-                              )}
+                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/40">
+                              <span>Unlinked</span>
+                            </span>
+                          )}
+
+                          {asset.linkedTrackIds && asset.linkedTrackIds.length > 0 && (
+                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/40" title={`Linked to ${asset.linkedTrackIds.join(', ')}`}>
+                              <LinkIcon className="w-2 h-2 text-indigo-400" />
+                              <span>+{asset.linkedTrackIds.length}</span>
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Quick Row Actions */}
-                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    {/* Quick Row Actions: Edit, Ask Gemini, Audition, Delete */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       {isAudio && (
                         <button
                           type="button"
                           onClick={() => handleToggleAudition(asset)}
-                          className={`p-2 rounded-xl transition cursor-pointer ${
+                          className={`p-1 rounded-md transition cursor-pointer ${
                             playingAssetId === asset.id
                               ? 'bg-cyan-500 text-slate-950 font-bold'
                               : isDarkMode
                               ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300'
-                              : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200'
+                              : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700'
                           }`}
-                          title={playingAssetId === asset.id ? 'Pause Preview' : 'Audition Stem Preview'}
+                          title={playingAssetId === asset.id ? 'Pause Preview' : 'Audition Stem'}
                         >
-                          {playingAssetId === asset.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          {playingAssetId === asset.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                         </button>
                       )}
 
                       <button
                         type="button"
-                        onClick={() => copyText(asset.webdavPath, 'WebDAV Path')}
-                        className={`p-2 rounded-xl transition cursor-pointer ${
-                          isDarkMode
-                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                        }`}
-                        title="Copy WebDAV Path"
+                        onClick={() => handleOpenEditAssetModal(asset, 'gemini')}
+                        className="p-1 rounded-md bg-purple-950/80 hover:bg-purple-900 border border-purple-800/40 text-amber-300 hover:text-amber-200 transition cursor-pointer"
+                        title="Ask Gemini to change this asset"
                       >
-                        <Copy className="w-3.5 h-3.5" />
+                        <Sparkles className="w-3 h-3" />
                       </button>
 
-                      <a
-                        href={asset.shareUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`p-2 rounded-xl transition cursor-pointer ${
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditAssetModal(asset, 'edit')}
+                        className={`p-1 rounded-md transition cursor-pointer ${
                           isDarkMode
                             ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
                             : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                         }`}
-                        title="Open file directly in Nextcloud /Music-Production"
+                        title="Edit all aspects of this asset"
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                        <Edit3 className="w-3 h-3 text-indigo-400" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAsset(asset.id)}
+                        className={`p-1 rounded-md transition cursor-pointer ${
+                          isDarkMode
+                            ? 'bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400'
+                            : 'bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600'
+                        }`}
+                        title="Delete asset"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -941,51 +1136,285 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
           )}
         </div>
 
-        {/* Right: File Inspector & Track Linker Workbench (Col 5) */}
-        <div className="lg:col-span-5">
+        {/* Right: File Inspector & Deep Asset Editor Workbench - Expanded width */}
+        <div className={`${
+          folderWidthMode === 'slim'
+            ? 'lg:col-span-9'
+            : folderWidthMode === 'compact'
+            ? 'lg:col-span-8'
+            : 'lg:col-span-6'
+        }`}>
           {currentAsset ? (
             <div
-              className={`p-4 sm:p-5 rounded-3xl border sticky top-20 space-y-3.5 ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
+              className={`p-4 sm:p-6 rounded-3xl border sticky top-20 space-y-4 ${
+                isDarkMode ? 'bg-slate-900 border-slate-800 shadow-xl' : 'bg-white border-slate-200 shadow-sm'
               }`}
             >
-              <div className={`flex items-center justify-between pb-2.5 border-b ${
-                isDarkMode ? 'border-slate-800/60' : 'border-slate-200'
+              {/* Header with Quick Actions */}
+              <div className={`flex flex-wrap items-center justify-between gap-3 pb-3 border-b ${
+                isDarkMode ? 'border-slate-800/80' : 'border-slate-200'
               }`}>
                 <div className="flex items-center gap-2 min-w-0">
                   <Tag className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                  <h3 className={`text-xs font-bold uppercase tracking-wider truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    /Music-Production File Details
-                  </h3>
+                  <div>
+                    <h3 className={`text-sm font-black uppercase tracking-wider truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {currentAsset.filename}
+                    </h3>
+                    <div className="text-[10px] font-mono text-slate-400">
+                      ID: {currentAsset.id} • {currentAsset.fileSizeFormatted}
+                    </div>
+                  </div>
                 </div>
-                <span className="text-[10px] font-mono text-slate-400">ID: {currentAsset.id}</span>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditAssetModal(currentAsset, 'gemini')}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-purple-950/40 cursor-pointer"
+                    title="Ask Gemini to change, refine, or enhance this asset"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Ask Gemini to Change</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditAssetModal(currentAsset, 'edit')}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    title="Open full editor modal to change all aspects"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit All Aspects</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAsset(currentAsset.id)}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-rose-950 border border-slate-700 hover:border-rose-700/60 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                    title="Delete this asset"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Visual Preview if Image or Video */}
               {currentAsset.previewImageUrl && (
-                <div className="relative rounded-2xl overflow-hidden border border-slate-800 aspect-video group">
+                <div className="relative rounded-2xl overflow-hidden border border-slate-800 aspect-video group max-h-56 bg-black">
                   <img
                     src={currentAsset.previewImageUrl}
                     alt={currentAsset.filename}
-                    className="w-full h-full object-cover group-hover:scale-105 transition"
+                    className="w-full h-full object-contain group-hover:scale-102 transition"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-3 text-xs text-white">
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end justify-between p-3 text-xs text-white">
                     <span className="font-bold truncate">{currentAsset.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditAssetModal(currentAsset, 'gemini')}
+                      className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-[10px] font-bold flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-300" />
+                      <span>Gemini Edit</span>
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Filename & Info */}
-              <div className="space-y-1">
-                <div className={`text-xs font-bold break-all ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  {currentAsset.filename}
+              {/* Quick Inline Aspect Editors */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Filename Editor */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
+                    Asset Filename / Title:
+                  </label>
+                  <input
+                    type="text"
+                    value={currentAsset.filename}
+                    onChange={(e) => {
+                      const newName = e.target.value;
+                      setAssets(prev => prev.map(a => a.id === currentAsset.id ? { ...a, filename: newName } : a));
+                    }}
+                    className={`w-full p-2 rounded-xl border text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  />
                 </div>
-                <div className="text-[10px] font-mono text-indigo-400 break-all bg-indigo-950/30 p-2 rounded-xl border border-indigo-800/30">
-                  {currentAsset.webdavPath}
+
+                {/* Category Assignment */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
+                    Category Tag:
+                  </label>
+                  <select
+                    value={currentAsset.category}
+                    onChange={e => handleChangeCategory(currentAsset.id, e.target.value as NextcloudAssetCategory)}
+                    className={`w-full p-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  >
+                    <option value="MASTER_AUDIO">Master Audio (WAV / 24-bit 48kHz)</option>
+                    <option value="UVR5_VOCAL_STEM">UVR5 Vocal Stem (Isolated / Clean)</option>
+                    <option value="INSTRUMENTAL_STEM">Instrumental Stem (Guitars, Keys, Drums, 808s)</option>
+                    <option value="VISUAL_ARTWORK">Visual Artwork (1:1 Album Cover)</option>
+                    <option value="VIDEO_REEL">Video Reel (9:16 Vertical Short-Form)</option>
+                    <option value="LYRIC_SOP_DOC">Lyric & SOP Document (.md / .txt)</option>
+                    <option value="CHORD_MIDI">Chord Chart / MIDI (Nashville Number System)</option>
+                    <option value="UNCATEGORIZED">Uncategorized / Pending</option>
+                  </select>
                 </div>
-                <p className={`text-[11px] leading-relaxed pt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  {currentAsset.notes}
+              </div>
+
+              {/* Primary Project Reassignment & Suggestions */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
+                    Assigned Master Track (Primary Project):
+                  </label>
+                  {currentAsset.suggestedTrackId && (
+                    <button
+                      onClick={() => handleAssignTrack(currentAsset.id, currentAsset.suggestedTrackId || null)}
+                      className="text-[10px] text-indigo-500 hover:text-indigo-600 flex items-center gap-1 font-bold cursor-pointer"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                      <span>Use Suggestion ({currentAsset.suggestedTrackId})</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={currentAsset.matchedTrackId || ''}
+                    onChange={e => handleAssignTrack(currentAsset.id, e.target.value || null)}
+                    className={`flex-1 p-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  >
+                    <option value="">-- Unassigned (Shared / Global Asset) --</option>
+                    {tracks.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.id}: {t.title} ({t.ep}) [{t.bpm} BPM]
+                      </option>
+                    ))}
+                  </select>
+                  {currentAsset.matchedTrackId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trk = tracks.find(t => t.id === currentAsset.matchedTrackId);
+                        if (trk) onSelectTrack(trk);
+                      }}
+                      className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono text-xs font-bold whitespace-nowrap cursor-pointer"
+                      title="Jump to this track in studio"
+                    >
+                      Jump to Track →
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Cross-Project Multi-Linking: Link this same asset to other projects! */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-slate-950 border border-slate-800/80">
+                <div className="flex items-center justify-between text-[10px] font-mono">
+                  <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                    <LinkIcon className="w-3 h-3 text-cyan-400" />
+                    <span>Link to Additional Catalog Projects:</span>
+                  </span>
+                  <span className="text-slate-500">
+                    {(currentAsset.linkedTrackIds || []).length} linked
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Select which other tracks in your catalog should have immediate access to this stem/asset:
                 </p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar pt-1">
+                  {tracks.map(t => {
+                    const isPrimary = currentAsset.matchedTrackId === t.id;
+                    const isLinked = (currentAsset.linkedTrackIds || []).includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          if (isPrimary) return;
+                          handleToggleLinkTrack(currentAsset.id, t.id);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                          isPrimary
+                            ? 'bg-emerald-950 border-emerald-700/60 text-emerald-300 cursor-default'
+                            : isLinked
+                            ? 'bg-cyan-950 border-cyan-700/60 text-cyan-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                        title={isPrimary ? 'Primary Project' : isLinked ? 'Click to unlink' : 'Click to link'}
+                      >
+                        <span>{t.id}</span>
+                        {isPrimary ? (
+                          <span className="text-[8px] opacity-75">(Primary)</span>
+                        ) : isLinked ? (
+                          <span className="text-cyan-400 font-bold">✓</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BPM, Key & Notes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
+                    BPM / Tempo:
+                  </label>
+                  <input
+                    type="number"
+                    value={currentAsset.bpm || ''}
+                    placeholder="e.g. 78"
+                    onChange={(e) => {
+                      const val = e.target.value ? parseInt(e.target.value) : undefined;
+                      setAssets(prev => prev.map(a => a.id === currentAsset.id ? { ...a, bpm: val } : a));
+                    }}
+                    className={`w-full p-2 rounded-xl border text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
+                    Musical Key:
+                  </label>
+                  <input
+                    type="text"
+                    value={currentAsset.key || ''}
+                    placeholder="e.g. B Major"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setAssets(prev => prev.map(a => a.id === currentAsset.id ? { ...a, key: val } : a));
+                    }}
+                    className={`w-full p-2 rounded-xl border text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Notes & SOP Guidelines */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
+                  Production Notes & Nashville SOP Details:
+                </label>
+                <textarea
+                  rows={2}
+                  value={currentAsset.notes || ''}
+                  placeholder="Notes, mixing cues, Nashville SOP rules..."
+                  onChange={(e) => {
+                    const notes = e.target.value;
+                    setAssets(prev => prev.map(a => a.id === currentAsset.id ? { ...a, notes } : a));
+                  }}
+                  className={`w-full p-2 rounded-xl border text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                />
               </div>
 
               {/* Audio Audition Player in Inspector */}
@@ -1022,63 +1451,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                 </div>
               )}
 
-              {/* Category Assignment */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
-                  Category Tag:
-                </label>
-                <select
-                  value={currentAsset.category}
-                  onChange={e => handleChangeCategory(currentAsset.id, e.target.value as NextcloudAssetCategory)}
-                  className={`w-full p-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-                    isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                >
-                  <option value="MASTER_AUDIO">Master Audio (WAV / 24-bit 48kHz)</option>
-                  <option value="UVR5_VOCAL_STEM">UVR5 Vocal Stem (Isolated / Clean)</option>
-                  <option value="INSTRUMENTAL_STEM">Instrumental Stem (Guitars, Keys, Drums, 808s)</option>
-                  <option value="VISUAL_ARTWORK">Visual Artwork (1:1 Album Cover)</option>
-                  <option value="VIDEO_REEL">Video Reel (9:16 Vertical Short-Form)</option>
-                  <option value="LYRIC_SOP_DOC">Lyric & SOP Document (.md / .txt)</option>
-                  <option value="CHORD_MIDI">Chord Chart / MIDI (Nashville Number System)</option>
-                  <option value="UNCATEGORIZED">Uncategorized / Pending</option>
-                </select>
-              </div>
-
-              {/* Track Matching Dropdown */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-mono uppercase font-bold text-slate-400 block">
-                    Link to Master Track:
-                  </label>
-                  {currentAsset.suggestedTrackId && (
-                    <button
-                      onClick={() => handleAssignTrack(currentAsset.id, currentAsset.suggestedTrackId || null)}
-                      className="text-[10px] text-indigo-500 hover:text-indigo-600 flex items-center gap-1 font-bold cursor-pointer"
-                    >
-                      <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                      <span>Use Suggestion ({currentAsset.suggestedTrackId})</span>
-                    </button>
-                  )}
-                </div>
-
-                <select
-                  value={currentAsset.matchedTrackId || ''}
-                  onChange={e => handleAssignTrack(currentAsset.id, e.target.value || null)}
-                  className={`w-full p-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-                    isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                >
-                  <option value="">-- Unassigned (Shared / Global Asset) --</option>
-                  {tracks.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.id}: {t.title} ({t.ep}) [{t.bpm} BPM]
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Action Buttons */}
+              {/* Action Buttons: Apply, Copy WebDAV, External */}
               <div className={`space-y-2 pt-2 border-t ${
                 isDarkMode ? 'border-slate-800/60' : 'border-slate-200'
               }`}>
@@ -1096,32 +1469,34 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                   </button>
                 )}
 
-                <button
-                  onClick={() => copyText(currentAsset.webdavPath, 'WebDAV Relative URI')}
-                  className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                    isDarkMode
-                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy WebDAV Path</span>
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => copyText(currentAsset.webdavPath, 'WebDAV Relative URI')}
+                    className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      isDarkMode
+                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy WebDAV Path</span>
+                  </button>
 
-                <a
-                  href="https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                    isDarkMode
-                      ? 'bg-slate-950 hover:bg-slate-800 border-slate-800 text-indigo-400 hover:text-white'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-indigo-700 hover:text-indigo-900'
-                  }`}
-                >
-                  <HardDrive className="w-3.5 h-3.5" />
-                  <span>Open /Music-Production in Nextcloud</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
+                  <a
+                    href="https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      isDarkMode
+                        ? 'bg-slate-950 hover:bg-slate-800 border-slate-800 text-indigo-400 hover:text-white'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-indigo-700 hover:text-indigo-900'
+                    }`}
+                  >
+                    <HardDrive className="w-3.5 h-3.5" />
+                    <span>Open Nextcloud</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                  </a>
+                </div>
               </div>
             </div>
           ) : (
@@ -1133,6 +1508,24 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
           )}
         </div>
       </div>
+
+      {/* UNIVERSAL ASSET EDITOR MODAL: ADD, EDIT, ASK GEMINI, REASSIGN, LINK TO OTHER PROJECTS, DELETE */}
+      <UniversalAssetEditorModal
+        isOpen={isAssetModalOpen}
+        onClose={() => setIsAssetModalOpen(false)}
+        asset={modalAssetItem}
+        mode={assetModalMode}
+        catalogTracks={tracks}
+        onSaveAsset={handleSaveAssetFromModal}
+        onDeleteAsset={(id) => {
+          handleDeleteAsset(id);
+          setIsAssetModalOpen(false);
+        }}
+        onDuplicateAsset={(dup) => {
+          handleSaveAssetFromModal(dup);
+        }}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };
