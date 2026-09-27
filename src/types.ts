@@ -641,6 +641,8 @@ export interface SessionSnapshot {
   updatedAt: string;
 }
 
+export type MasteringModuleId = 'eq' | 'compressor' | 'limiter';
+
 // ==============================================================================
 // BLOCKSUITE & INFINITE WHITEBOARD DATA STRUCTURES
 // ==============================================================================
@@ -653,7 +655,8 @@ export type BlockSuiteBlockType =
   | 'suno_prompt'    // AI Style & Audio synthesis block
   | 'heading'        // Document heading (H1, H2, H3)
   | 'paragraph'      // Freeform lyric or production text
-  | 'checklist';     // Task / milestone checklist block
+  | 'checklist'      // Task / milestone checklist block
+  | 'thumbnail_asset'; // Storyboard thumbnail image / visual asset card
 
 export interface BlockSuiteConnector {
   id: string;
@@ -681,6 +684,10 @@ export interface BlockSuiteBlock {
   orderIndex: number;
   sectionTag?: string; // e.g. '[Verse 1]', '[Chorus]', '[Bridge]'
   completed?: boolean;
+  imageUrl?: string; // Image thumbnail URL for storyboard assets
+  aspectRatio?: '16:9' | '9:16' | '1:1' | string;
+  assetId?: string; // Studio visual asset ID link
+  shotNumber?: string;
 }
 
 export interface WhiteboardCanvasDoc {
