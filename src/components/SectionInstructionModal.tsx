@@ -231,25 +231,29 @@ export const SECTION_GUIDES: Record<StudioSectionId, SectionGuideItem> = {
   veo_visuals: {
     id: 'veo_visuals',
     title: 'Visuals & Veo 3 Video Studio',
-    badge: 'AI Media Generator',
+    badge: 'AI Media & Google Flow Hub',
     icon: Clapperboard,
-    summary: 'Generate high-fidelity album art (1:1) and vertical promotional videos (9:16) using Google Veo and Gemini image preview models.',
-    purpose: 'Create visual assets for single covers, lyric backdrops, and promotional motion teasers.',
+    summary: 'Generate high-fidelity album art (1:1) and vertical promotional videos (9:16) using Google Veo, Gemini image preview models, and link allotted Google Flow video generation workflows.',
+    purpose: 'Create visual assets for single covers, lyric backdrops, and promotional motion teasers, with full Google Flow video asset import & cross-project linking.',
     keySteps: [
-      'Select Aspect Ratio (1:1 for Album Artwork, 9:16 for Vertical Shorts/Reels, 16:9 for YouTube).',
-      'Select Model (gemini-3.1-flash-image-preview for fast iteration or Google Veo for cinematic video).',
-      'Enter cinematic prompt or load a pre-set visual style (Cedar Woodshop, Kintsugi, Nashville Studio).',
-      'Click "Generate Artwork" or "Render Veo Video".',
-      'Click "Analyze (Pro)" to receive a Gemini Pro Vision audit of lighting and theological symbolism.'
+      'Google Flow Integration: Connect your Google Flow workspace (labs.google/flow) and track allotted monthly video generations.',
+      'Prompt Transfer Bridge: Select project track and click "Copy & Launch Flow" to export camera motion and lighting tokens formatted for Google Flow.',
+      'Generate & Export in Flow: Create cinematic 9:16 vertical reels using your allotted Flow credits and export to Google Drive or copy the MP4 link.',
+      'Link Video Asset: Click "+ Link Flow Video Asset", paste the URL, assign primary and multi-track projects, and auto-mirror to Nextcloud /Music-Production/Videos/GoogleFlow/.',
+      'Veo 3 In-App Engine: Or select Aspect Ratio (1:1 for Artwork, 9:16 for Shorts, 16:9 for YouTube) and generate directly with Veo 3.',
+      'Audit with Gemini: Click "Analyze (Pro)" for a Gemini Pro Vision theological and lighting audit.'
     ],
     bestPractices: [
-      'Use 50mm portrait anamorphic lens tokens and chiaroscuro lighting descriptions for photorealism.',
-      'Keep backgrounds slightly defocused (bokeh) to keep focus on foreground focal points.'
+      'Format prompts with camera tokens (e.g. "slow cinematic tracking push-in", "chiaroscuro 3200K tungsten") to guide Google Flow video generators.',
+      'Use 9:16 vertical video assets for TikTok, Instagram Reels, and YouTube Shorts promo cuts.',
+      'Deduct video generation credits in the Allotment Tracker to maintain accurate monthly quota tracking.'
     ],
     sopRules: [
-      'Images must be saved at full resolution and linked to Nextcloud Folder 207332.'
+      'Images must be saved at full resolution and linked to Nextcloud Folder 207332.',
+      'All Google Flow video generations must be tagged with their source prompt and linked to at least one active catalog track.',
+      'Video assets linked from Google Flow should be auto-mirrored to /Music-Production/Videos/GoogleFlow/ for distribution.'
     ],
-    relatedTabs: ['prompt_library', 'video_express', 'nightcafe']
+    relatedTabs: ['prompt_library', 'video_express', 'nightcafe', 'nextcloud_sync']
   },
   prompt_library: {
     id: 'prompt_library',

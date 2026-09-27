@@ -84,6 +84,7 @@ import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibra
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
 import { SongVersionCompareTab } from './components/SongVersionCompareTab';
 import { BlockSuiteBrainstormingTab } from './components/BlockSuiteBrainstormingTab';
+import { GoogleFlowIntegrationHub } from './components/GoogleFlowIntegrationHub';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
 import { SectionQuickHelpBanner } from './components/SectionQuickHelpBanner';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
@@ -816,20 +817,49 @@ export default function BrickOSMusicStudioWorkspace() {
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [imageAnalysisResult, setImageAnalysisResult] = useState<string | null>(null);
 
-  // Veo Video State
+  // Veo Video & Google Flow State
   const [videoPrompt, setVideoPrompt] = useState('Slow cinematic tracking shot gliding through an overgrown mossy stone archway opening into a sun-drenched cedar glade, morning mist rising, 8k photorealistic');
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [videoOperationName, setVideoOperationName] = useState<string | null>(null);
   const [videoStatus, setVideoStatus] = useState<string>('idle');
+  const [mediaGalleryFilter, setMediaGalleryFilter] = useState<'all' | 'images' | 'videos' | 'flow'>('all');
+
+  const INITIAL_SEED_VIDEOS: GeneratedVideo[] = [
+    {
+      id: 'flow-sample-mmh-1',
+      name: 'Meet Me Here - Hook Teaser (Google Flow Allotment #12)',
+      operationName: 'google-flow-linked-asset',
+      prompt: 'Cinematic 9:16 portrait of craftsman in Nashville timber workshop with floating cedar dust, dramatic sunlight rays, golden hour, slow motion 24fps',
+      aspectRatio: '9:16',
+      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4',
+      status: 'ready',
+      timestamp: new Date().toISOString(),
+      modelUsed: 'Google Flow (Veo / Labs Allotment)',
+      trackTitle: 'Meet Me Here',
+      trackId: 'mmh',
+      linkedTrackIds: ['mmh', 'calvary-grit'],
+      tags: ['google-flow', 'allotted-generation', '9:16', 'cinematic'],
+      notes: 'Generated using monthly Google Flow allotment (Shot 3 from MMH Storyboard). Linked across Meet Me Here and Calvary Grit.',
+      category: 'Google Flow Reel',
+      source: 'google_flow',
+      flowAssetUrl: 'https://labs.google/flow',
+      resolution: '1080x1920 Vertical HD',
+      durationSec: 15
+    }
+  ];
+
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('brickos_studio_videos');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
       } catch (e) {}
     }
-    return [];
+    return INITIAL_SEED_VIDEOS;
   });
 
   const handleUpdateVideo = (updated: GeneratedVideo) => {
@@ -862,7 +892,7 @@ export default function BrickOSMusicStudioWorkspace() {
       } catch (e) {}
       return next;
     });
-    showToast(`Added new video "${newVid.name || 'Veo Reel'}"`, 'success');
+    showToast(`Added new video "${newVid.name || 'Video Reel'}"`, 'success');
   };
 
   // Workspace Universal Asset Modal State
@@ -893,21 +923,24 @@ export default function BrickOSMusicStudioWorkspace() {
   };
 
   const handleOpenEditVideoModal = (vid: GeneratedVideo, mode: 'edit' | 'gemini' = 'edit') => {
+    const isFlow = vid.source === 'google_flow' || vid.category?.toLowerCase().includes('flow');
     const item: UniversalAssetItem = {
       id: vid.id,
       type: 'video',
-      name: vid.name || `Veo: ${vid.prompt.slice(0, 24)}...`,
+      name: vid.name || (isFlow ? `Flow Reel: ${vid.prompt.slice(0, 24)}...` : `Veo: ${vid.prompt.slice(0, 24)}...`),
       url: vid.videoUrl || '',
       prompt: vid.prompt,
       notes: vid.notes || '',
       trackId: vid.trackId || selectedTrack.id,
       trackTitle: vid.trackTitle || selectedTrack.title,
       linkedTrackIds: vid.linkedTrackIds || [],
-      category: vid.category || 'Veo Reel',
+      category: vid.category || (isFlow ? 'Google Flow Reel' : 'Veo Reel'),
       aspectRatio: vid.aspectRatio || '16:9',
-      tags: vid.tags || ['Veo', 'Video Reel'],
+      tags: vid.tags || (isFlow ? ['Google Flow', 'Video Reel'] : ['Veo', 'Video Reel']),
       timestamp: vid.timestamp || new Date().toISOString().split('T')[0],
-      originalRef: vid
+      originalRef: vid,
+      source: vid.source || (isFlow ? 'google_flow' : 'veo'),
+      flowAssetUrl: vid.flowAssetUrl
     };
     setWorkspaceEditingAsset(item);
     setWorkspaceAssetModalMode(mode);
@@ -958,21 +991,27 @@ export default function BrickOSMusicStudioWorkspace() {
         handleAddImage(imgObj);
       }
     } else if (updated.type === 'video') {
+      const isFlow = updated.source === 'google_flow' || updated.category?.toLowerCase().includes('flow');
       const vidObj: GeneratedVideo = {
         id: updated.id,
         name: updated.name,
-        operationName: `op-${updated.id}`,
+        operationName: updated.originalRef?.operationName || `op-${updated.id}`,
         prompt: updated.prompt || '',
         aspectRatio: (updated.aspectRatio === '9:16' ? '9:16' : '16:9'),
         videoUrl: updated.url,
         status: 'ready',
         timestamp: updated.timestamp,
-        modelUsed: 'veo-3.1-generate-preview',
+        modelUsed: updated.originalRef?.modelUsed || (isFlow ? 'Google Flow (Veo / Labs Allotment)' : 'veo-3.1-generate-preview'),
         trackTitle: updated.trackTitle || selectedTrack.title,
         trackId: updated.trackId,
         linkedTrackIds: updated.linkedTrackIds,
         tags: updated.tags,
-        notes: updated.notes
+        notes: updated.notes,
+        category: updated.category,
+        source: updated.source || (isFlow ? 'google_flow' : 'veo'),
+        flowAssetUrl: updated.flowAssetUrl || updated.originalRef?.flowAssetUrl,
+        resolution: updated.originalRef?.resolution,
+        durationSec: updated.originalRef?.durationSec
       };
       if (generatedVideos.some(v => v.id === updated.id)) {
         handleUpdateVideo(vidObj);
@@ -2182,6 +2221,18 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                   </div>
                 </div>
 
+                {/* DEDICATED GOOGLE FLOW INTEGRATION & ASSET HUB */}
+                <GoogleFlowIntegrationHub
+                  catalogTracks={tracks}
+                  onAddVideoAsset={handleAddVideo}
+                  onOpenAssetEditor={(asset, mode) => {
+                    setWorkspaceEditingAsset(asset);
+                    setWorkspaceAssetModalMode(mode);
+                    setWorkspaceAssetModalOpen(true);
+                  }}
+                  isDarkMode={isDarkMode}
+                />
+
                 {/* PROMPT VAULT & STORYBOARD ENGINE (MMH, VENOM, MASK, CYHL, ETC.) */}
                 <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -2539,15 +2590,66 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 {/* GALLERY OF GENERATED IMAGES & VIDEOS */}
                 <div className="space-y-4 pt-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-indigo-400" />
-                      <span>Visual Assets & Generated Renders ({generatedImages.length + generatedVideos.length})</span>
-                    </h4>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-indigo-400" />
+                        <span>Visual Assets & Generated Renders ({generatedImages.length + generatedVideos.length})</span>
+                      </h4>
+
+                      {/* Filter Pills */}
+                      <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono">
+                        <button
+                          type="button"
+                          onClick={() => setMediaGalleryFilter('all')}
+                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                            mediaGalleryFilter === 'all'
+                              ? 'bg-indigo-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          All ({generatedImages.length + generatedVideos.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaGalleryFilter('flow')}
+                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                            mediaGalleryFilter === 'flow'
+                              ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-cyan-300'
+                          }`}
+                        >
+                          Google Flow ({generatedVideos.filter(v => v.source === 'google_flow').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaGalleryFilter('videos')}
+                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                            mediaGalleryFilter === 'videos'
+                              ? 'bg-rose-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Veo 3 ({generatedVideos.filter(v => v.source !== 'google_flow').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMediaGalleryFilter('images')}
+                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                            mediaGalleryFilter === 'images'
+                              ? 'bg-purple-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Images ({generatedImages.length})
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleOpenAddWorkspaceAsset('image')}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
                       >
                         <Plus className="w-3 h-3" />
                         <span>+ Add Image</span>
@@ -2555,7 +2657,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                       <button
                         type="button"
                         onClick={() => handleOpenAddWorkspaceAsset('video')}
-                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
                       >
                         <Plus className="w-3 h-3" />
                         <span>+ Add Video</span>
@@ -2565,7 +2667,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     {/* Images */}
-                    {generatedImages.map((img) => (
+                    {(mediaGalleryFilter === 'all' || mediaGalleryFilter === 'images') &&
+                      generatedImages.map((img) => (
                       <div key={img.id} className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col group">
                         <div className="relative aspect-square bg-slate-900 overflow-hidden">
                           <img src={img.url} alt={img.prompt} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
@@ -2630,54 +2733,112 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                       </div>
                     ))}
 
-                    {/* Videos */}
-                    {generatedVideos.map((vid) => (
-                      <div key={vid.id} className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col group">
-                        <div className={`relative ${vid.aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'} bg-slate-900 flex items-center justify-center`}>
-                          {vid.videoUrl ? (
-                            <video src={vid.videoUrl} controls className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="text-center p-4">
-                              <RefreshCw className="w-6 h-6 text-rose-400 animate-spin mx-auto mb-2" />
-                              <span className="text-[10px] text-slate-400 font-mono">Veo Rendering...</span>
+                    {/* Videos (Veo 3 & Google Flow) */}
+                    {(mediaGalleryFilter === 'all'
+                      ? generatedVideos
+                      : mediaGalleryFilter === 'flow'
+                      ? generatedVideos.filter(v => v.source === 'google_flow')
+                      : mediaGalleryFilter === 'videos'
+                      ? generatedVideos.filter(v => v.source !== 'google_flow')
+                      : []
+                    ).map((vid) => {
+                      const isFlow = vid.source === 'google_flow' || vid.category?.toLowerCase().includes('flow');
+                      return (
+                        <div
+                          key={vid.id}
+                          className={`bg-slate-950 rounded-xl overflow-hidden flex flex-col group border transition ${
+                            isFlow
+                              ? 'border-cyan-500/40 hover:border-cyan-400/80 shadow-[0_0_15px_rgba(6,182,212,0.08)]'
+                              : 'border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className={`relative ${vid.aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'} bg-slate-900 flex items-center justify-center`}>
+                            {vid.videoUrl ? (
+                              <video src={vid.videoUrl} controls className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="text-center p-4">
+                                <RefreshCw className="w-6 h-6 text-rose-400 animate-spin mx-auto mb-2" />
+                                <span className="text-[10px] text-slate-400 font-mono">Video Rendering...</span>
+                              </div>
+                            )}
+
+                            {/* Top-Right Badge: Google Flow vs Veo */}
+                            {isFlow ? (
+                              <div className="absolute top-2 right-2 bg-gradient-to-r from-cyan-950 to-indigo-950/90 text-cyan-300 border border-cyan-700/60 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1 shadow-md">
+                                <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                                <span>Google Flow {vid.aspectRatio}</span>
+                              </div>
+                            ) : (
+                              <div className="absolute top-2 right-2 bg-slate-900/80 px-2 py-0.5 rounded text-[9px] font-mono text-white font-bold">
+                                Veo {vid.aspectRatio}
+                              </div>
+                            )}
+
+                            {/* Top-Left: Linked tracks indicator & Resolution */}
+                            <div className="absolute top-2 left-2 flex items-center gap-1">
+                              {vid.resolution && (
+                                <span className="bg-slate-900/85 backdrop-blur-sm text-slate-300 px-1.5 py-0.2 rounded text-[8px] font-mono border border-slate-700/60">
+                                  {vid.resolution}
+                                </span>
+                              )}
+                              {vid.linkedTrackIds && vid.linkedTrackIds.length > 1 && (
+                                <span className="bg-emerald-600/90 text-white px-1.5 py-0.2 rounded text-[8px] font-bold shadow-xs">
+                                  +{vid.linkedTrackIds.length} tracks
+                                </span>
+                              )}
                             </div>
-                          )}
-                          <div className="absolute top-2 right-2 bg-slate-900/80 px-2 py-0.5 rounded text-[9px] font-mono text-white font-bold">
-                            Veo {vid.aspectRatio}
+                          </div>
+
+                          <div className="p-3 text-xs space-y-2 flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="font-bold text-white text-xs truncate">
+                                  {vid.name || (isFlow ? 'Google Flow Reel' : 'Veo Reel')}
+                                </div>
+                                {vid.flowAssetUrl && (
+                                  <a
+                                    href={vid.flowAssetUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[9px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5 font-mono shrink-0 px-1.5 py-0.2 rounded bg-cyan-950/50 border border-cyan-800/40"
+                                    title="Open video in Google Flow / Drive"
+                                  >
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                    <span>Flow</span>
+                                  </a>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{vid.prompt}</p>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800">
+                              <button
+                                onClick={() => handleOpenEditVideoModal(vid, 'gemini')}
+                                className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800/40 text-[9px] font-bold flex items-center gap-1"
+                                title="Ask Gemini to change this video prompt"
+                              >
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>AI Edit</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenEditVideoModal(vid, 'edit')}
+                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold"
+                                title="Edit all aspects / reassign / link across projects"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteVideo(vid.id)}
+                                className="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-[9px]"
+                                title="Delete video"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="p-3 text-xs space-y-2 flex-1 flex flex-col justify-between">
-                          <div>
-                            <div className="font-bold text-white text-xs truncate">{vid.name || 'Veo Reel'}</div>
-                            <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{vid.prompt}</p>
-                          </div>
-                          <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800">
-                            <button
-                              onClick={() => handleOpenEditVideoModal(vid, 'gemini')}
-                              className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800/40 text-[9px] font-bold flex items-center gap-1"
-                              title="Ask Gemini to change this video prompt"
-                            >
-                              <Sparkles className="w-2.5 h-2.5" />
-                              <span>AI Edit</span>
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditVideoModal(vid, 'edit')}
-                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold"
-                              title="Edit all aspects / reassign / link"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteVideo(vid.id)}
-                              className="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-[9px]"
-                              title="Delete video"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Gemini Image / Video Analysis Result Box */}

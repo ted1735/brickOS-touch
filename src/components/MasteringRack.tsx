@@ -31,6 +31,8 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
   // Real-time gain reduction polling for Compressor & Limiter meters
   const [compGrDb, setCompGrDb] = useState<number>(0);
   const [limiterGrDb, setLimiterGrDb] = useState<number>(0);
+  const [limiterPeakHoldDb, setLimiterPeakHoldDb] = useState<number>(0);
+  const [simulatedPulseDb, setSimulatedPulseDb] = useState<number>(0);
 
   // Fallback limiter state if not defined in older snapshots
   const limiter: DawLimiter = effects.limiter || {
@@ -43,16 +45,49 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
 
   useEffect(() => {
     let animId: number;
+    let peakHoldVal = 0;
+    let peakHoldTimestamp = 0;
+    let pulseVal = 0;
+
     const pollReduction = () => {
       const compGr = audioMiniDaw.getCompressorGainReduction();
-      const limGr = audioMiniDaw.getLimiterGainReduction();
+      let limGr = audioMiniDaw.getLimiterGainReduction();
+
+      // If simulated pulse is active, blend it in
+      if (pulseVal > 0.05) {
+        pulseVal *= 0.92; // smooth decay
+        setSimulatedPulseDb(pulseVal);
+        limGr = Math.max(limGr, pulseVal);
+      } else if (pulseVal !== 0) {
+        pulseVal = 0;
+        setSimulatedPulseDb(0);
+      }
+
       setCompGrDb(compGr);
       setLimiterGrDb(limGr);
+
+      const now = Date.now();
+      if (limGr >= peakHoldVal) {
+        peakHoldVal = limGr;
+        peakHoldTimestamp = now;
+        setLimiterPeakHoldDb(peakHoldVal);
+      } else if (now - peakHoldTimestamp > 1400) {
+        peakHoldVal = Math.max(0, peakHoldVal - 0.12);
+        setLimiterPeakHoldDb(peakHoldVal);
+      }
+
       animId = requestAnimationFrame(pollReduction);
     };
     animId = requestAnimationFrame(pollReduction);
     return () => cancelAnimationFrame(animId);
   }, []);
+
+  const triggerAuditionPulse = () => {
+    // Generate a lively dynamic peak burst to test limiter ballistics
+    const burst = 3.8 + Math.random() * 2.2;
+    setSimulatedPulseDb(burst);
+    setLimiterGrDb(burst);
+  };
 
   // Quick module toggle handlers
   const handleToggleEq = () => {
@@ -837,44 +872,155 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
               </button>
             </div>
 
-            {/* Live Limiter Peak & Guard status readout */}
-            <div className="my-3 p-2.5 bg-slate-900/90 rounded-lg border border-slate-800/80 space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] font-mono">
-                <span className="text-slate-400">LIMITER REDUCTION:</span>
-                <span
-                  className={`font-bold font-mono px-1.5 py-0.2 rounded text-[10px] ${
-                    limiterGrDb > 0.1
-                      ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  {limiterGrDb > 0 ? `-${limiterGrDb.toFixed(1)} dB` : '0.0 dB'}
-                </span>
-              </div>
-
-              {/* Limiter meter bar */}
-              <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-400 via-rose-400 to-rose-600 transition-all duration-75"
-                  style={{
-                    width: `${Math.min(100, (limiterGrDb / 8) * 100)}%`
-                  }}
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-[9px] font-mono">
-                <div className="flex items-center gap-1 text-slate-400">
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>Inter-Sample Guard:</span>
-                  <span className={limiter.enabled ? 'text-emerald-300 font-bold' : 'text-slate-500'}>
-                    {limiter.enabled ? 'ENGAGED' : 'OFF'}
+            {/* Live Dynamic Limiter Peak & Gain Reduction LED Meter */}
+            <div className="my-3 p-3 bg-slate-950/95 rounded-xl border border-amber-500/30 space-y-2.5 shadow-[0_0_15px_rgba(245,158,11,0.08)]">
+              {/* Header: GR and Peak hold telemetry + Audition button */}
+              <div className="flex items-center justify-between text-[10px] font-mono flex-wrap gap-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-semibold tracking-wider">LIMITER GR:</span>
+                  <span
+                    className={`font-bold font-mono px-1.5 py-0.5 rounded text-[11px] transition-colors ${
+                      !limiter.enabled
+                        ? 'bg-slate-900 text-slate-500 border border-slate-800'
+                        : limiterGrDb > 4.0
+                        ? 'bg-rose-950 text-rose-300 border border-rose-800/80 shadow-[0_0_8px_rgba(244,63,94,0.4)]'
+                        : limiterGrDb > 1.5
+                        ? 'bg-amber-950 text-amber-300 border border-amber-800/60 shadow-[0_0_8px_rgba(251,191,36,0.3)]'
+                        : limiterGrDb > 0.1
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
+                        : 'text-slate-500 bg-slate-900 border border-slate-800'
+                    }`}
+                  >
+                    {limiter.enabled ? (limiterGrDb > 0 ? `-${limiterGrDb.toFixed(1)} dB` : '0.0 dB') : 'BYPASS'}
                   </span>
                 </div>
-                {lufsData && (
-                  <span className={`font-bold ${lufsData.truePeakDb > limiter.ceiling ? 'text-rose-400' : 'text-slate-300'}`}>
-                    TP: {lufsData.truePeakDb > -60 ? `${lufsData.truePeakDb.toFixed(1)} dBTP` : '-inf'}
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 text-[9px] text-slate-400 font-mono">
+                    <span>PEAK:</span>
+                    <span className={`font-bold ${limiterPeakHoldDb > 0.1 ? 'text-amber-300' : 'text-slate-600'}`}>
+                      {limiterPeakHoldDb > 0 ? `-${limiterPeakHoldDb.toFixed(1)} dB` : '0.0 dB'}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={triggerAuditionPulse}
+                    disabled={!limiter.enabled}
+                    className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-amber-950/60 text-slate-300 hover:text-amber-300 border border-slate-800 hover:border-amber-600/40 text-[9px] font-mono flex items-center gap-1 transition cursor-pointer disabled:opacity-40"
+                    title="Simulate a sudden audio peak transient to test real-time limiter meter ballistics and peak hold"
+                  >
+                    <Zap className="w-2.5 h-2.5 text-amber-400" />
+                    <span>Pulse Test</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Hardware LED Meter Bar */}
+              <div className="space-y-1">
+                <div
+                  className="p-1 bg-slate-950 rounded-lg border border-slate-800/90 shadow-inner flex items-center gap-[2.5px] h-6 overflow-hidden"
+                  title={`Real-Time Limiter Gain Reduction: -${limiterGrDb.toFixed(1)} dB (Peak Hold: -${limiterPeakHoldDb.toFixed(1)} dB)`}
+                >
+                  {[
+                    { th: 0.2, col: 'emerald', light: 'bg-emerald-400 shadow-[0_0_8px_#34d399]' },
+                    { th: 0.4, col: 'emerald', light: 'bg-emerald-400 shadow-[0_0_8px_#34d399]' },
+                    { th: 0.6, col: 'emerald', light: 'bg-emerald-400 shadow-[0_0_8px_#34d399]' },
+                    { th: 0.8, col: 'emerald', light: 'bg-emerald-400 shadow-[0_0_8px_#34d399]' },
+                    { th: 1.0, col: 'emerald', light: 'bg-emerald-400 shadow-[0_0_8px_#34d399]' },
+                    { th: 1.3, col: 'lime', light: 'bg-lime-400 shadow-[0_0_8px_#a3e635]' },
+                    { th: 1.6, col: 'lime', light: 'bg-lime-400 shadow-[0_0_8px_#a3e635]' },
+                    { th: 2.0, col: 'lime', light: 'bg-lime-400 shadow-[0_0_8px_#a3e635]' },
+                    { th: 2.4, col: 'lime', light: 'bg-lime-400 shadow-[0_0_8px_#a3e635]' },
+                    { th: 2.8, col: 'amber', light: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' },
+                    { th: 3.2, col: 'amber', light: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' },
+                    { th: 3.6, col: 'amber', light: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' },
+                    { th: 4.0, col: 'amber', light: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' },
+                    { th: 4.5, col: 'amber', light: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]' },
+                    { th: 5.0, col: 'orange', light: 'bg-orange-500 shadow-[0_0_8px_#f97316]' },
+                    { th: 5.6, col: 'orange', light: 'bg-orange-500 shadow-[0_0_8px_#f97316]' },
+                    { th: 6.2, col: 'orange', light: 'bg-orange-500 shadow-[0_0_8px_#f97316]' },
+                    { th: 7.0, col: 'rose', light: 'bg-rose-500 shadow-[0_0_9px_#f43f5e]' },
+                    { th: 8.0, col: 'rose', light: 'bg-rose-500 shadow-[0_0_10px_#f43f5e]' },
+                    { th: 9.0, col: 'rose', light: 'bg-rose-600 shadow-[0_0_11px_#e11d48]' },
+                    { th: 10.0, col: 'rose', light: 'bg-rose-600 shadow-[0_0_12px_#e11d48]' },
+                    { th: 12.0, col: 'rose', light: 'bg-rose-600 shadow-[0_0_14px_#e11d48]' }
+                  ].map((seg, idx, arr) => {
+                    const isLit = limiter.enabled && limiterGrDb >= seg.th;
+                    const nextTh = arr[idx + 1]?.th ?? 999;
+                    const isPeakHold = limiter.enabled && limiterPeakHoldDb >= seg.th && limiterPeakHoldDb < nextTh;
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`h-full flex-1 rounded-[1.5px] transition-all duration-75 ${
+                          !limiter.enabled
+                            ? 'bg-slate-900/60 border border-slate-900 opacity-30'
+                            : isPeakHold
+                            ? 'bg-white border border-amber-200 shadow-[0_0_10px_#ffffff] z-10'
+                            : isLit
+                            ? `${seg.light} border border-white/20`
+                            : 'bg-slate-900/90 border border-slate-800/80 opacity-40'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Meter Decibel Calibration Scale */}
+                <div className="flex justify-between text-[8px] font-mono text-slate-500 px-0.5">
+                  <span className="text-slate-400">0 dB</span>
+                  <span>-1</span>
+                  <span>-2</span>
+                  <span>-3</span>
+                  <span>-4</span>
+                  <span>-6</span>
+                  <span>-8</span>
+                  <span className="text-rose-400 font-bold">-12+</span>
+                </div>
+              </div>
+
+              {/* Status footer: Guard status and reduction health badge */}
+              <div className="flex items-center justify-between text-[9px] font-mono pt-0.5 border-t border-slate-900">
+                <div className="flex items-center gap-1 text-slate-400">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>True Peak Guard:</span>
+                  <span className={limiter.enabled ? 'text-emerald-300 font-bold' : 'text-slate-500'}>
+                    {limiter.enabled ? 'ACTIVE' : 'BYPASS'}
                   </span>
-                )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`px-1.5 py-0.2 rounded font-mono text-[8px] font-bold uppercase ${
+                      !limiter.enabled
+                        ? 'bg-slate-900 text-slate-500'
+                        : limiterGrDb > 4.5
+                        ? 'bg-rose-950/80 text-rose-300 border border-rose-800/50'
+                        : limiterGrDb > 1.5
+                        ? 'bg-amber-950/80 text-amber-300 border border-amber-800/50'
+                        : limiterGrDb > 0.1
+                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50'
+                        : 'bg-slate-900 text-slate-400'
+                    }`}
+                  >
+                    {!limiter.enabled
+                      ? 'BYPASS'
+                      : limiterGrDb > 4.5
+                      ? 'HEAVY LIMITING'
+                      : limiterGrDb > 1.5
+                      ? 'TARGET MASTER GR'
+                      : limiterGrDb > 0.1
+                      ? 'GENTLE PEAK TAME'
+                      : 'TRANSPARENT'}
+                  </span>
+
+                  {lufsData && (
+                    <span className={`font-bold ${lufsData.truePeakDb > limiter.ceiling ? 'text-rose-400' : 'text-slate-300'}`}>
+                      TP: {lufsData.truePeakDb > -60 ? `${lufsData.truePeakDb.toFixed(1)} dBTP` : '-inf'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

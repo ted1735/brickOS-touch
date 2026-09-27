@@ -202,6 +202,22 @@ export interface GeneratedVideo {
   tags?: string[];
   notes?: string;
   category?: string;
+  source?: 'veo' | 'google_flow' | 'video_express' | 'custom' | string;
+  flowAssetUrl?: string;
+  flowProjectId?: string;
+  driveUrl?: string;
+  resolution?: string;
+  durationSec?: number;
+}
+
+export interface GoogleFlowConfig {
+  workspaceUrl: string;
+  totalAllotment: number;
+  usedGenerations: number;
+  renewalPeriod: string;
+  defaultAspectRatio: '9:16' | '16:9';
+  connectedAccountEmail?: string;
+  autoSyncToNextcloud: boolean;
 }
 
 export type UniversalAssetType = 'image' | 'video' | 'stem' | 'nextcloud' | 'lyric_checkpoint';
@@ -225,6 +241,9 @@ export interface UniversalAssetItem {
   tags: string[];
   timestamp: string;
   originalRef?: any;
+  source?: string;
+  flowAssetUrl?: string;
+  driveUrl?: string;
 }
 
 export interface YouTubeSEOReport {

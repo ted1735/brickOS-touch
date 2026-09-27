@@ -223,7 +223,10 @@ export const UniversalAssetEditorModal: React.FC<UniversalAssetEditorModalProps>
       key,
       tags,
       timestamp: asset?.timestamp || new Date().toISOString().split('T')[0],
-      originalRef: asset?.originalRef
+      originalRef: asset?.originalRef,
+      source: asset?.source || (category.toLowerCase().includes('flow') ? 'google_flow' : undefined),
+      flowAssetUrl: asset?.flowAssetUrl,
+      driveUrl: asset?.driveUrl
     };
 
     onSaveAsset(updated);
@@ -269,6 +272,12 @@ export const UniversalAssetEditorModal: React.FC<UniversalAssetEditorModalProps>
                 }`}>
                   {type.toUpperCase()}
                 </span>
+                {asset?.source === 'google_flow' && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold bg-cyan-950 text-cyan-300 border-cyan-700/60 flex items-center gap-1 shadow-xs">
+                    <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                    <span>Google Flow</span>
+                  </span>
+                )}
                 <span className="text-xs text-amber-500 font-mono font-bold">
                   {currentPrimaryTrack?.id} ({currentPrimaryTrack?.title})
                 </span>

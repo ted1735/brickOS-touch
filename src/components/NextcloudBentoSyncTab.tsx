@@ -1071,6 +1071,13 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                               <span>+{asset.linkedTrackIds.length}</span>
                             </span>
                           )}
+
+                          {(asset.tags?.includes('google-flow') || asset.webdavPath.includes('GoogleFlow')) && (
+                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/40" title="Imported from Google Flow video workflow">
+                              <Sparkles className="w-2 h-2 text-cyan-400" />
+                              <span>Flow</span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
