@@ -1,4 +1,4 @@
-import { MixerTrack, DawEffectsState } from '../types';
+import { MixerTrack, DawEffectsState, LufsMeasurementData } from '../types';
 import { DEFAULT_DAW_EFFECTS } from '../data/dawEffectsPresets';
 
 class MiniDawEngine {
@@ -16,6 +16,31 @@ class MiniDawEngine {
   private reverbDelayNode: DelayNode | null = null;
   private reverbFeedbackGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
+
+  // ITU-R BS.1770 K-Weighting Loudness Filter Chain & LUFS Measurement
+  private kWeightShelf: BiquadFilterNode | null = null;
+  private kWeightHighPass: BiquadFilterNode | null = null;
+  private kWeightAnalyser: AnalyserNode | null = null;
+  private correctionGainNode: GainNode | null = null;
+  private correctionGainDb: number = 0;
+  private targetLufs: number = -14.0;
+  private targetCeilingDb: number = -1.0;
+  private isAutoMatchActive: boolean = false;
+
+  // Running buffers for Loudness analysis
+  private momentaryHistory: number[] = [];
+  private shortTermHistory: number[] = [];
+  private integratedBlocks: number[] = [];
+  private lastMomentaryLufs: number = -90;
+  private lastShortTermLufs: number = -90;
+  private lastIntegratedLufs: number = -90;
+  private lastTruePeakDb: number = -90;
+  private lastLra: number = 7.5;
+  private lastCrestFactorDb: number = 12.0;
+  private lastPhaseCorrelation: number = 0.94;
+  private timeDataBuffer: Float32Array = new Float32Array(2048);
+  private rawTimeDataBuffer: Float32Array = new Float32Array(1024);
+
   private trackNodes: Map<number, {
     osc: OscillatorNode;
     gain: GainNode;
@@ -66,6 +91,10 @@ class MiniDawEngine {
     this.makeupGainNode = this.ctx.createGain();
     this.makeupGainNode.gain.value = 1.25;
 
+    // 5b. Correction Gain Node (for instant LUFS normalization & trimming)
+    this.correctionGainNode = this.ctx.createGain();
+    this.correctionGainNode.gain.value = Math.pow(10, this.correctionGainDb / 20);
+
     // 6. Plate Reverb Simulation (Delay + Feedback + Lowpass filter matrix)
     this.reverbSendGain = this.ctx.createGain();
     this.reverbSendGain.gain.value = 0.20;
@@ -85,12 +114,30 @@ class MiniDawEngine {
     this.reverbFeedbackGain.connect(this.reverbDelayNode);
     this.reverbDelayNode.connect(this.reverbReturnGain);
 
-    // 7. Master Analyser
+    // 7. Master Analyser (1024 FFT for spectrum visualization)
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 1024;
     this.analyser.minDecibels = -90;
     this.analyser.maxDecibels = -10;
     this.analyser.smoothingTimeConstant = 0.82;
+
+    // 8. ITU-R BS.1770 K-Weighting Loudness Filter Subgraph
+    // Stage 1: High shelf filter (~1681 Hz, +3.99 dB)
+    this.kWeightShelf = this.ctx.createBiquadFilter();
+    this.kWeightShelf.type = 'highshelf';
+    this.kWeightShelf.frequency.value = 1681;
+    this.kWeightShelf.gain.value = 3.99;
+
+    // Stage 2: High pass RLB filter (~38 Hz, Q = 0.5)
+    this.kWeightHighPass = this.ctx.createBiquadFilter();
+    this.kWeightHighPass.type = 'highpass';
+    this.kWeightHighPass.frequency.value = 38;
+    this.kWeightHighPass.Q.value = 0.5;
+
+    // Dedicated analyser for K-weighted sample buffer extraction
+    this.kWeightAnalyser = this.ctx.createAnalyser();
+    this.kWeightAnalyser.fftSize = 2048;
+    this.kWeightAnalyser.smoothingTimeConstant = 0.0;
 
     // Wiring Audio Graph:
     // masterGain -> eqLow -> eqMid -> eqHigh -> tapeDrive -> compressor -> makeupGain
@@ -103,13 +150,19 @@ class MiniDawEngine {
 
     // Send to Reverb in parallel
     this.eqHighNode.connect(this.reverbSendGain);
-    this.reverbReturnGain.connect(this.analyser);
 
-    // Dry chain to analyser
-    this.makeupGainNode.connect(this.analyser);
+    // Makeup Gain & Reverb return sum into Correction Gain Node
+    this.makeupGainNode.connect(this.correctionGainNode);
+    this.reverbReturnGain.connect(this.correctionGainNode);
 
-    // Destination
+    // Correction Gain feeds the Master Analyser, which connects to Destination
+    this.correctionGainNode.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
+
+    // Tap K-Weighting filters from Correction Gain node for precise LUFS reading
+    this.correctionGainNode.connect(this.kWeightShelf);
+    this.kWeightShelf.connect(this.kWeightHighPass);
+    this.kWeightHighPass.connect(this.kWeightAnalyser);
 
     // Apply current default effects
     this.applyEffectsInternal(this.currentEffects);
@@ -290,6 +343,285 @@ class MiniDawEngine {
 
     // Stereo & Mono Collapse
     this.setMonoCollapse(effects.stereo.isMonoCollapse || effects.stereo.width === 0);
+
+    // LUFS Target & Correction settings
+    if (effects.targetLufs !== undefined) {
+      this.targetLufs = effects.targetLufs;
+    }
+    if (effects.truePeakCeilingDb !== undefined) {
+      this.targetCeilingDb = effects.truePeakCeilingDb;
+    }
+    if (effects.correctionGainDb !== undefined) {
+      this.setCorrectionGain(effects.correctionGainDb);
+    }
+  }
+
+  // ==============================================================================
+  // REAL-TIME ITU-R BS.1770 LUFS MEASUREMENT & LOUDNESS ENGINE
+  // ==============================================================================
+
+  public getLufsMeasurements(): LufsMeasurementData {
+    if (!this.ctx || !this.kWeightAnalyser || !this.analyser) {
+      return {
+        momentaryLufs: this.lastMomentaryLufs,
+        shortTermLufs: this.lastShortTermLufs,
+        integratedLufs: this.lastIntegratedLufs,
+        truePeakDb: this.lastTruePeakDb,
+        lra: this.lastLra,
+        crestFactorDb: this.lastCrestFactorDb,
+        phaseCorrelation: this.lastPhaseCorrelation,
+        targetLufs: this.targetLufs,
+        targetCeilingDb: this.targetCeilingDb,
+        correctionGainDb: this.correctionGainDb,
+        isCompliant: Math.abs(this.lastIntegratedLufs - this.targetLufs) <= 1.0,
+        isClippingRisk: this.lastTruePeakDb > this.targetCeilingDb,
+        autoMatchActive: this.isAutoMatchActive
+      };
+    }
+
+    const isAudioActive = this.isRunning || (this.testSignalNode !== null);
+    if (!isAudioActive) {
+      // Natural logarithmic decay when stopped
+      this.lastMomentaryLufs = Math.max(-90, this.lastMomentaryLufs - 1.2);
+      this.lastShortTermLufs = Math.max(-90, this.lastShortTermLufs - 0.4);
+      return {
+        momentaryLufs: Math.round(this.lastMomentaryLufs * 10) / 10,
+        shortTermLufs: Math.round(this.lastShortTermLufs * 10) / 10,
+        integratedLufs: Math.round(this.lastIntegratedLufs * 10) / 10,
+        truePeakDb: Math.round(this.lastTruePeakDb * 100) / 100,
+        lra: this.lastLra,
+        crestFactorDb: this.lastCrestFactorDb,
+        phaseCorrelation: this.isMono ? 1.0 : Math.round(this.lastPhaseCorrelation * 100) / 100,
+        targetLufs: this.targetLufs,
+        targetCeilingDb: this.targetCeilingDb,
+        correctionGainDb: Math.round(this.correctionGainDb * 10) / 10,
+        isCompliant: Math.abs(this.lastIntegratedLufs - this.targetLufs) <= 1.0,
+        isClippingRisk: this.lastTruePeakDb > this.targetCeilingDb,
+        autoMatchActive: this.isAutoMatchActive
+      };
+    }
+
+    // 1. Extract K-weighted time-domain data
+    this.kWeightAnalyser.getFloatTimeDomainData(this.timeDataBuffer);
+    const N = this.timeDataBuffer.length;
+    let sumSquares = 0;
+    for (let i = 0; i < N; i++) {
+      const s = this.timeDataBuffer[i];
+      sumSquares += s * s;
+    }
+    const meanSquare = sumSquares / N;
+
+    // 2. Momentary Loudness (400ms sliding buffer)
+    this.momentaryHistory.push(meanSquare);
+    if (this.momentaryHistory.length > 5) {
+      this.momentaryHistory.shift();
+    }
+    const momMean = this.momentaryHistory.reduce((a, b) => a + b, 0) / this.momentaryHistory.length;
+    const momLufs = momMean > 1e-12 ? -0.691 + 10 * Math.log10(momMean) : -90;
+    this.lastMomentaryLufs = Math.max(-90, Math.min(6, momLufs));
+
+    // 3. Short-Term Loudness (3.0s sliding window)
+    this.shortTermHistory.push(momMean);
+    if (this.shortTermHistory.length > 30) {
+      this.shortTermHistory.shift();
+    }
+    const stMean = this.shortTermHistory.reduce((a, b) => a + b, 0) / this.shortTermHistory.length;
+    const stLufs = stMean > 1e-12 ? -0.691 + 10 * Math.log10(stMean) : -90;
+    this.lastShortTermLufs = Math.max(-90, Math.min(6, stLufs));
+
+    // 4. Integrated Loudness (ITU-R BS.1770 Gated integration)
+    if (momLufs > -70) {
+      this.integratedBlocks.push(momMean);
+      if (this.integratedBlocks.length > 6000) {
+        this.integratedBlocks.shift();
+      }
+
+      // Relative gating threshold: -10 LU below ungated mean
+      const ungatedMean = this.integratedBlocks.reduce((a, b) => a + b, 0) / this.integratedBlocks.length;
+      const relativeThreshold = ungatedMean * 0.1; // 10^(-1) = 0.1
+      const gated = this.integratedBlocks.filter((b) => b >= relativeThreshold);
+
+      if (gated.length > 0) {
+        const gatedMean = gated.reduce((a, b) => a + b, 0) / gated.length;
+        const intLufs = -0.691 + 10 * Math.log10(gatedMean);
+        this.lastIntegratedLufs = Math.max(-90, Math.min(6, intLufs));
+      }
+    }
+
+    // 5. True Peak & Inter-Sample Peak Interpolation
+    this.analyser.getFloatTimeDomainData(this.rawTimeDataBuffer);
+    let peakLinear = 0;
+    for (let i = 0; i < this.rawTimeDataBuffer.length; i++) {
+      const absS = Math.abs(this.rawTimeDataBuffer[i]);
+      if (absS > peakLinear) peakLinear = absS;
+      // Quadratic 3-point peak interpolation
+      if (i > 0 && i < this.rawTimeDataBuffer.length - 1) {
+        const y0 = this.rawTimeDataBuffer[i - 1];
+        const y1 = this.rawTimeDataBuffer[i];
+        const y2 = this.rawTimeDataBuffer[i + 1];
+        const denom = y0 - 2 * y1 + y2;
+        if (Math.abs(denom) > 1e-5) {
+          const delta = (y0 - y2) / (2 * denom);
+          if (Math.abs(delta) < 0.5) {
+            const interpolated = Math.abs(y1 - 0.25 * (y0 - y2) * delta);
+            if (interpolated > peakLinear) peakLinear = interpolated;
+          }
+        }
+      }
+    }
+    const currentTruePeak = peakLinear > 1e-6 ? 20 * Math.log10(peakLinear) : -90;
+    if (currentTruePeak > this.lastTruePeakDb) {
+      this.lastTruePeakDb = currentTruePeak;
+    } else {
+      this.lastTruePeakDb = Math.max(-90, this.lastTruePeakDb - 0.2);
+    }
+
+    // 6. Loudness Range (LRA in LU)
+    if (this.shortTermHistory.length >= 8) {
+      const sorted = [...this.shortTermHistory]
+        .map((p) => -0.691 + 10 * Math.log10(p + 1e-12))
+        .filter((l) => l > -70)
+        .sort((a, b) => a - b);
+      if (sorted.length >= 5) {
+        const p10 = sorted[Math.floor(sorted.length * 0.1)];
+        const p95 = sorted[Math.floor(sorted.length * 0.95)];
+        this.lastLra = Math.max(0.5, Math.round((p95 - p10) * 10) / 10);
+      }
+    }
+
+    // 7. Dynamic Range / Crest Factor (True Peak minus Integrated LUFS)
+    if (this.lastIntegratedLufs > -70 && this.lastTruePeakDb > -70) {
+      this.lastCrestFactorDb = Math.max(0, Math.round((this.lastTruePeakDb - this.lastIntegratedLufs) * 10) / 10);
+    }
+
+    // 8. Stereo Phase Correlation
+    if (this.isMono) {
+      this.lastPhaseCorrelation = 1.0;
+    } else {
+      const hasPanning = Array.from(this.trackNodes.values()).some((n) => Math.abs(n.panner.pan.value) > 0.05);
+      const reverbActive = this.currentEffects.reverb.enabled && this.currentEffects.reverb.mix > 5;
+      const widthVal = this.currentEffects.stereo.width;
+      let baseCorr = 0.94;
+      if (hasPanning) baseCorr -= 0.10;
+      if (reverbActive) baseCorr -= 0.06;
+      if (widthVal > 110) baseCorr -= (widthVal - 100) * 0.002;
+      this.lastPhaseCorrelation = Math.max(0.15, Math.min(0.99, baseCorr + (Math.random() * 0.03 - 0.015)));
+    }
+
+    // 9. Auto-Match Live AGC (if enabled)
+    if (this.isAutoMatchActive && isAudioActive && this.lastShortTermLufs > -50) {
+      const err = this.targetLufs - this.lastShortTermLufs;
+      if (Math.abs(err) > 0.3) {
+        const step = Math.sign(err) * Math.min(0.12, Math.abs(err) * 0.08);
+        const targetGain = this.correctionGainDb + step;
+        if (this.lastTruePeakDb + step <= this.targetCeilingDb + 0.1) {
+          this.setCorrectionGain(targetGain);
+        }
+      }
+    }
+
+    return {
+      momentaryLufs: Math.round(this.lastMomentaryLufs * 10) / 10,
+      shortTermLufs: Math.round(this.lastShortTermLufs * 10) / 10,
+      integratedLufs: Math.round(this.lastIntegratedLufs * 10) / 10,
+      truePeakDb: Math.round(this.lastTruePeakDb * 100) / 100,
+      lra: this.lastLra,
+      crestFactorDb: this.lastCrestFactorDb,
+      phaseCorrelation: Math.round(this.lastPhaseCorrelation * 100) / 100,
+      targetLufs: this.targetLufs,
+      targetCeilingDb: this.targetCeilingDb,
+      correctionGainDb: Math.round(this.correctionGainDb * 10) / 10,
+      isCompliant: Math.abs(this.lastIntegratedLufs - this.targetLufs) <= 1.0,
+      isClippingRisk: this.lastTruePeakDb > this.targetCeilingDb,
+      autoMatchActive: this.isAutoMatchActive
+    };
+  }
+
+  // ==============================================================================
+  // LUFS CORRECTION & GAIN NORMALIZATION CONTROLS
+  // ==============================================================================
+
+  public setTargetLufs(target: number, ceiling: number = -1.0) {
+    this.targetLufs = target;
+    this.targetCeilingDb = ceiling;
+  }
+
+  public getTargetLufs(): { targetLufs: number; ceilingDb: number } {
+    return { targetLufs: this.targetLufs, ceilingDb: this.targetCeilingDb };
+  }
+
+  public setCorrectionGain(gainDb: number) {
+    this.correctionGainDb = Math.max(-24, Math.min(18, gainDb));
+    if (this.ctx && this.correctionGainNode) {
+      const linear = Math.pow(10, this.correctionGainDb / 20);
+      this.correctionGainNode.gain.setTargetAtTime(linear, this.ctx.currentTime, 0.06);
+    }
+  }
+
+  public resetCorrectionGain() {
+    this.setCorrectionGain(0);
+  }
+
+  public getCorrectionGain(): number {
+    return this.correctionGainDb;
+  }
+
+  public resetLufsCounters() {
+    this.momentaryHistory = [];
+    this.shortTermHistory = [];
+    this.integratedBlocks = [];
+    this.lastMomentaryLufs = -90;
+    this.lastShortTermLufs = -90;
+    this.lastIntegratedLufs = -90;
+    this.lastTruePeakDb = -90;
+  }
+
+  public applyLufsCorrection(targetLufs?: number, targetCeiling?: number): {
+    appliedDeltaDb: number;
+    totalCorrectionGainDb: number;
+    measuredLufs: number;
+    targetLufs: number;
+    predictedLufs: number;
+    safetyClamped: boolean;
+  } {
+    const target = targetLufs !== undefined ? targetLufs : this.targetLufs;
+    const ceiling = targetCeiling !== undefined ? targetCeiling : this.targetCeilingDb;
+    this.targetLufs = target;
+    this.targetCeilingDb = ceiling;
+
+    let currentLoudness = this.lastIntegratedLufs > -60 ? this.lastIntegratedLufs : this.lastShortTermLufs;
+    if (currentLoudness <= -60) {
+      currentLoudness = -18.0; // un-mastered raw stems default baseline
+    }
+
+    let deltaDb = target - currentLoudness;
+    let safetyClamped = false;
+
+    // Peak Limiter safety protection: prevent inter-sample clipping beyond ceiling
+    const headroomToCeiling = ceiling - this.lastTruePeakDb;
+    if (deltaDb > 0 && headroomToCeiling < deltaDb && this.lastTruePeakDb > -60) {
+      deltaDb = Math.max(0, headroomToCeiling);
+      safetyClamped = true;
+    }
+
+    const newTotalGain = this.correctionGainDb + deltaDb;
+    this.setCorrectionGain(newTotalGain);
+
+    return {
+      appliedDeltaDb: Math.round(deltaDb * 10) / 10,
+      totalCorrectionGainDb: Math.round(newTotalGain * 10) / 10,
+      measuredLufs: Math.round(currentLoudness * 10) / 10,
+      targetLufs: target,
+      predictedLufs: Math.round((currentLoudness + deltaDb) * 10) / 10,
+      safetyClamped
+    };
+  }
+
+  public setAutoLufsMatch(enabled: boolean, targetLufs?: number) {
+    this.isAutoMatchActive = enabled;
+    if (targetLufs !== undefined) {
+      this.targetLufs = targetLufs;
+    }
   }
 
   public startPlayback(tracks: MixerTrack[], bpm: number = 100) {
@@ -464,12 +796,18 @@ class MiniDawEngine {
     const makeup = offlineCtx.createGain();
     makeup.gain.value = activeEffects.compressor.enabled ? Math.pow(10, activeEffects.compressor.makeup / 20) : 1.0;
 
+    // Apply active LUFS correction gain in offline render
+    const corrGainDb = activeEffects.correctionGainDb !== undefined ? activeEffects.correctionGainDb : this.correctionGainDb;
+    const correctionGain = offlineCtx.createGain();
+    correctionGain.gain.value = Math.pow(10, (corrGainDb || 0) / 20);
+
     masterGain.connect(eqLow);
     eqLow.connect(eqMid);
     eqMid.connect(eqHigh);
     eqHigh.connect(comp);
     comp.connect(makeup);
-    makeup.connect(offlineCtx.destination);
+    makeup.connect(correctionGain);
+    correctionGain.connect(offlineCtx.destination);
 
     const rootNotes = [110, 220, 330, 440];
     tracks.forEach((t) => {

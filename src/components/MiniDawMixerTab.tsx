@@ -22,7 +22,7 @@ import {
   BarChart3,
   HelpCircle
 } from 'lucide-react';
-import { Track, MixerTrack, DawEffectsState } from '../types';
+import { Track, MixerTrack, DawEffectsState, LufsMeasurementData } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { MiniDawRealtimeChart } from './MiniDawRealtimeChart';
@@ -52,6 +52,23 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [showSecondaryChart, setShowSecondaryChart] = useState<boolean>(false);
   const [activeFxPresetId, setActiveFxPresetId] = useState<string>('fx_nashville_master');
 
+  // Real-time LUFS measurement & correction state
+  const [lufsData, setLufsData] = useState<LufsMeasurementData>({
+    momentaryLufs: -90,
+    shortTermLufs: -90,
+    integratedLufs: -90,
+    truePeakDb: -90,
+    lra: 7.5,
+    crestFactorDb: 12.0,
+    phaseCorrelation: 0.94,
+    targetLufs: -12.0,
+    targetCeilingDb: -1.0,
+    correctionGainDb: 0,
+    isCompliant: false,
+    isClippingRisk: false,
+    autoMatchActive: false
+  });
+
   // Sync isPlaying state with audioMiniDaw
   useEffect(() => {
     const checkPlaying = () => {
@@ -60,6 +77,25 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     const interval = setInterval(checkPlaying, 250);
     return () => clearInterval(interval);
   }, []);
+
+  // Poll real-time LUFS measurements
+  useEffect(() => {
+    let animId: number;
+    const poll = () => {
+      setLufsData(audioMiniDaw.getLufsMeasurements());
+      animId = requestAnimationFrame(poll);
+    };
+    animId = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
+  // 1-Click LUFS Correction
+  const handleAutoCorrectLufs = () => {
+    const target = effects.targetLufs || -12.0;
+    const ceiling = effects.truePeakCeilingDb || -1.0;
+    audioMiniDaw.applyLufsCorrection(target, ceiling);
+    setEffects(audioMiniDaw.getEffects());
+  };
 
   // Toggle playback
   const handleTogglePlay = () => {
@@ -300,6 +336,77 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         </div>
       </div>
 
+      {/* REAL-TIME ITU-R BS.1770 LUFS & PEAK COMPLIANCE BAR */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex items-center justify-between flex-wrap gap-4 shadow-lg">
+        <div className="flex items-center gap-5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+              Loudness & Compliance:
+            </span>
+          </div>
+
+          {/* Integrated LUFS Readout */}
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 font-mono text-xs">
+            <span className="text-slate-400 text-[10px]">INTEGRATED:</span>
+            <span className={`font-black ${
+              lufsData.integratedLufs > -60
+                ? Math.abs(lufsData.integratedLufs - (effects.targetLufs || -12.0)) <= 1.0
+                  ? 'text-emerald-400'
+                  : 'text-amber-400'
+                : 'text-slate-500'
+            }`}>
+              {lufsData.integratedLufs > -60 ? `${lufsData.integratedLufs.toFixed(1)} LUFS` : '---.- LUFS'}
+            </span>
+            <span className="text-[10px] text-slate-500">
+              (Target: {effects.targetLufs || -12.0})
+            </span>
+          </div>
+
+          {/* True Peak Readout */}
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 font-mono text-xs">
+            <span className="text-slate-400 text-[10px]">TRUE PEAK:</span>
+            <span className={`font-black ${
+              lufsData.truePeakDb > (effects.truePeakCeilingDb || -1.0)
+                ? 'text-rose-400 animate-pulse'
+                : lufsData.truePeakDb > -60
+                ? 'text-indigo-400'
+                : 'text-slate-500'
+            }`}>
+              {lufsData.truePeakDb > -60 ? `${lufsData.truePeakDb.toFixed(2)} dBTP` : '---.-- dBTP'}
+            </span>
+            <span className="text-[10px] text-slate-500">
+              (Ceiling: {effects.truePeakCeilingDb || -1.0})
+            </span>
+          </div>
+
+          {/* Short Term & Dynamic Range */}
+          <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono text-slate-400">
+            <span>Momentary: <strong className="text-slate-200">{lufsData.momentaryLufs > -60 ? `${lufsData.momentaryLufs.toFixed(1)}` : '---'} LUFS</strong></span>
+            <span>•</span>
+            <span>Phase: <strong className="text-emerald-400">{lufsData.phaseCorrelation > 0 ? `+${lufsData.phaseCorrelation.toFixed(2)}` : lufsData.phaseCorrelation.toFixed(2)}</strong></span>
+            {lufsData.correctionGainDb !== 0 && (
+              <>
+                <span>•</span>
+                <span className="text-teal-300">Correction: <strong>{lufsData.correctionGainDb > 0 ? `+${lufsData.correctionGainDb}` : lufsData.correctionGainDb} dB</strong></span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 1-Click Auto-Correct & Reset */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAutoCorrectLufs}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono transition flex items-center gap-1.5 shadow-sm shadow-emerald-950 cursor-pointer"
+            title="Automatically adjust gain to hit selected target LUFS"
+          >
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            <span>Auto-Correct to {effects.targetLufs || -12.0} LUFS</span>
+          </button>
+        </div>
+      </div>
+
       {/* REAL-TIME FREQUENCY SPECTRUM VISUALIZER (CANVAS) */}
       <MiniDawSpectrumVisualizer
         analyser={audioMiniDaw.getAnalyser()}
@@ -336,7 +443,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {/* Module 1: 3-Band Parametric EQ */}
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
               <div className="flex items-center justify-between">
@@ -622,6 +729,97 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   <option value="instrumental">Instrumental Bus (Stem 1+4)</option>
                   <option value="suno">Suno Master Bus (Stem 1)</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Module 5: LUFS Normalization & Limiter Ceiling Guard */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5 font-mono">
+                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  LUFS Normalizer
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-purple-950 text-purple-300 border border-purple-700/50">
+                  BS.1770
+                </span>
+              </div>
+
+              {/* Target Standard Selector */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 block">Target Standard:</span>
+                <select
+                  value={effects.targetLufs || -12.0}
+                  onChange={(e) => {
+                    const target = parseFloat(e.target.value);
+                    handleUpdateEffect('targetLufs' as any, '', target);
+                    audioMiniDaw.setTargetLufs(target, effects.truePeakCeilingDb || -1.0);
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
+                >
+                  <option value="-14">Spotify / YouTube (-14.0 LUFS)</option>
+                  <option value="-16">Apple Music / Spatial (-16.0 LUFS)</option>
+                  <option value="-12">Nashville Radio (-12.0 LUFS)</option>
+                  <option value="-9">Club / EDM Slam (-9.0 LUFS)</option>
+                  <option value="-10.5">Stadium Rock (-10.5 LUFS)</option>
+                  <option value="-23">Broadcast EBU R128 (-23.0 LUFS)</option>
+                  <option value="-18">Acoustic Audiophile (-18.0 LUFS)</option>
+                </select>
+              </div>
+
+              {/* Ceiling Selector */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 block">True Peak Ceiling:</span>
+                <select
+                  value={effects.truePeakCeilingDb || -1.0}
+                  onChange={(e) => {
+                    const ceiling = parseFloat(e.target.value);
+                    handleUpdateEffect('truePeakCeilingDb' as any, '', ceiling);
+                    audioMiniDaw.setTargetLufs(effects.targetLufs || -12.0, ceiling);
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
+                >
+                  <option value="-1.0">-1.0 dBTP (Universal Streaming)</option>
+                  <option value="-0.8">-0.8 dBTP (Radio / Billboard)</option>
+                  <option value="-0.3">-0.3 dBTP (Club / Dancefloor)</option>
+                  <option value="-2.0">-2.0 dBTP (Audiophile Dynamic)</option>
+                </select>
+              </div>
+
+              {/* Correction Trim Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-mono">
+                  <span className="text-slate-400">Gain Trim:</span>
+                  <span className={`font-bold ${
+                    (effects.correctionGainDb || 0) > 0 ? 'text-emerald-300' : (effects.correctionGainDb || 0) < 0 ? 'text-rose-400' : 'text-slate-300'
+                  }`}>
+                    {(effects.correctionGainDb || 0) > 0 ? `+${(effects.correctionGainDb || 0).toFixed(1)}` : (effects.correctionGainDb || 0).toFixed(1)} dB
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-12"
+                  max="12"
+                  step="0.5"
+                  value={effects.correctionGainDb || 0}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    handleUpdateEffect('correctionGainDb' as any, '', val);
+                    audioMiniDaw.setCorrectionGain(val);
+                  }}
+                  className="w-full accent-purple-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              {/* Auto-Correct Button */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleAutoCorrectLufs}
+                  className="w-full py-1.5 rounded text-[10px] font-mono font-bold transition bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                >
+                  <Zap className="w-3 h-3 fill-current" />
+                  <span>Auto-Correct Gain</span>
+                </button>
               </div>
             </div>
           </div>

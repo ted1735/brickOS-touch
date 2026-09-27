@@ -63,6 +63,7 @@ import { audioMiniDaw } from './utils/audioEngine';
 import { KanbanDashboardTab } from './components/KanbanDashboardTab';
 import { LyricsAndSunoTab } from './components/LyricsAndSunoTab';
 import { MiniDawMixerTab } from './components/MiniDawMixerTab';
+import { MasteringLufsSuite } from './components/MasteringLufsSuite';
 import { YouTubeSEOTab } from './components/YouTubeSEOTab';
 import { OmniPostTab } from './components/OmniPostTab';
 import { LiveMinistryChartsTab } from './components/LiveMinistryChartsTab';
@@ -1906,121 +1907,11 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           {/* TAB 3: SENIOR MASTERING & A/B BUS */}
           {activeTab === 'mastering' && (
             <div className="space-y-4">
-              <SectionQuickHelpBanner
-                sectionId="mastering"
-                onOpenModalGuide={handleOpenSectionGuide}
+              <MasteringLufsSuite
+                track={selectedTrack}
+                onOpenSectionGuide={handleOpenSectionGuide}
                 isDarkMode={isDarkMode}
               />
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>Senior Mastering Engineer & Level-Matched A/B Bus</span>
-                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
-                        Target: -12.0 LUFS | -1.0 dBTP
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400">Audition raw Suno gens against Billboard Top 100 reference tracks with instant LUFS gain compensation.</p>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSectionGuide('mastering')}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                      title="Open Senior Mastering Operating Guide & SOP Rules"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>How To Use Mastering & SOP</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        const next = !isMonoCollapse;
-                        setIsMonoCollapse(next);
-                        audioMiniDaw.setMonoCollapse(next);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-                        isMonoCollapse ? 'bg-amber-600 text-white border-amber-500' : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
-                      title="Audit wide reverb returns for phase cancellation on mobile phones"
-                    >
-                      <Activity className="w-3.5 h-3.5" />
-                      <span>{isMonoCollapse ? 'Mono Collapse ACTIVE' : 'Mono-Collapse Check'}</span>
-                    </button>
-                  </div>
-                </div>
-
-              {/* A/B Bus Selector */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {[
-                  { id: 'suno', label: '[A] Raw Suno Gen' },
-                  { id: 'vocal', label: '[B] Isolated Dry Vocal' },
-                  { id: 'instrumental', label: '[C] True Instrumental' },
-                  { id: 'master', label: '[D] Final Master WAV' },
-                  { id: 'ref', label: '[REF] Billboard Ref' }
-                ].map(bus => (
-                  <button
-                    key={bus.id}
-                    onClick={() => {
-                      setActiveBus(bus.id as any);
-                      audioMiniDaw.updateBusRouting(bus.id, trackStates);
-                    }}
-                    className={`p-3 rounded-xl border text-xs font-bold transition flex flex-col items-center gap-1 ${
-                      activeBus === bus.id
-                        ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-950'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                    }`}
-                  >
-                    <span>{bus.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Mastering Meters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Integrated Loudness</span>
-                  <div className="text-2xl font-black text-emerald-400 font-mono">-12.1 LUFS</div>
-                  <span className="text-[10px] text-slate-500">Nashville Standard Compliant</span>
-                </div>
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">True Peak Ceiling</span>
-                  <div className="text-2xl font-black text-indigo-400 font-mono">-1.05 dBTP</div>
-                  <span className="text-[10px] text-slate-500">Zero Intersample Clipping</span>
-                </div>
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Phase Correlation</span>
-                  <div className="text-2xl font-black text-amber-400 font-mono">+0.92</div>
-                  <span className="text-[10px] text-slate-500">Mono Compatible Safe</span>
-                </div>
-              </div>
-
-              {/* Processing Chain Checklist */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2 text-xs">
-                <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">
-                  DAW Surgery & Master Chain Audit (Nashville Benchmark)
-                </span>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-slate-300 font-mono text-[11px]">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Subtractive HPF @ 80-100Hz on Vocals</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Dynamic EQ Notch @ 300-500Hz mud reduction</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Dual-Stage Compression (Peak Catcher + Color Slam)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Parallel Vox Smash Bus blended @ 5-10%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
             </div>
           )}
 

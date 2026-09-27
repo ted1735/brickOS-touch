@@ -477,6 +477,51 @@ export interface DawEffectsState {
   stereo: DawStereoWidth;
   busRouting: 'master' | 'vocal' | 'instrumental' | 'suno' | 'ref';
   activeFxPresetName?: string;
+  targetLufs?: number;
+  correctionGainDb?: number;
+  truePeakCeilingDb?: number;
+}
+
+export type MasteringCategory = 
+  | 'Streaming'
+  | 'Radio & Commercial'
+  | 'Modern Punch'
+  | 'Warm Vintage'
+  | 'Acoustic & Classical'
+  | 'Broadcast & Dialogue'
+  | 'Corrective';
+
+export interface MasteringPreset {
+  id: string;
+  name: string;
+  category: MasteringCategory;
+  targetLufs: number; // e.g. -14.0, -12.0, -9.0
+  truePeakCeiling: number; // e.g. -1.0 dBTP
+  targetLra?: number; // Target Loudness Range (LU)
+  description: string;
+  badge: string;
+  platformSpec?: string;
+  effects: DawEffectsState;
+  limiterCeilingDb?: number;
+  hpfCutoffHz?: number;
+  tags: string[];
+  isCustom?: boolean;
+}
+
+export interface LufsMeasurementData {
+  momentaryLufs: number;
+  shortTermLufs: number;
+  integratedLufs: number;
+  truePeakDb: number;
+  lra: number;
+  crestFactorDb: number;
+  phaseCorrelation: number;
+  targetLufs: number;
+  targetCeilingDb: number;
+  correctionGainDb: number;
+  isCompliant: boolean;
+  isClippingRisk: boolean;
+  autoMatchActive: boolean;
 }
 
 export interface DawPresetsState {
