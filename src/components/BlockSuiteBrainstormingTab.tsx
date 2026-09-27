@@ -17,6 +17,7 @@ import {
   Eye,
   Type,
   FileText,
+  Image as ImageIcon,
   Cloud,
   HardDrive,
   Copy,
@@ -118,6 +119,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
   // Toast / feedback message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Storyboard Thumbnail Image Asset Modal state
+  const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
+  const [newImageUrl, setNewImageUrl] = useState<string>('');
+  const [newImageTitle, setNewImageTitle] = useState<string>('');
+  const [newImageShotNumber, setNewImageShotNumber] = useState<string>('Scene 1 / Shot A');
+  const [newImageNotes, setNewImageNotes] = useState<string>('');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<any>(null);
@@ -377,6 +385,11 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       content = 'Track stems exported\nUVR5 lead vocal clean\nNashville -14 LUFS verified\nSelah 24h prayer gate cleared';
       color = 'slate';
       width = 280;
+    } else if (type === 'thumbnail_asset') {
+      title = 'Storyboard Thumbnail';
+      content = 'Shot description & camera prompt notes';
+      color = 'indigo';
+      width = 280;
     }
 
     const newBlock: BlockSuiteBlock = {
@@ -397,6 +410,44 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     setSelectedBlockId(newBlock.id);
     triggerAutoSave(updated, connectors, viewMode);
     showToast(`Added ${title} to Whiteboard`);
+  };
+
+  // Add Thumbnail Image Asset Card directly onto Whiteboard
+  const handleCreateThumbnailAsset = (url: string, titleStr: string, shotNum: string, notes: string) => {
+    if (!url.trim()) {
+      showToast('Please enter an image URL');
+      return;
+    }
+    const containerWidth = containerRef.current?.clientWidth || 1000;
+    const containerHeight = containerRef.current?.clientHeight || 600;
+    const spawnX = Math.round((-pan.x + containerWidth / 2 - 140) / zoom);
+    const spawnY = Math.round((-pan.y + containerHeight / 2 - 100) / zoom);
+
+    const thumbnailBlock: BlockSuiteBlock = {
+      id: `thumb_${Date.now()}`,
+      type: 'thumbnail_asset',
+      title: titleStr.trim() || 'Visual Storyboard Thumbnail',
+      subtitle: shotNum.trim() || 'Shot Concept',
+      content: notes.trim() || 'Visual prompt and staging details for this scene.',
+      imageUrl: url.trim(),
+      aspectRatio: '16:9',
+      shotNumber: shotNum.trim(),
+      x: Math.max(40, spawnX),
+      y: Math.max(40, spawnY),
+      width: 300,
+      color: 'indigo',
+      orderIndex: blocks.length
+    };
+
+    const updated = [...blocks, thumbnailBlock];
+    setBlocks(updated);
+    setSelectedBlockId(thumbnailBlock.id);
+    triggerAutoSave(updated, connectors, viewMode);
+    setIsImageModalOpen(false);
+    setNewImageUrl('');
+    setNewImageTitle('');
+    setNewImageNotes('');
+    showToast(`Added "${thumbnailBlock.title}" Image Card to Whiteboard!`);
   };
 
   // Delete a block
@@ -857,6 +908,15 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
             <Plus className="w-3 h-3" />
             <span>Suno AI Block</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setIsImageModalOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-900/80 text-white hover:bg-indigo-800 border border-indigo-500/50 shadow-xs cursor-pointer font-bold"
+            title="Add Storyboard Thumbnail Image card and link to song arrangement"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-indigo-300" />
+            <span>+ Thumbnail Image</span>
+          </button>
         </div>
 
         {/* Right: Viewport Controls & Grid Styles (Only in Edgeless Mode) */}
@@ -1114,12 +1174,36 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
                     {/* Block Content Area */}
                     <div className="p-3 flex-1 flex flex-col gap-2">
+                      {/* Storyboard Image Thumbnail Preview */}
+                      {block.type === 'thumbnail_asset' && block.imageUrl && (
+                        <div className="relative rounded-lg overflow-hidden border border-slate-700/80 bg-slate-950 aspect-video mb-1 group">
+                          <img
+                            src={block.imageUrl}
+                            alt={block.title}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            onError={(e) => {
+                              (e.target as any).src = 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80';
+                            }}
+                          />
+                          {block.shotNumber && (
+                            <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[9px] font-mono font-bold text-amber-300 border border-amber-500/40">
+                              {block.shotNumber}
+                            </span>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                            <span className="text-[9px] font-mono text-slate-200 truncate">
+                              Storyboard Visual
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                       <textarea
                         value={block.content}
                         onChange={(e) => handleUpdateBlock(block.id, { content: e.target.value })}
-                        rows={Math.max(3, Math.min(10, block.content.split('\n').length))}
+                        rows={block.type === 'thumbnail_asset' ? 2 : Math.max(3, Math.min(10, block.content.split('\n').length))}
                         className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed selection:bg-indigo-900"
-                        placeholder="Enter lyrics, chords, or notes..."
+                        placeholder={block.type === 'thumbnail_asset' ? "Scene prompt / shot notes..." : "Enter lyrics, chords, or notes..."}
                         spellCheck={false}
                       />
 
@@ -1214,6 +1298,21 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                         </button>
                       </div>
 
+                      {block.type === 'thumbnail_asset' && block.imageUrl && (
+                        <div className="relative rounded-lg overflow-hidden border border-slate-700/80 bg-slate-950 aspect-video max-w-md my-2">
+                          <img
+                            src={block.imageUrl}
+                            alt={block.title}
+                            className="w-full h-full object-cover"
+                          />
+                          {block.shotNumber && (
+                            <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/80 text-[10px] font-mono font-bold text-amber-300 border border-amber-500/40">
+                              {block.shotNumber}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       <textarea
                         value={block.content}
                         onChange={(e) => handleUpdateBlock(block.id, { content: e.target.value })}
@@ -1228,6 +1327,149 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </div>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* STORYBOARD THUMBNAIL IMAGE MODAL */}
+      {/* ========================================================================= */}
+      {isImageModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl text-slate-100 font-mono">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Add Storyboard Thumbnail Card
+                  </h3>
+                  <span className="text-[10px] text-slate-400">
+                    Add an image thumbnail card to the infinite canvas and link it with story connectors
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImageModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Image URL input */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">
+                  Image URL / Path: <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newImageUrl}
+                  onChange={(e) => setNewImageUrl(e.target.value)}
+                  placeholder="https://... or /assets/..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Quick Sample Presets */}
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 block font-semibold">Quick Visual Presets:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: 'Nashville Woodshop', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80', title: 'Woodshop Sanctification', shot: 'Scene 1 / Shot A' },
+                    { label: 'Golden Candle Light', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80', title: 'Every Candle Victory', shot: 'Scene 2 / Shot B' },
+                    { label: 'Studio Analog Desk', url: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&auto=format&fit=crop&q=80', title: 'Brick Production Desk', shot: 'Scene 3 / Shot C' },
+                    { label: 'Cathedral Acoustic Glow', url: 'https://images.unsplash.com/photo-1548625361-195fe61a55c3?w=800&auto=format&fit=crop&q=80', title: 'Throne Room Anchor', shot: 'Bridge Climax' }
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setNewImageUrl(preset.url);
+                        setNewImageTitle(preset.title);
+                        setNewImageShotNumber(preset.shot);
+                      }}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[10px] border border-slate-700 transition cursor-pointer"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Title & Shot Number */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-bold block">Card Title:</label>
+                  <input
+                    type="text"
+                    value={newImageTitle}
+                    onChange={(e) => setNewImageTitle(e.target.value)}
+                    placeholder="e.g. Intro Sunrise Reveal"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-bold block">Shot / Scene Number:</label>
+                  <input
+                    type="text"
+                    value={newImageShotNumber}
+                    onChange={(e) => setNewImageShotNumber(e.target.value)}
+                    placeholder="e.g. Scene 1 / Shot A"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Prompt / Scene Notes */}
+              <div className="space-y-1">
+                <label className="text-slate-300 font-bold block">Scene & Prompt Notes:</label>
+                <textarea
+                  value={newImageNotes}
+                  onChange={(e) => setNewImageNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Describe camera movement, lighting, emotion, or story context..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono outline-none resize-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Preview if URL provided */}
+              {newImageUrl.trim() && (
+                <div className="rounded-lg overflow-hidden border border-slate-800 aspect-video relative max-h-40 bg-slate-950">
+                  <img
+                    src={newImageUrl.trim()}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as any).src = 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80';
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsImageModalOpen(false)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCreateThumbnailAsset(newImageUrl, newImageTitle, newImageShotNumber, newImageNotes)}
+                disabled={!newImageUrl.trim()}
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-md"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Place on Whiteboard</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* FOOTER: STATS & QUICK NAVIGATION SHORTCUTS */}

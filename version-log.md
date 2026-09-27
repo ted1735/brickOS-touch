@@ -147,3 +147,26 @@ All major milestones, song creations, and revision checkpoints in the studio inc
   - **Deep Lyric Suite & Studio Integration**:
     - One-click **"Compile to Lyrics"** compiling whiteboard blocks into active song lyrics.
     - Added **"Open in Whiteboard"** quick launcher to the Lyric Suite header action bar.
+
+---
+
+## [v2.0] — Mastering Rack Signal Chain Flow Indicator & Whiteboard Storyboard Thumbnail Linking
+- **Date**: 2026-09-27
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.0`**.
+  - **Mastering Rack Visual Signal Chain Flow Indicator**:
+    - Built interactive signal chain flow indicator bar: `Input ➔ [Stage 1] ➔ [Stage 2] ➔ [Stage 3] ➔ Master Out`.
+    - Implemented full HTML5 drag-and-drop reordering with drag handle indicators and active stage drop zones.
+    - Added single-click directional stage swap buttons (`◀` / `▶`) for precision module nudging.
+    - Dynamic CSS grid reordering applied to EQ, Compressor, and Limiter rack cards in real-time.
+    - Added one-click **"Reset Order"** button returning the signal path to default `EQ ➔ Compressor ➔ Limiter`.
+    - Signal chain routing order persists across reloads via `localStorage` (`brickos_mastering_module_order`).
+  - **BlockSuite Whiteboard Storyboard Thumbnail Images & Connector Linking**:
+    - Maintained exact whiteboard layout, coordinates, connectors, and themes per user instruction.
+    - Added **"+ Thumbnail Image"** insertion button with icon to toolbar palette.
+    - Built **Storyboard Thumbnail Image Modal** allowing image URL input, sample presets (Nashville Woodshop, Candlelit Piano, Analog Console, Cathedral), title, shot number badge (`Scene 1 / Shot A`), and notes.
+    - Created `thumbnail_asset` card rendering in **Edgeless Mode** with 16:9 aspect preview, shot badge, scene notes, color selector, and card removal.
+    - Enabled full SVG connector linking (`LinkIcon`) allowing storyboard thumbnails to link to lyrics, chord cards, or other scenes with free dragging across the 2D infinite canvas.
+    - Rendered linear storyboard cards with image previews in **Page Mode**.
+

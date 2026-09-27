@@ -8,9 +8,15 @@ import {
   Zap,
   Activity,
   ChevronRight,
-  Info
+  Info,
+  ArrowRight,
+  GripVertical,
+  Check,
+  Layers,
+  Sliders,
+  Waves
 } from 'lucide-react';
-import { DawEffectsState, DawLimiter, LufsMeasurementData } from '../types';
+import { DawEffectsState, DawLimiter, LufsMeasurementData, MasteringModuleId } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
 
 interface MasteringRackProps {
@@ -230,6 +236,84 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
     return `M 0,${yLow.toFixed(1)} C 50,${yLow.toFixed(1)} 80,${yMid.toFixed(1)} 120,${yMid.toFixed(1)} C 160,${yMid.toFixed(1)} 190,${yHigh.toFixed(1)} 240,${yHigh.toFixed(1)}`;
   };
 
+  // Module Signal Chain Order & Drag-and-Drop state
+  const [moduleOrder, setModuleOrder] = useState<MasteringModuleId[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('brickos_mastering_module_order');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length === 3 && parsed.includes('eq') && parsed.includes('compressor') && parsed.includes('limiter')) {
+            return parsed as MasteringModuleId[];
+          }
+        }
+      } catch (_) {}
+    }
+    return ['eq', 'compressor', 'limiter'];
+  });
+  const [draggingModule, setDraggingModule] = useState<MasteringModuleId | null>(null);
+  const [dragOverModule, setDragOverModule] = useState<MasteringModuleId | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: MasteringModuleId) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingModule(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: MasteringModuleId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverModule !== id) {
+      setDragOverModule(id);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverModule(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: MasteringModuleId) => {
+    e.preventDefault();
+    const sourceId = (e.dataTransfer.getData('text/plain') as MasteringModuleId) || draggingModule;
+    setDraggingModule(null);
+    setDragOverModule(null);
+
+    if (!sourceId || sourceId === targetId) return;
+
+    const newOrder = [...moduleOrder];
+    const sourceIdx = newOrder.indexOf(sourceId);
+    const targetIdx = newOrder.indexOf(targetId);
+    if (sourceIdx !== -1 && targetIdx !== -1) {
+      newOrder.splice(sourceIdx, 1);
+      newOrder.splice(targetIdx, 0, sourceId);
+      setModuleOrder(newOrder);
+      try {
+        localStorage.setItem('brickos_mastering_module_order', JSON.stringify(newOrder));
+      } catch (_) {}
+    }
+  };
+
+  const handleResetModuleOrder = () => {
+    const defaultOrder: MasteringModuleId[] = ['eq', 'compressor', 'limiter'];
+    setModuleOrder(defaultOrder);
+    try {
+      localStorage.setItem('brickos_mastering_module_order', JSON.stringify(defaultOrder));
+    } catch (_) {}
+  };
+
+  const moveModuleIndex = (index: number, direction: 'left' | 'right') => {
+    const targetIndex = direction === 'left' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= moduleOrder.length) return;
+    const newOrder = [...moduleOrder];
+    const item = newOrder[index];
+    newOrder.splice(index, 1);
+    newOrder.splice(targetIndex, 0, item);
+    setModuleOrder(newOrder);
+    try {
+      localStorage.setItem('brickos_mastering_module_order', JSON.stringify(newOrder));
+    } catch (_) {}
+  };
+
   const allBypassed = !effects.eq.enabled && !effects.compressor.enabled && !limiter.enabled;
 
   return (
@@ -318,6 +402,148 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
       </div>
 
       {/* ========================================================================= */}
+      {/* VISUAL SIGNAL CHAIN FLOW INDICATOR & DRAG-AND-DROP REORDER BAR */}
+      {/* ========================================================================= */}
+      <div className="px-4 py-2.5 bg-slate-900/90 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        {/* Left: Signal Chain Status & Explanation */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px]">
+            <Waves className="w-3 h-3 text-teal-400" />
+            <span className="text-slate-400 font-bold uppercase tracking-wider">Signal Path:</span>
+            <span className="text-white font-semibold">Input</span>
+            <ChevronRight className="w-3 h-3 text-slate-600" />
+            <span className="text-teal-300 font-bold">DSP Modules</span>
+            <ChevronRight className="w-3 h-3 text-slate-600" />
+            <span className="text-white font-semibold">Master Out</span>
+          </div>
+
+          <span className="text-[10px] text-slate-400 hidden xl:inline">
+            Drag badges or use arrows to reorder DSP sequence in real-time
+          </span>
+        </div>
+
+        {/* Center: Draggable Module Flow Badges */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {moduleOrder.map((modId, index) => {
+            const isFirst = index === 0;
+            const isLast = index === moduleOrder.length - 1;
+            const isDragging = draggingModule === modId;
+            const isDragOver = dragOverModule === modId;
+
+            let modLabel = '';
+            let modNum = '';
+            let isEnabled = false;
+            let activeColor = '';
+            let borderHover = '';
+
+            if (modId === 'eq') {
+              modLabel = 'Parametric EQ';
+              modNum = '01';
+              isEnabled = effects.eq.enabled;
+              activeColor = 'bg-cyan-950/80 text-cyan-300 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.15)]';
+              borderHover = 'border-cyan-400';
+            } else if (modId === 'compressor') {
+              modLabel = 'VCA Compressor';
+              modNum = '02';
+              isEnabled = effects.compressor.enabled;
+              activeColor = 'bg-indigo-950/80 text-indigo-300 border-indigo-500/50 shadow-[0_0_10px_rgba(99,102,241,0.15)]';
+              borderHover = 'border-indigo-400';
+            } else {
+              modLabel = 'Brickwall Limiter';
+              modNum = '03';
+              isEnabled = limiter.enabled;
+              activeColor = 'bg-amber-950/80 text-amber-300 border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.15)]';
+              borderHover = 'border-amber-400';
+            }
+
+            return (
+              <React.Fragment key={modId}>
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, modId)}
+                  onDragOver={(e) => handleDragOver(e, modId)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, modId)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono select-none transition-all duration-150 cursor-grab active:cursor-grabbing ${
+                    isDragging
+                      ? 'opacity-40 scale-95 border-dashed border-teal-400'
+                      : isDragOver
+                      ? `scale-105 ${borderHover} ring-2 ring-teal-400 bg-slate-800`
+                      : isEnabled
+                      ? activeColor
+                      : 'bg-slate-950/60 text-slate-500 border-slate-800 hover:border-slate-700'
+                  }`}
+                  title={`Stage ${index + 1}: ${modLabel} (${isEnabled ? 'Active' : 'Bypassed'}). Drag to reposition signal order.`}
+                >
+                  <GripVertical className="w-3 h-3 text-slate-500 shrink-0" />
+                  
+                  {/* Stage position index badge */}
+                  <span className="w-4 h-4 rounded-full bg-slate-900 border border-slate-700 text-[9px] font-bold flex items-center justify-center text-slate-300">
+                    {index + 1}
+                  </span>
+
+                  <span className="font-bold tracking-tight">{modLabel}</span>
+
+                  {/* Status Indicator Dot */}
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isEnabled ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-slate-600'
+                    }`}
+                  />
+
+                  {/* Quick Nudge Arrows */}
+                  <div className="flex items-center gap-0.5 ml-1 border-l border-slate-700/50 pl-1">
+                    <button
+                      type="button"
+                      disabled={isFirst}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveModuleIndex(index, 'left');
+                      }}
+                      className="text-[9px] px-1 hover:text-white disabled:opacity-20 cursor-pointer disabled:pointer-events-none"
+                      title="Move earlier in chain"
+                    >
+                      ◀
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isLast}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveModuleIndex(index, 'right');
+                      }}
+                      className="text-[9px] px-1 hover:text-white disabled:opacity-20 cursor-pointer disabled:pointer-events-none"
+                      title="Move later in chain"
+                    >
+                      ▶
+                    </button>
+                  </div>
+                </div>
+
+                {!isLast && (
+                  <ArrowRight className="w-3 h-3 text-slate-600 shrink-0" />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Right: Reset Chain Order to Default */}
+        <div className="flex items-center gap-2">
+          {JSON.stringify(moduleOrder) !== JSON.stringify(['eq', 'compressor', 'limiter']) && (
+            <button
+              type="button"
+              onClick={handleResetModuleOrder}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-mono border border-slate-700 transition cursor-pointer"
+              title="Reset signal flow to canonical EQ ➔ Compressor ➔ Limiter"
+            >
+              Default Order (EQ ➔ Comp ➔ Lim)
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
       {/* 3-MODULE MASTERING RACK CHASSIS GRID */}
       {/* ========================================================================= */}
       <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -325,6 +551,7 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
         {/* MODULE 1: 3-BAND PARAMETRIC MASTER EQ */}
         {/* ======================================================================= */}
         <div
+          style={{ order: moduleOrder.indexOf('eq') }}
           className={`relative rounded-xl border p-4 transition-all duration-200 flex flex-col justify-between ${
             effects.eq.enabled
               ? 'bg-slate-950/90 border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.06)]'
@@ -614,6 +841,7 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
         {/* MODULE 2: VCA MASTER BUS DYNAMICS COMPRESSOR */}
         {/* ======================================================================= */}
         <div
+          style={{ order: moduleOrder.indexOf('compressor') }}
           className={`relative rounded-xl border p-4 transition-all duration-200 flex flex-col justify-between ${
             effects.compressor.enabled
               ? 'bg-slate-950/90 border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.06)]'
@@ -827,6 +1055,7 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
         {/* MODULE 3: BRICKWALL MASTER LIMITER & TRUE PEAK CEILING GUARD */}
         {/* ======================================================================= */}
         <div
+          style={{ order: moduleOrder.indexOf('limiter') }}
           className={`relative rounded-xl border p-4 transition-all duration-200 flex flex-col justify-between ${
             limiter.enabled
               ? 'bg-slate-950/90 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.06)]'
