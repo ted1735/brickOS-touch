@@ -53,7 +53,8 @@ import {
   RefreshCcw,
   Sun,
   Moon,
-  HelpCircle
+  HelpCircle,
+  Keyboard
 } from 'lucide-react';
 import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem } from './types';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
@@ -71,6 +72,9 @@ import { CatalogSidebar } from './components/CatalogSidebar';
 import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
 import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { StudioTwoRowNavigation } from './components/StudioTwoRowNavigation';
+import { GlobalAudioTransport } from './components/GlobalAudioTransport';
+import { KeyboardShortcutsOverlay } from './components/KeyboardShortcutsOverlay';
+import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts';
 import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
 import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
 import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
@@ -634,6 +638,88 @@ export default function BrickOSMusicStudioWorkspace() {
   const [activeBus, setActiveBus] = useState<'master' | 'suno' | 'vocal' | 'instrumental' | 'ref'>('master');
   const [isMonoCollapse, setIsMonoCollapse] = useState(false);
 
+  // Global Audio Engine Controls for Keyboard Shortcuts
+  const [isMutedAudio, setIsMutedAudio] = useState(false);
+
+  const handleTogglePlayPauseAudio = () => {
+    if (audioMiniDaw.getIsPlaying()) {
+      audioMiniDaw.stopPlayback();
+      setIsPlaying(false);
+      showToast('Audio preview paused [Space]', 'info');
+    } else {
+      audioMiniDaw.init();
+      audioMiniDaw.startPlayback(trackStates, selectedTrack.bpm);
+      setIsPlaying(true);
+      showToast(`Playing stem preview: "${selectedTrack.title}" (${selectedTrack.bpm} BPM) [Space]`, 'success');
+    }
+  };
+
+  const handleToggleMuteAudio = () => {
+    if (isMutedAudio) {
+      audioMiniDaw.setMasterVolume(masterVolume);
+      setIsMutedAudio(false);
+      showToast('Master audio unmuted [M]', 'info');
+    } else {
+      audioMiniDaw.setMasterVolume(0);
+      setIsMutedAudio(true);
+      showToast('Master audio muted [M]', 'info');
+    }
+  };
+
+  const handleResetAudioEngine = () => {
+    audioMiniDaw.stopPlayback();
+    setIsPlaying(false);
+    showToast('Audio synthesizers reset [R]', 'info');
+  };
+
+  const handleNextTrack = () => {
+    const currentIndex = tracks.findIndex(t => t.id === selectedTrack.id);
+    const nextIndex = (currentIndex + 1) % tracks.length;
+    const nextTrack = tracks[nextIndex];
+    setSelectedTrack(nextTrack);
+    showToast(`Switched to: ${nextTrack.id} - ${nextTrack.title} [ ] ]`, 'info');
+  };
+
+  const handlePreviousTrack = () => {
+    const currentIndex = tracks.findIndex(t => t.id === selectedTrack.id);
+    const prevIndex = (currentIndex - 1 + tracks.length) % tracks.length;
+    const prevTrack = tracks[prevIndex];
+    setSelectedTrack(prevTrack);
+    showToast(`Switched to: ${prevTrack.id} - ${prevTrack.title} [ [ ]`, 'info');
+  };
+
+  // Global Keyboard Shortcuts Manager Hook
+  const {
+    isCheatSheetOpen,
+    setIsCheatSheetOpen,
+    openCheatSheet,
+    closeCheatSheet,
+    toggleCheatSheet
+  } = useGlobalKeyboardShortcuts({
+    onNavigateToTab: (tab) => {
+      setActiveTab(tab as any);
+      showToast(`Switched to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+    },
+    onTogglePlayPauseAudio: handleTogglePlayPauseAudio,
+    onToggleMuteAudio: handleToggleMuteAudio,
+    onResetAudioEngine: handleResetAudioEngine,
+    onPreviousTrack: handlePreviousTrack,
+    onNextTrack: handleNextTrack,
+    onOpenCreateProject: () => setIsCreateModalOpen(true),
+    onOpenSunoBridge: () => setIsSunoBridgeOpen(true),
+    onOpenSectionGuide: () => handleOpenSectionGuide(activeTab as StudioSectionId),
+    onToggleTheme: handleToggleTheme,
+    onToggleSideNav: () => {
+      setIsSideNavOpen(prev => !prev);
+      showToast('Toggled side navigation [Alt+B]', 'info');
+    },
+    onCloseModals: () => {
+      setIsCreateModalOpen(false);
+      setIsSunoBridgeOpen(false);
+      setIsSectionGuideOpen(false);
+    }
+  });
+
   // NightCafe prompts
   const [nightCafePrompts, setNightCafePrompts] = useState(NIGHTCAFE_DEFAULT_PROMPTS);
 
@@ -1133,7 +1219,15 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           ) : (
             <CheckCircle className="w-4 h-4 text-white shrink-0" />
           )}
-          <span>{copiedNotification}</span>
+          <span className="flex-1">{copiedNotification}</span>
+          <button
+            onClick={() => setCopiedNotification('')}
+            className="ml-1.5 p-0.5 text-white/80 hover:text-white hover:scale-110 transition cursor-pointer"
+            title="Dismiss notification"
+            aria-label="Dismiss notification"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -1373,6 +1467,26 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">Guide & SOP</span>
             <span className="sm:hidden">Guide</span>
+          </button>
+
+          {/* KEYBOARD SHORTCUTS CHEAT SHEET BUTTON */}
+          <button
+            onClick={toggleCheatSheet}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              isCheatSheetOpen
+                ? 'bg-purple-600 border-purple-500 text-white shadow-purple-950/60 shadow-md'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700 hover:text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-purple-700 border-slate-300'
+            }`}
+            title="Open Interactive Keyboard Shortcuts Cheat Sheet (? or Shift+/)"
+            aria-label="Toggle Keyboard Shortcuts Cheat Sheet"
+          >
+            <Keyboard className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">Shortcuts</span>
+            <kbd className="hidden md:inline px-1.5 py-0.2 rounded text-[10px] font-mono bg-purple-950/70 border border-purple-800/60 text-purple-300 font-bold">
+              ?
+            </kbd>
           </button>
 
           {/* LIGHT / DARK MODE TOGGLE SWITCH */}
@@ -1654,10 +1768,11 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             setActiveTab={setActiveTab}
             isDarkMode={isDarkMode}
             onOpenSectionGuide={handleOpenSectionGuide}
+            onOpenShortcutsCheatSheet={openCheatSheet}
           />
 
           {/* ACTIVE SECTION CONTEXT BANNER & "HOW TO USE THIS SECTION" BUTTON */}
-          <div className={`px-4 py-2.5 rounded-xl border flex items-center justify-between flex-wrap gap-2 transition ${
+          <div className={`${activeTab === 'kanban' ? 'px-3 py-1.5' : 'px-4 py-2.5'} rounded-xl border flex items-center justify-between flex-wrap gap-2 transition flex-shrink-0 ${
             isDarkMode
               ? 'bg-slate-900/90 border-slate-800 text-slate-200'
               : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
@@ -3054,6 +3169,50 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onNavigateToSection={(targetSection) => {
           setActiveTab(targetSection as any);
         }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* GLOBAL KEYBOARD SHORTCUTS INTERACTIVE OVERLAY CHEAT SHEET */}
+      <KeyboardShortcutsOverlay
+        isOpen={isCheatSheetOpen}
+        onClose={closeCheatSheet}
+        isDarkMode={isDarkMode}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab as any);
+          showToast(`Switched to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+        }}
+        onTogglePlayPauseAudio={handleTogglePlayPauseAudio}
+        isPlayingAudio={isPlaying}
+        onToggleMuteAudio={handleToggleMuteAudio}
+        isMutedAudio={isMutedAudio}
+        onResetAudioEngine={handleResetAudioEngine}
+        onPreviousTrack={handlePreviousTrack}
+        onNextTrack={handleNextTrack}
+        onOpenCreateProject={() => setIsCreateModalOpen(true)}
+        onOpenSunoBridge={() => setIsSunoBridgeOpen(true)}
+        onOpenSectionGuide={() => handleOpenSectionGuide(activeTab as StudioSectionId)}
+        onToggleTheme={handleToggleTheme}
+        onToggleSideNav={() => setIsSideNavOpen(prev => !prev)}
+        currentTrackTitle={selectedTrack ? `${selectedTrack.id}: ${selectedTrack.title}` : undefined}
+        activeTab={activeTab}
+      />
+
+      {/* PERSISTENT FLOATING AUDIO TRANSPORT */}
+      <GlobalAudioTransport
+        isPlaying={isPlaying}
+        onTogglePlayPause={handleTogglePlayPauseAudio}
+        isMuted={isMutedAudio}
+        onToggleMute={handleToggleMuteAudio}
+        masterVolume={masterVolume}
+        onVolumeChange={(vol) => {
+          setMasterVolume(vol);
+          audioMiniDaw.setMasterVolume(vol);
+        }}
+        selectedTrack={selectedTrack}
+        onPreviousTrack={handlePreviousTrack}
+        onNextTrack={handleNextTrack}
+        onOpenMiniDaw={() => setActiveTab('mixer')}
+        onResetAudio={handleResetAudioEngine}
         isDarkMode={isDarkMode}
       />
 

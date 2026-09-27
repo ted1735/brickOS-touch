@@ -431,3 +431,96 @@ export interface SoundPreset {
   updatedAt?: string;
 }
 
+// ==============================================================================
+// DAW EFFECTS, PROCESSING RACK & PRESETS DEFINITIONS
+// ==============================================================================
+
+export interface DawMasterEq {
+  low: number; // -12dB to +12dB (80 Hz Low Shelf)
+  mid: number; // -12dB to +12dB (1 kHz Parametric Bell)
+  high: number; // -12dB to +12dB (10 kHz High Shelf)
+  enabled: boolean;
+}
+
+export interface DawCompressor {
+  threshold: number; // -40dB to 0dB
+  ratio: number; // 1:1 to 20:1
+  attack: number; // 0.001s to 0.1s
+  release: number; // 0.05s to 1.0s
+  makeup: number; // 0dB to +12dB
+  enabled: boolean;
+}
+
+export interface DawReverb {
+  mix: number; // 0% to 100% Wet
+  decay: number; // 0.5s to 8.0s
+  roomType: 'plate' | 'hall' | 'room' | 'cathedral';
+  enabled: boolean;
+}
+
+export interface DawTapeDrive {
+  drive: number; // 0% to 100% saturation
+  warmth: boolean;
+  enabled: boolean;
+}
+
+export interface DawStereoWidth {
+  width: number; // 0% (Mono) to 200% (Super-wide)
+  isMonoCollapse: boolean;
+}
+
+export interface DawEffectsState {
+  eq: DawMasterEq;
+  compressor: DawCompressor;
+  reverb: DawReverb;
+  tapeDrive: DawTapeDrive;
+  stereo: DawStereoWidth;
+  busRouting: 'master' | 'vocal' | 'instrumental' | 'suno' | 'ref';
+  activeFxPresetName?: string;
+}
+
+export interface DawPresetsState {
+  activeSoundPresetId?: string;
+  activeSoundPresetName?: string;
+  engineSliders: EngineSliders;
+  sunoPrompt: string;
+  negativePrompt: string;
+  vocalCast?: string;
+  targetBpm: number;
+  targetKey: string;
+  genre: string;
+  activeFxPresetName?: string;
+}
+
+export interface DawTracksState {
+  stems: MixerTrack[];
+  masterVolume: number;
+  cropPreset: '30s' | '60s' | 'full';
+}
+
+export type SnapshotTriggerType = 'auto' | 'manual' | 'preset_change' | 'milestone';
+
+export interface SessionSnapshot {
+  id: string;
+  sessionId?: string;
+  trackId: string;
+  trackTitle: string;
+  ep: string;
+  timestamp: string;
+  label: string;
+  trigger: SnapshotTriggerType;
+  dawTracks: DawTracksState;
+  effects: DawEffectsState;
+  presets: DawPresetsState;
+  workspace: {
+    activeTab: string;
+    status: TrackStatus;
+    bpm: number;
+    key: string;
+    lyricsExcerpt?: string;
+  };
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

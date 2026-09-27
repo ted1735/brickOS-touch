@@ -9,9 +9,13 @@ import {
   onSnapshot,
   Firestore,
   writeBatch,
-  Unsubscribe
+  Unsubscribe,
+  query,
+  where,
+  orderBy,
+  limit
 } from 'firebase/firestore';
-import { Track, CompositionSession, SoundPreset } from '../types';
+import { Track, CompositionSession, SoundPreset, SessionSnapshot } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { CANONICAL_SOUND_PRESETS } from '../data/canonicalSoundPresets';
 
@@ -21,6 +25,8 @@ const SESSIONS_COLLECTION = 'composition_sessions';
 const SESSIONS_LOCAL_STORAGE_KEY = 'brickos_sessions_cloud_cache_v1';
 const PRESETS_COLLECTION = 'sound_presets';
 const PRESETS_LOCAL_STORAGE_KEY = 'brickos_sound_presets_cache_v1';
+const SNAPSHOTS_COLLECTION = 'session_snapshots';
+const SNAPSHOTS_LOCAL_STORAGE_KEY = 'brickos_session_snapshots_cache_v1';
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;

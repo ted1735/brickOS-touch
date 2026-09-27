@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   ArrowRight,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  Keyboard
 } from 'lucide-react';
 
 interface StudioTwoRowNavigationProps {
@@ -21,13 +22,15 @@ interface StudioTwoRowNavigationProps {
   setActiveTab: (tab: string) => void;
   isDarkMode?: boolean;
   onOpenSectionGuide?: (sectionId?: any) => void;
+  onOpenShortcutsCheatSheet?: () => void;
 }
 
 export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
   activeTab,
   setActiveTab,
   isDarkMode = true,
-  onOpenSectionGuide
+  onOpenSectionGuide,
+  onOpenShortcutsCheatSheet
 }) => {
   // Collapsed to icons mode: default to true so user gets the requested icon-only dual row experience, with easy toggle
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
@@ -180,6 +183,25 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
               </>
             )}
           </button>
+
+          {onOpenShortcutsCheatSheet && (
+            <button
+              onClick={onOpenShortcutsCheatSheet}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-900 hover:bg-slate-800 text-purple-300 border-slate-700 hover:border-purple-500/50'
+                  : 'bg-white hover:bg-slate-100 text-purple-700 border-slate-300 hover:border-purple-400'
+              }`}
+              title="Open Global Keyboard Shortcuts Cheat Sheet (?)"
+              aria-label="Open Global Keyboard Shortcuts Cheat Sheet"
+            >
+              <Keyboard className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Keymap</span>
+              <kbd className="px-1 py-0.2 rounded text-[9px] font-mono bg-purple-950/60 border border-purple-800/60 text-purple-300 font-bold">
+                ?
+              </kbd>
+            </button>
+          )}
         </div>
       </div>
 

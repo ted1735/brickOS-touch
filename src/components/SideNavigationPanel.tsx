@@ -184,17 +184,23 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
   if (isCollapsed) {
     return (
-      <aside className="w-18 sm:w-20 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3.5 space-y-3 h-full flex-shrink-0 z-30 shadow-xl transition-all duration-200 overflow-y-auto custom-scrollbar">
+      <aside className={`w-18 sm:w-20 border-r flex flex-col items-center py-3.5 space-y-3 h-full flex-shrink-0 z-30 shadow-xl transition-all duration-200 overflow-y-auto custom-scrollbar ${
+        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
+      }`}>
         {/* Expand Button */}
         <button
           onClick={onToggleCollapse}
-          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shadow-sm border border-slate-700/50"
+          className={`p-2 rounded-xl transition cursor-pointer shadow-sm border ${
+            isDarkMode
+              ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/50'
+              : 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-300'
+          }`}
           title="Expand Side Navigation Panel (Full View)"
         >
-          <ChevronRight className="w-4 h-4 text-indigo-400" />
+          <ChevronRight className="w-4 h-4 text-indigo-500" />
         </button>
 
-        <div className="h-px w-10 bg-slate-800 my-0.5" />
+        <div className={`h-px w-10 my-0.5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
         {/* Tab Quick Toggles: Projects, Sessions, Assets */}
         <div className="flex flex-col items-center gap-2">
@@ -204,7 +210,11 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               onToggleCollapse();
             }}
             className={`p-2 rounded-xl transition cursor-pointer relative ${
-              activePanelTab === 'projects' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              activePanelTab === 'projects'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/60'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
             }`}
             title={`Projects Catalog (${tracks.length} Master Tracks) — Click to expand`}
           >
@@ -218,7 +228,11 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               onToggleCollapse();
             }}
             className={`p-2 rounded-xl transition cursor-pointer relative ${
-              activePanelTab === 'sessions' ? 'bg-purple-600 text-white shadow-md shadow-purple-950/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              activePanelTab === 'sessions'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-950/60'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
             }`}
             title={`Composition Sessions (${sessions.length} Snapshots) — Click to expand`}
           >
@@ -232,7 +246,11 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               onToggleCollapse();
             }}
             className={`p-2 rounded-xl transition cursor-pointer relative ${
-              activePanelTab === 'assets' ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              activePanelTab === 'assets'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/60'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
             }`}
             title="Studio Assets (Stems, Artworks, Video Reels) — Click to expand"
           >
@@ -241,11 +259,13 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
           </button>
         </div>
 
-        <div className="h-px w-10 bg-slate-800 my-0.5" />
+        <div className={`h-px w-10 my-0.5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
 
         {/* TWO-COLUMN / TWO-ROW QUICK LAUNCHER ICONS (TIER 1 & TIER 2) */}
         <div className="w-full px-1.5 flex flex-col items-center space-y-1.5">
-          <div className="flex items-center justify-between w-full px-1 text-[8px] font-mono uppercase font-black text-slate-500">
+          <div className={`flex items-center justify-between w-full px-1 text-[8px] font-mono uppercase font-black ${
+            isDarkMode ? 'text-slate-500' : 'text-slate-400'
+          }`}>
             <span title="Tier 1: Audio Engine">T1</span>
             <span title="Tier 2: Visuals & Copilots">T2</span>
           </div>
@@ -268,7 +288,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition cursor-pointer border relative group ${
                       isActive
                         ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ring-2 ring-white/20`
-                        : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                        : isDarkMode
+                        ? 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                        : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 shadow-2xs'
                     }`}
                     title={`${item.name} (${item.tierLabel}): ${item.description}`}
                     aria-label={item.name}
@@ -299,7 +321,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition cursor-pointer border relative group ${
                       isActive
                         ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ring-2 ring-white/20`
-                        : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                        : isDarkMode
+                        ? 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                        : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 shadow-2xs'
                     }`}
                     title={`${item.name} (${item.tierLabel}): ${item.description}`}
                     aria-label={item.name}
@@ -326,15 +350,25 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             }}
             className="w-[320px] pointer-events-none animate-in fade-in zoom-in-95 duration-150"
           >
-            <div className="p-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl bg-slate-900/95 border-slate-700/80 text-white shadow-indigo-950/80 ring-1 ring-white/10 relative">
+            <div className={`p-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl relative transition-all ${
+              isDarkMode
+                ? 'bg-slate-900/95 border-slate-700/80 text-white shadow-indigo-950/80 ring-1 ring-white/10'
+                : 'bg-white/95 border-slate-300 text-slate-900 shadow-xl ring-1 ring-slate-900/10'
+            }`}>
               {/* Arrow pointing left back to the icon */}
-              <div className="absolute left-[-6px] top-6 w-3 h-3 rotate-45 border-l border-b border-slate-700/80 bg-slate-900" />
+              <div className={`absolute left-[-6px] top-6 w-3 h-3 rotate-45 border-l border-b transition-all ${
+                isDarkMode
+                  ? 'border-slate-700/80 bg-slate-900'
+                  : 'border-slate-300 bg-white'
+              }`} />
 
               <div className="flex items-start gap-2.5 mb-2 relative z-10">
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
                   activeTab === sidebarHoverItem.item.id
                     ? `${sidebarHoverItem.item.activeBg} text-white`
-                    : 'bg-slate-800 text-indigo-400 border border-slate-700'
+                    : isDarkMode
+                    ? 'bg-slate-800 text-indigo-400 border border-slate-700'
+                    : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
                 }`}>
                   {React.createElement(sidebarHoverItem.item.icon, { className: 'w-4 h-4' })}
                 </div>
@@ -357,24 +391,34 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 </div>
               </div>
 
-              <p className="text-[11px] leading-relaxed text-slate-300 mb-2 relative z-10">
+              <p className={`text-[11px] leading-relaxed mb-2 relative z-10 ${
+                isDarkMode ? 'text-slate-300' : 'text-slate-600'
+              }`}>
                 {sidebarHoverItem.item.description}
               </p>
 
               {sidebarHoverItem.item.sopRule && (
-                <div className="p-2 rounded-xl border text-[10px] leading-tight flex items-start gap-1.5 mb-2 bg-amber-950/40 border-amber-800/40 text-amber-300 relative z-10">
+                <div className={`p-2 rounded-xl border text-[10px] leading-tight flex items-start gap-1.5 mb-2 relative z-10 ${
+                  isDarkMode
+                    ? 'bg-amber-950/40 border-amber-800/40 text-amber-300'
+                    : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
                   <span className="font-bold">SOP:</span>
                   <span>{sidebarHoverItem.item.sopRule}</span>
                 </div>
               )}
 
-              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400 relative z-10">
+              <div className={`pt-2 border-t flex items-center justify-between text-[10px] font-mono relative z-10 ${
+                isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-500'
+              }`}>
                 <span className="text-indigo-400 font-bold flex items-center gap-1">
                   <ArrowRight className="w-3 h-3" />
                   <span>Click to open workspace</span>
                 </span>
                 {sidebarHoverItem.item.shortcut && (
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">
+                  <span className={`px-1.5 py-0.5 rounded border font-bold ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'
+                  }`}>
                     {sidebarHoverItem.item.shortcut}
                   </span>
                 )}

@@ -63,6 +63,26 @@
         "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
         "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
       }
+    },
+    "session_snapshots": {
+      "description": "Periodically saved session snapshots capturing frozen state of all DAW tracks, stems, effects chains, sound presets, and workspace point-in-time recovery data",
+      "fields": {
+        "id": { "type": "string", "description": "Unique snapshot identifier (e.g. SNAP-UUID or timestamp)" },
+        "sessionId": { "type": "string", "description": "Associated Composition Session ID" },
+        "trackId": { "type": "string", "description": "Associated Track Identifier" },
+        "trackTitle": { "type": "string", "description": "Track title at snapshot time" },
+        "ep": { "type": "string", "description": "EP Suite grouping" },
+        "timestamp": { "type": "string", "description": "ISO timestamp when snapshot was captured" },
+        "label": { "type": "string", "description": "User label or auto-save descriptor" },
+        "trigger": { "type": "string", "description": "Trigger type: 'auto' | 'manual' | 'preset_change' | 'milestone'" },
+        "dawTracks": { "type": "object", "description": "Frozen state of all DAW tracks, stems, volumes, pans, mute, solo, and trims" },
+        "effects": { "type": "object", "description": "Frozen state of DAW effects rack (EQ, compressor, reverb, saturation, stereo width)" },
+        "presets": { "type": "object", "description": "Frozen state of active sound preset and Suno engine sliders" },
+        "workspace": { "type": "object", "description": "Frozen workspace state (activeTab, status, BPM, musical key)" },
+        "notes": { "type": "string", "description": "Optional engineer notes for this snapshot" },
+        "createdAt": { "type": "string", "description": "ISO timestamp when snapshot was created" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      }
     }
   }
 }
