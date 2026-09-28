@@ -14,8 +14,61 @@ import {
   ArrowRight,
   Sparkles,
   HelpCircle,
-  Keyboard
+  Keyboard,
+  Command,
+  MessageSquare,
+  Compass,
+  Feather,
+  Sliders,
+  Film,
+  Rocket
 } from 'lucide-react';
+
+export type StudioPhase = 'all' | 'composition' | 'audio' | 'visuals' | 'release';
+
+const PHASE_DEFINITIONS: Array<{
+  id: StudioPhase;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accentColor: string;
+  tabs: string[];
+}> = [
+  {
+    id: 'all',
+    label: 'All Views',
+    icon: Compass,
+    accentColor: 'text-slate-400',
+    tabs: []
+  },
+  {
+    id: 'composition',
+    label: '1. Composition',
+    icon: Feather,
+    accentColor: 'text-indigo-400',
+    tabs: ['brainstorming', 'lyrics', 'version-matrix', 'prompt_library']
+  },
+  {
+    id: 'audio',
+    label: '2. Sound & Mix',
+    icon: Sliders,
+    accentColor: 'text-emerald-400',
+    tabs: ['mixer', 'mastering', 'nextcloud_sync', 'database']
+  },
+  {
+    id: 'visuals',
+    label: '3. Visuals & Avatar',
+    icon: Film,
+    accentColor: 'text-amber-400',
+    tabs: ['video_express', 'veo_visuals', 'nightcafe']
+  },
+  {
+    id: 'release',
+    label: '4. Release & Outreach',
+    icon: Rocket,
+    accentColor: 'text-rose-400',
+    tabs: ['kanban', 'youtube', 'omnipost', 'ministry']
+  }
+];
 
 interface StudioTwoRowNavigationProps {
   activeTab: string;
@@ -23,6 +76,10 @@ interface StudioTwoRowNavigationProps {
   isDarkMode?: boolean;
   onOpenSectionGuide?: (sectionId?: any) => void;
   onOpenShortcutsCheatSheet?: () => void;
+  onOpenCommandPalette?: () => void;
+  onOpenCopilotDrawer?: () => void;
+  isZenMode?: boolean;
+  onToggleZenMode?: () => void;
 }
 
 export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
@@ -30,9 +87,36 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
   setActiveTab,
   isDarkMode = true,
   onOpenSectionGuide,
-  onOpenShortcutsCheatSheet
+  onOpenShortcutsCheatSheet,
+  onOpenCommandPalette,
+  onOpenCopilotDrawer,
+  isZenMode = false,
+  onToggleZenMode
 }) => {
-  // Collapsed to icons mode: default to true so user gets the requested icon-only dual row experience, with easy toggle
+  // Phase Workflow Lens State
+  const [activePhase, setActivePhase] = useState<StudioPhase>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('brickos_studio_phase') as StudioPhase;
+      if (saved) return saved;
+    }
+    return 'all';
+  });
+
+  const handleSelectPhase = (phase: StudioPhase) => {
+    setActivePhase(phase);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('brickos_studio_phase', phase);
+    }
+    // If current tab is not in the newly selected phase (and phase !== 'all'), switch to first tab of that phase
+    if (phase !== 'all') {
+      const def = PHASE_DEFINITIONS.find(p => p.id === phase);
+      if (def && !def.tabs.includes(activeTab)) {
+        setActiveTab(def.tabs[0]);
+      }
+    }
+  };
+
+  // Collapsed to icons mode
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('brickos_dualrow_collapsed');
@@ -40,7 +124,7 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
         return saved === 'true';
       }
     }
-    return true; // default to collapsed down into icons as requested
+    return true;
   });
 
   const toggleCollapse = () => {
@@ -98,10 +182,8 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
     const { rect } = hoveredItem;
     const tooltipWidth = 340;
     
-    // Calculate horizontal center aligned with hovered button
     let left = rect.left + rect.width / 2 - tooltipWidth / 2;
     
-    // Keep within window bounds
     if (typeof window !== 'undefined') {
       if (left < 16) left = 16;
       if (left + tooltipWidth > window.innerWidth - 16) {
@@ -109,10 +191,7 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
       }
     }
 
-    // Arrow offset relative to tooltip
     const arrowLeft = rect.left + rect.width / 2 - left;
-
-    // Place below button if space allows, otherwise above
     const spaceBelow = typeof window !== 'undefined' ? window.innerHeight - rect.bottom : 500;
     const placeAbove = spaceBelow < 220;
     const top = placeAbove ? rect.top - 12 : rect.bottom + 10;
@@ -127,209 +206,272 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
 
   const tooltipPos = getTooltipStyle() as any;
 
+  // Filter items based on active phase
+  const isPhaseFiltered = activePhase !== 'all';
+  const activePhaseDef = PHASE_DEFINITIONS.find(p => p.id === activePhase);
+  const allowedTabs = activePhaseDef?.tabs || [];
+
+  const tier1Items = isPhaseFiltered
+    ? TIER_1_NAV_ITEMS.filter(item => allowedTabs.includes(item.id))
+    : TIER_1_NAV_ITEMS;
+
+  const tier2Items = isPhaseFiltered
+    ? TIER_2_NAV_ITEMS.filter(item => allowedTabs.includes(item.id))
+    : TIER_2_NAV_ITEMS;
+
   return (
     <div
-      className={`border-b pb-2.5 pt-1 space-y-2 flex flex-col relative transition-all duration-200 ${
+      className={`border-b pb-2 pt-1 space-y-2 flex flex-col relative transition-all duration-200 ${
         isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50/50'
       }`}
     >
-      {/* TOP CONTROLS BAR: ROW INDICATOR & COLLAPSE / EXPAND TOGGLE */}
+      {/* TOP CONTROLS BAR: PHASE WORKFLOW SWITCHER & QUICK ACTIONS */}
       <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-            <span className={`text-[11px] font-black uppercase tracking-wider font-mono ${
-              isDarkMode ? 'text-slate-300' : 'text-slate-700'
-            }`}>
-              Studio Navigation Deck
-            </span>
-          </div>
-
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border ${
-            isCollapsed
-              ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
-              : 'bg-slate-800 text-slate-300 border-slate-700'
-          }`}>
-            {isCollapsed ? 'Compact Icon Mode' : 'Expanded Labels Mode'}
+        {/* Phase Workflow Switcher Buttons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <span className="text-[10px] font-mono uppercase text-slate-500 font-bold mr-1 shrink-0">
+            Phase:
           </span>
+          {PHASE_DEFINITIONS.map(phase => {
+            const PhaseIcon = phase.icon;
+            const isSelected = activePhase === phase.id;
 
-          <span className="text-[10px] text-slate-500 hidden md:inline">
-            (Hover any icon for instant tool description & SOP rules)
-          </span>
+            return (
+              <button
+                key={phase.id}
+                type="button"
+                onClick={() => handleSelectPhase(phase.id)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 border ${
+                  isSelected
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-sm'
+                    : isDarkMode
+                    ? 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border-slate-800'
+                    : 'bg-white text-slate-600 hover:text-slate-900 border-slate-200'
+                }`}
+                title={`Switch studio lens to ${phase.label}`}
+              >
+                <PhaseIcon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : phase.accentColor}`} />
+                <span>{phase.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* COLLAPSE / EXPAND TOGGLE BUTTON */}
-        <div className="flex items-center gap-1.5">
+        {/* Action Controls: Command Palette, Copilot Dock, Zen Mode, Expand */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Command Palette Button (Ctrl+K) */}
+          {onOpenCommandPalette && (
+            <button
+              type="button"
+              onClick={onOpenCommandPalette}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-900 hover:bg-slate-800 text-indigo-300 border-slate-700 hover:border-indigo-500/50'
+                  : 'bg-white hover:bg-slate-100 text-indigo-700 border-slate-300 hover:border-indigo-400'
+              }`}
+              title="Open Command Palette (Ctrl+K)"
+            >
+              <Command className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="px-1 py-0.2 rounded text-[9px] font-mono bg-indigo-950/80 border border-indigo-800 text-indigo-300">
+                Ctrl+K
+              </kbd>
+            </button>
+          )}
+
+          {/* Copilot Drawer Button (Ctrl+J) */}
+          {onOpenCopilotDrawer && (
+            <button
+              type="button"
+              onClick={onOpenCopilotDrawer}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+                isDarkMode
+                  ? 'bg-teal-950/80 hover:bg-teal-900 text-teal-300 border-teal-800/60 hover:border-teal-600'
+                  : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-300 hover:border-teal-400'
+              }`}
+              title="Toggle Studio Copilot Assistant Drawer (Ctrl+J)"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+              <span className="hidden sm:inline">Copilot</span>
+              <kbd className="px-1 py-0.2 rounded text-[9px] font-mono bg-teal-950 border border-teal-800 text-teal-300">
+                Ctrl+J
+              </kbd>
+            </button>
+          )}
+
+          {/* Zen / Focus Mode Toggle */}
+          {onToggleZenMode && (
+            <button
+              type="button"
+              onClick={onToggleZenMode}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+                isZenMode
+                  ? 'bg-purple-600 text-white border-purple-400 shadow-purple-500/30'
+                  : isDarkMode
+                  ? 'bg-slate-900 hover:bg-slate-800 text-purple-300 border-slate-700'
+                  : 'bg-white hover:bg-slate-100 text-purple-700 border-slate-300'
+              }`}
+              title="Toggle Zen / Fullscreen Creative Focus Mode (Z)"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{isZenMode ? 'Exit Zen' : 'Zen'}</span>
+              <kbd className="px-1 py-0.2 rounded text-[9px] font-mono bg-purple-950/80 border border-purple-800 text-purple-300">
+                Z
+              </kbd>
+            </button>
+          )}
+
+          {/* Compact / Expanded Toggle */}
           <button
             onClick={toggleCollapse}
-            className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+            className={`px-2 py-1 rounded-xl text-xs font-bold border flex items-center gap-1 transition cursor-pointer shadow-xs ${
               isDarkMode
-                ? 'bg-slate-900 hover:bg-slate-800 text-indigo-300 border-slate-700 hover:border-indigo-500/50'
-                : 'bg-white hover:bg-slate-100 text-indigo-700 border-slate-300 hover:border-indigo-400'
+                ? 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
             }`}
-            title={isCollapsed ? 'Expand navigation to show full text labels' : 'Collapse navigation down to compact icons'}
+            title={isCollapsed ? 'Show full labels' : 'Collapse to compact icons'}
           >
-            {isCollapsed ? (
-              <>
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Expand Labels</span>
-                <span className="sm:hidden">Expand</span>
-              </>
-            ) : (
-              <>
-                <Minimize2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Collapse to Icons</span>
-                <span className="sm:hidden">Icons Only</span>
-              </>
-            )}
+            {isCollapsed ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
           </button>
 
+          {/* Keymap */}
           {onOpenShortcutsCheatSheet && (
             <button
               onClick={onOpenShortcutsCheatSheet}
-              className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+              className={`px-2 py-1 rounded-xl text-xs font-bold border flex items-center gap-1 transition cursor-pointer ${
                 isDarkMode
-                  ? 'bg-slate-900 hover:bg-slate-800 text-purple-300 border-slate-700 hover:border-purple-500/50'
-                  : 'bg-white hover:bg-slate-100 text-purple-700 border-slate-300 hover:border-purple-400'
+                  ? 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
+                  : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-300'
               }`}
-              title="Open Global Keyboard Shortcuts Cheat Sheet (?)"
-              aria-label="Open Global Keyboard Shortcuts Cheat Sheet"
+              title="Keymap (?)"
             >
-              <Keyboard className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Keymap</span>
-              <kbd className="px-1 py-0.2 rounded text-[9px] font-mono bg-purple-950/60 border border-purple-800/60 text-purple-300 font-bold">
-                ?
-              </kbd>
+              <Keyboard className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
       {/* ROW 1: TIER 1 - CORE MUSIC & AUDIO PRODUCTION PIPELINE */}
-      <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar px-1 py-0.5">
-        {/* Tier Label Badge */}
-        <div
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border flex-shrink-0 font-mono text-[10px] font-bold ${
-            isDarkMode
-              ? 'bg-indigo-950/70 text-indigo-300 border-indigo-800/40 shadow-xs'
-              : 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-xs'
-          }`}
-          title="Tier 1: Core Music & Audio Production Pipeline"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-          <span>{isCollapsed ? 'T1: Audio' : 'Tier 1: Audio Engine'}</span>
+      {tier1Items.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar px-1 py-0.5">
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border flex-shrink-0 font-mono text-[10px] font-bold ${
+              isDarkMode
+                ? 'bg-indigo-950/70 text-indigo-300 border-indigo-800/40 shadow-xs'
+                : 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-xs'
+            }`}
+            title="Tier 1: Core Music & Audio Production Pipeline"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+            <span>{isCollapsed ? 'T1: Audio' : 'Tier 1: Audio Engine'}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+            {tier1Items.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  onMouseEnter={(e) => handleMouseEnter(item, e)}
+                  onMouseLeave={handleMouseLeave}
+                  onFocus={(e) => handleFocus(item, e)}
+                  onBlur={handleBlur}
+                  title={`${item.name} — ${item.description}`}
+                  className={`relative group transition-all duration-150 cursor-pointer flex items-center justify-center border font-bold text-xs ${
+                    isCollapsed
+                      ? 'p-2 sm:p-2.5 min-w-[38px] h-[38px] rounded-xl'
+                      : 'px-3 py-1.5 rounded-xl gap-1.5 whitespace-nowrap'
+                  } ${
+                    isActive
+                      ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ${item.glowColor} scale-[1.02] ring-2 ring-white/20`
+                      : isDarkMode
+                      ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700'
+                      : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
+                  }`}
+                  aria-label={item.name}
+                >
+                  <Icon
+                    className={`transition-transform duration-150 group-hover:scale-110 ${
+                      isCollapsed ? 'w-4 h-4' : 'w-3.5 h-3.5'
+                    } ${isActive ? 'text-white' : item.accentColor}`}
+                  />
+
+                  {!isCollapsed && <span>{item.shortName}</span>}
+
+                  {isActive && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-slate-950 animate-pulse" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-
-        {/* Tier 1 Navigation Items */}
-        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-          {TIER_1_NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                onMouseEnter={(e) => handleMouseEnter(item, e)}
-                onMouseLeave={handleMouseLeave}
-                onFocus={(e) => handleFocus(item, e)}
-                onBlur={handleBlur}
-                title={`${item.name} — ${item.description}`}
-                className={`relative group transition-all duration-150 cursor-pointer flex items-center justify-center border font-bold text-xs ${
-                  isCollapsed
-                    ? 'p-2 sm:p-2.5 min-w-[38px] h-[38px] rounded-xl'
-                    : 'px-3 py-1.5 rounded-xl gap-1.5 whitespace-nowrap'
-                } ${
-                  isActive
-                    ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ${item.glowColor} scale-[1.02] ring-2 ring-white/20`
-                    : isDarkMode
-                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700'
-                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
-                }`}
-                aria-label={item.name}
-              >
-                <Icon
-                  className={`transition-transform duration-150 group-hover:scale-110 ${
-                    isCollapsed ? 'w-4 h-4' : 'w-3.5 h-3.5'
-                  } ${isActive ? 'text-white' : item.accentColor}`}
-                />
-
-                {!isCollapsed && <span>{item.shortName}</span>}
-
-                {/* Active Indicator Glow Pip (Shown on icons in collapsed mode) */}
-                {isActive && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-slate-950 animate-pulse" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* ROW 2: TIER 2 - MEDIA, SEO, TELEMETRY & AI COPILOTS */}
-      <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar px-1 py-0.5">
-        {/* Tier Label Badge */}
-        <div
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border flex-shrink-0 font-mono text-[10px] font-bold ${
-            isDarkMode
-              ? 'bg-purple-950/70 text-purple-300 border-purple-800/40 shadow-xs'
-              : 'bg-purple-50 text-purple-700 border-purple-200 shadow-xs'
-          }`}
-          title="Tier 2: Visuals, SEO & AI Studio Copilots"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-          <span>{isCollapsed ? 'T2: Visuals' : 'Tier 2: Visuals & Copilots'}</span>
+      {tier2Items.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar px-1 py-0.5">
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border flex-shrink-0 font-mono text-[10px] font-bold ${
+              isDarkMode
+                ? 'bg-purple-950/70 text-purple-300 border-purple-800/40 shadow-xs'
+                : 'bg-purple-50 text-purple-700 border-purple-200 shadow-xs'
+            }`}
+            title="Tier 2: Visuals, SEO & AI Studio Copilots"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+            <span>{isCollapsed ? 'T2: Visuals' : 'Tier 2: Visuals & Copilots'}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+            {tier2Items.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  onMouseEnter={(e) => handleMouseEnter(item, e)}
+                  onMouseLeave={handleMouseLeave}
+                  onFocus={(e) => handleFocus(item, e)}
+                  onBlur={handleBlur}
+                  title={`${item.name} — ${item.description}`}
+                  className={`relative group transition-all duration-150 cursor-pointer flex items-center justify-center border font-bold text-xs ${
+                    isCollapsed
+                      ? 'p-2 sm:p-2.5 min-w-[38px] h-[38px] rounded-xl'
+                      : 'px-3 py-1.5 rounded-xl gap-1.5 whitespace-nowrap'
+                  } ${
+                    isActive
+                      ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ${item.glowColor} scale-[1.02] ring-2 ring-white/20`
+                      : isDarkMode
+                      ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700'
+                      : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
+                  }`}
+                  aria-label={item.name}
+                >
+                  <Icon
+                    className={`transition-transform duration-150 group-hover:scale-110 ${
+                      isCollapsed ? 'w-4 h-4' : 'w-3.5 h-3.5'
+                    } ${isActive ? 'text-white' : item.accentColor}`}
+                  />
+
+                  {!isCollapsed && <span>{item.shortName}</span>}
+
+                  {isActive && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-slate-950 animate-pulse" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
+      )}
 
-        {/* Tier 2 Navigation Items */}
-        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-          {TIER_2_NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                onMouseEnter={(e) => handleMouseEnter(item, e)}
-                onMouseLeave={handleMouseLeave}
-                onFocus={(e) => handleFocus(item, e)}
-                onBlur={handleBlur}
-                title={`${item.name} — ${item.description}`}
-                className={`relative group transition-all duration-150 cursor-pointer flex items-center justify-center border font-bold text-xs ${
-                  isCollapsed
-                    ? 'p-2 sm:p-2.5 min-w-[38px] h-[38px] rounded-xl'
-                    : 'px-3 py-1.5 rounded-xl gap-1.5 whitespace-nowrap'
-                } ${
-                  isActive
-                    ? `${item.activeBg} ${item.activeBorder} text-white shadow-md ${item.glowColor} scale-[1.02] ring-2 ring-white/20`
-                    : isDarkMode
-                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700'
-                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-2xs'
-                }`}
-                aria-label={item.name}
-              >
-                <Icon
-                  className={`transition-transform duration-150 group-hover:scale-110 ${
-                    isCollapsed ? 'w-4 h-4' : 'w-3.5 h-3.5'
-                  } ${isActive ? 'text-white' : item.accentColor}`}
-                />
-
-                {!isCollapsed && <span>{item.shortName}</span>}
-
-                {/* Active Indicator Glow Pip */}
-                {isActive && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-slate-950 animate-pulse" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* FLOATING HOVER DESCRIPTION CARD (POPUP WITH ZERO-CLIPPING GUARANTEE)     */}
-      {/* ========================================================================= */}
+      {/* FLOATING HOVER DESCRIPTION CARD */}
       {hoveredItem && (
         <div
           style={{
@@ -348,94 +490,30 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
                 : 'bg-white/95 border-slate-300 text-slate-900 shadow-xl ring-1 ring-slate-900/10'
             }`}
           >
-            {/* Pointer Arrow */}
-            <div
-              style={{ left: tooltipPos.arrowLeft }}
-              className={`absolute w-3 h-3 rotate-45 border transition-all ${
-                tooltipPos.placeAbove
-                  ? 'bottom-[-6px] border-b border-r'
-                  : 'top-[-6px] border-t border-l'
-              } ${
-                isDarkMode
-                  ? 'bg-slate-900 border-slate-700/80'
-                  : 'bg-white border-slate-300'
-              }`}
-            />
-
-            {/* Header: Icon, Tool Name & Category */}
-            <div className="flex items-start gap-2.5 mb-2 relative z-10">
-              <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
-                  activeTab === hoveredItem.item.id
-                    ? `${hoveredItem.item.activeBg} text-white`
-                    : isDarkMode
-                    ? 'bg-slate-800 text-indigo-400 border border-slate-700'
-                    : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
-                }`}
-              >
-                {React.createElement(hoveredItem.item.icon, { className: 'w-4 h-4' })}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {React.createElement(hoveredItem.item.icon, {
+                  className: `w-4 h-4 ${hoveredItem.item.accentColor}`
+                })}
+                <span className="text-xs font-bold text-white">
+                  {hoveredItem.item.name}
+                </span>
               </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1">
-                  <h4 className="text-xs font-black tracking-wide truncate">
-                    {hoveredItem.item.name}
-                  </h4>
-                  {hoveredItem.item.badge && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                      {hoveredItem.item.badge}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-semibold ${hoveredItem.item.tierBadgeColor}`}>
-                    {hoveredItem.item.tierLabel}
-                  </span>
-                  {activeTab === hoveredItem.item.id && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.2 rounded border border-amber-400/30 font-mono">
-                      <CheckCircle2 className="w-3 h-3 text-amber-400" />
-                      ACTIVE
-                    </span>
-                  )}
-                </div>
-              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono font-bold ${hoveredItem.item.tierBadgeColor}`}>
+                {hoveredItem.item.badge || hoveredItem.item.tierLabel}
+              </span>
             </div>
 
-            {/* Tool Description */}
-            <p className={`text-[11.5px] leading-relaxed mb-2 relative z-10 ${
-              isDarkMode ? 'text-slate-300' : 'text-slate-600'
-            }`}>
+            <p className="text-xs text-slate-300 leading-relaxed mb-2.5">
               {hoveredItem.item.description}
             </p>
 
-            {/* SOP Rule Callout if available */}
             {hoveredItem.item.sopRule && (
-              <div className={`p-2 rounded-xl border text-[10.5px] leading-tight flex items-start gap-1.5 mb-2 relative z-10 ${
-                isDarkMode
-                  ? 'bg-amber-950/40 border-amber-800/40 text-amber-300'
-                  : 'bg-amber-50 border-amber-200 text-amber-900'
-              }`}>
-                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Nashville SOP:</strong> {hoveredItem.item.sopRule}
-                </span>
+              <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-amber-300/90 font-mono flex items-start gap-1.5">
+                <span className="text-amber-400 font-bold shrink-0">SOP:</span>
+                <span>{hoveredItem.item.sopRule}</span>
               </div>
             )}
-
-            {/* Card Footer: Action Prompt & Keyboard Shortcut */}
-            <div className={`pt-2 border-t flex items-center justify-between text-[10px] font-mono relative z-10 ${
-              isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-500'
-            }`}>
-              <span className="flex items-center gap-1 text-indigo-400 font-bold">
-                <ArrowRight className="w-3 h-3" />
-                <span>Click icon to switch workspace</span>
-              </span>
-              {hoveredItem.item.shortcut && (
-                <span className="px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300 font-bold">
-                  {hoveredItem.item.shortcut}
-                </span>
-              )}
-            </div>
           </div>
         </div>
       )}

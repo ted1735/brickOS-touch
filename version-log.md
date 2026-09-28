@@ -170,3 +170,39 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Enabled full SVG connector linking (`LinkIcon`) allowing storyboard thumbnails to link to lyrics, chord cards, or other scenes with free dragging across the 2D infinite canvas.
     - Rendered linear storyboard cards with image previews in **Page Mode**.
 
+---
+
+## [v2.1] — Studio Phase Workflow Lenses, Command Palette, Interactive Waveforms & Master Package Exporter
+- **Date**: 2026-09-28
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.1`**.
+  - **De-Chaotifying Studio Phase Workflow Switcher (Stage Lenses)**:
+    - Integrated Phase Switcher in top navigation with 4 dedicated stage lenses:
+      - **1. Composition**: Brainstorming Whiteboard, Lyric Suite & Suno Engine, Song Version Matrix, Prompt Library.
+      - **2. Sound & Mix**: Mini-DAW Mixer, Senior Mastering & LUFS, Nextcloud 207332 Sync, Relational Matrix.
+      - **3. Visuals & Avatar**: VideoExpress.ai Talking Avatar, Visual & Veo 3 Studio, NightCafe Runner.
+      - **4. Release & Outreach**: Master Pipeline Dashboard, YouTube SEO 2026, OmniPost Outreach, Ministry Charts.
+      - **All Views**: Unfiltered full 18-tab grid.
+    - Smooth animated tab transitions and contextual tab counts per stage lens.
+  - **Spotlight Studio Command Palette (`Ctrl+K` / `Cmd+K`)**:
+    - Quick-switcher modal inspired by Raycast / macOS Spotlight.
+    - Fuzzy search across all 26 canonical tracks, 18 studio tabs, and SOP quick actions.
+    - Full keyboard navigation with `↑`, `↓`, and `Enter`.
+  - **Focus / Zen Mode (`Z`)**:
+    - One-key toggle hiding sidebars and chrome to eliminate visual clutter and maximize creative flow.
+  - **Nashville SOP Track Lifecycle Stepper**:
+    - Interactive 7-node visual pipeline bar (`Idea ➔ Lyrics ➔ Stems ➔ Mastered ➔ Visuals ➔ Selah Gate ➔ Distributed`).
+    - One-click navigation to each lifecycle stage workbench.
+  - **Slide-Over Studio Copilot Drawer (`Ctrl+J` / `Cmd+J`)**:
+    - Persistent right slide-over panel housing Gemini Theological Co-Producer, Live Google Search Grounding, and Telemetry Daemon stats.
+  - **brickOS-Automations Feature Ingestion**:
+    - **Interactive Web Audio Waveform Visualizer**: Scrubbable playhead, transient peaks, and -1.0 dBTP ceiling indicator embedded in the Senior Mastering Suite.
+    - **One-Click Master Deliverables ZIP/JSON Package Exporter**: Generates complete distribution package with 24/48 WAV master, 4-track stems, lyrics `.md`, YouTube SEO metadata, and Nextcloud rclone sync commands.
+    - **24-Hour Selah Prayer Gatekeeper (`SelahPrayerGateModal`)**: Mandatory 24-hour prayer reflection clock and scripture anchor guarding master release.
+    - **Suno & NightCafe 1-Click Automation Userscript HUDs**: One-click userscript code installer and copy HUD directly accessible in Lyric Suite and NightCafe runner.
+    - **Whiteboard ➔ VideoExpress Bridge**: Direct "To VideoExpress" button on storyboard thumbnail cards bridging scene prompts into the avatar director.
+  - **Architectural Cleanup**:
+    - Extracted monolithic inline tabs into clean, maintainable modular components (`VeoVisualsTab`, `NightCafeTab`, `TelemetryTab`, `StudioCopilotTab`, `SearchGroundingTab`).
+
+

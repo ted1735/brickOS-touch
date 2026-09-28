@@ -38,7 +38,8 @@ import {
   Columns,
   BookOpen,
   HelpCircle,
-  FolderSync
+  FolderSync,
+  Video
 } from 'lucide-react';
 import {
   Track,
@@ -62,6 +63,7 @@ interface BlockSuiteBrainstormingTabProps {
   onSelectTrack: (track: Track) => void;
   onUpdateTrackLyrics: (lyrics: string, versionTag: string) => void;
   onNavigateToTab?: (tab: string) => void;
+  onSendToVideoExpress?: (sceneData: { title: string; prompt: string; shotNumber?: string; imageUrl?: string }) => void;
   isDarkMode?: boolean;
 }
 
@@ -81,6 +83,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   onSelectTrack,
   onUpdateTrackLyrics,
   onNavigateToTab,
+  onSendToVideoExpress,
   isDarkMode = true
 }) => {
   // Isomorphic BlockSuite View Mode: 'edgeless' (infinite whiteboard) vs 'page' (linear document)
@@ -1216,6 +1219,25 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                               {block.sectionTag}
                             </span>
                           )}
+                          {block.type === 'thumbnail_asset' && onSendToVideoExpress && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSendToVideoExpress({
+                                  title: block.title,
+                                  prompt: block.content,
+                                  shotNumber: block.shotNumber,
+                                  imageUrl: block.imageUrl
+                                });
+                              }}
+                              className="px-2 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-[9px] font-bold flex items-center gap-1 transition cursor-pointer"
+                              title="Send scene prompt & reference to VideoExpress Avatar Tab"
+                            >
+                              <Video className="w-2.5 h-2.5 text-rose-400" />
+                              <span>To VideoExpress</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1309,6 +1331,25 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                             <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/80 text-[10px] font-mono font-bold text-amber-300 border border-amber-500/40">
                               {block.shotNumber}
                             </span>
+                          )}
+                          {onSendToVideoExpress && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSendToVideoExpress({
+                                  title: block.title,
+                                  prompt: block.content,
+                                  shotNumber: block.shotNumber,
+                                  imageUrl: block.imageUrl
+                                });
+                              }}
+                              className="absolute bottom-2 right-2 px-2.5 py-1 rounded bg-rose-600/90 hover:bg-rose-500 text-white text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-md"
+                              title="Send scene prompt & reference to VideoExpress Avatar Tab"
+                            >
+                              <Video className="w-3 h-3 text-white" />
+                              <span>Send to VideoExpress</span>
+                            </button>
                           )}
                         </div>
                       )}

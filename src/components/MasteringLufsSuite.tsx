@@ -28,7 +28,8 @@ import {
   Volume2,
   VolumeX,
   Zap,
-  Plus
+  Plus,
+  Package
 } from 'lucide-react';
 import { Track, MixerTrack, DawEffectsState, MasteringPreset, LufsMeasurementData, MasteringCategory } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
@@ -40,6 +41,8 @@ import {
   deleteCustomMasteringPreset
 } from '../data/masteringPresets';
 import { INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
+import { AudioWaveformVisualizer } from './AudioWaveformVisualizer';
+import { MasterDeliverablesExportModal } from './MasterDeliverablesExportModal';
 
 interface MasteringLufsSuiteProps {
   track: Track;
@@ -55,6 +58,7 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
   // Transport & Audio Engine States
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isExportingWav, setIsExportingWav] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [activeBus, setActiveBus] = useState<'master' | 'suno' | 'vocal' | 'instrumental' | 'ref'>('master');
   const [isMonoCollapse, setIsMonoCollapse] = useState<boolean>(false);
   const [tracks, setTracks] = useState<MixerTrack[]>(INITIAL_DAW_STEMS);
@@ -373,6 +377,17 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
             <span>{isMonoCollapse ? 'Mono Collapse ACTIVE' : 'Mono-Collapse Check'}</span>
           </button>
 
+          {/* One-Click Master Deliverables Exporter */}
+          <button
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-700/60 text-purple-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+            title="Generate complete master release package with WAV, stems, lyrics, and YouTube SEO"
+          >
+            <Package className="w-3.5 h-3.5 text-purple-400" />
+            <span>Deliverables Package</span>
+          </button>
+
           {/* Lossless WAV Master Export */}
           <button
             onClick={handleExportMasterWav}
@@ -411,6 +426,16 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
           </button>
         </div>
       )}
+
+      {/* INTERACTIVE AUDIO WAVEFORM VISUALIZER WITH SCRUBBABLE PLAYHEAD */}
+      <AudioWaveformVisualizer
+        isPlaying={isPlaying}
+        onTogglePlay={handleTogglePlay}
+        trackTitle={`${track.title} (Master 24/48)`}
+        targetLufs={targetLufs}
+        truePeakCeiling={targetCeiling}
+        isDarkMode={isDarkMode}
+      />
 
       {/* A/B AUDITION BUS SELECTOR */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
@@ -1105,6 +1130,15 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
           </div>
         </div>
       )}
+
+      {/* ONE-CLICK MASTER DELIVERABLES EXPORTER MODAL */}
+      <MasterDeliverablesExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        track={track}
+        onCopySuccess={(msg) => setCorrectionFeedback(msg)}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };

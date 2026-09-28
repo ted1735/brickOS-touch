@@ -27,9 +27,11 @@ import {
   ChevronLeft,
   ChevronRight,
   FoldHorizontal,
-  UnfoldHorizontal
+  UnfoldHorizontal,
+  Lock
 } from 'lucide-react';
 import { Track, TrackStatus, EPCollection } from '../types';
+import { SelahPrayerGateModal } from './SelahPrayerGateModal';
 
 interface KanbanDashboardTabProps {
   tracks: Track[];
@@ -71,6 +73,7 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [localEpFilter, setLocalEpFilter] = useState<string>(selectedEpFilter);
   const [layoutMode, setLayoutMode] = useState<'kanban' | 'bento'>('kanban');
+  const [selahModalTrack, setSelahModalTrack] = useState<Track | null>(null);
 
   // Collapsed columns state: tracks which board columns are collapsed (empty or with contents)
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
@@ -196,13 +199,25 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
     };
   }, [filteredTracks, collapsedColumns]);
 
+  // Advance or revert track status with Selah Prayer Gate verification
+  const handleUpdateStatusSafe = (trackId: string, newStatus: TrackStatus) => {
+    if (newStatus === 'Released') {
+      const found = tracks.find(t => t.id === trackId);
+      if (found) {
+        setSelahModalTrack(found);
+        return;
+      }
+    }
+    onUpdateTrackStatus(trackId, newStatus);
+  };
+
   // Advance or revert track status
   const handleMoveStatus = (track: Track, direction: 'prev' | 'next') => {
     const currentIndex = STATUS_COLUMNS.findIndex(c => c.id === track.status);
     if (currentIndex === -1) return;
     const targetIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
     if (targetIndex >= 0 && targetIndex < STATUS_COLUMNS.length) {
-      onUpdateTrackStatus(track.id, STATUS_COLUMNS[targetIndex].id);
+      handleUpdateStatusSafe(track.id, STATUS_COLUMNS[targetIndex].id);
     }
   };
 
@@ -678,7 +693,7 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
                     onDrop={(e) => {
                       e.preventDefault();
                       const trackId = e.dataTransfer.getData('text/plain') || draggedTrackId;
-                      if (trackId) onUpdateTrackStatus(trackId, col.id);
+                      if (trackId) handleUpdateStatusSafe(trackId, col.id);
                       setDraggedTrackId(null);
                       setDragOverColumnId(null);
                     }}
@@ -778,7 +793,7 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
                   onDrop={(e) => {
                     e.preventDefault();
                     const trackId = e.dataTransfer.getData('text/plain') || draggedTrackId;
-                    if (trackId) onUpdateTrackStatus(trackId, col.id);
+                    if (trackId) handleUpdateStatusSafe(trackId, col.id);
                     setDraggedTrackId(null);
                     setDragOverColumnId(null);
                   }}
@@ -1124,6 +1139,20 @@ export const KanbanDashboardTab: React.FC<KanbanDashboardTabProps> = ({
             })}
           </div>
         </div>
+      )}
+
+      {/* SELAH 24-HOUR PRAYER GATE INTERACTIVE MODAL */}
+      {selahModalTrack && (
+        <SelahPrayerGateModal
+          isOpen={Boolean(selahModalTrack)}
+          onClose={() => setSelahModalTrack(null)}
+          track={selahModalTrack}
+          onReleaseGateApproved={(trackId) => {
+            onUpdateTrackStatus(trackId, 'Released');
+            setSelahModalTrack(null);
+          }}
+          isDarkMode={isDarkMode}
+        />
       )}
 
     </div>

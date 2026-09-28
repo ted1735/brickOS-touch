@@ -87,6 +87,15 @@ import { BlockSuiteBrainstormingTab } from './components/BlockSuiteBrainstorming
 import { GoogleFlowIntegrationHub } from './components/GoogleFlowIntegrationHub';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
 import { SectionQuickHelpBanner } from './components/SectionQuickHelpBanner';
+import { VeoVisualsTab } from './components/VeoVisualsTab';
+import { NightCafeTab } from './components/NightCafeTab';
+import { TelemetryTab } from './components/TelemetryTab';
+import { StudioCopilotTab } from './components/StudioCopilotTab';
+import { SearchGroundingTab } from './components/SearchGroundingTab';
+import { StudioCommandPalette } from './components/StudioCommandPalette';
+import { StudioCopilotDrawer } from './components/StudioCopilotDrawer';
+import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
+import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -140,6 +149,44 @@ export default function BrickOSMusicStudioWorkspace() {
     }
     showToast(`Copied ${label} to clipboard!`, 'success');
   };
+  // Unified Command Palette & Studio Copilot Drawer State
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isCopilotDrawerOpen, setIsCopilotDrawerOpen] = useState(false);
+  const [isZenMode, setIsZenMode] = useState(false);
+  const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
+
+  // Global Keyboard Shortcuts for Command Palette (Ctrl+K), Copilot Drawer (Ctrl+J), and Zen Mode (Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl instanceof HTMLInputElement || activeEl instanceof HTMLTextAreaElement || (activeEl as HTMLElement)?.isContentEditable;
+
+      // Ctrl+K or Cmd+K: Open Command Palette
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      // Ctrl+J or Cmd+J: Toggle Copilot Drawer
+      else if ((e.ctrlKey || e.metaKey) && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        setIsCopilotDrawerOpen(prev => !prev);
+      }
+      // Z / z (only when not typing in input/textarea): Toggle Zen Mode
+      else if (!isInput && (e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsZenMode(prev => !prev);
+      }
+      // ESC: Close overlays if open
+      else if (e.key === 'Escape') {
+        if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
+        if (isCopilotDrawerOpen) setIsCopilotDrawerOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCommandPaletteOpen, isCopilotDrawerOpen]);
+
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('brickos_theme');
@@ -2003,7 +2050,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
                 <div className="pt-4">
                   <button
-                    onClick={() => handleTrackUpdate('selahPrayed', !selectedTrack.selahPrayed)}
+                    onClick={() => setIsSelahGateOpen(true)}
                     className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
                       selectedTrack.selahPrayed
                         ? 'bg-emerald-950 border-emerald-600 text-emerald-300'
@@ -2011,7 +2058,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                         ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
                         : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
                     }`}
-                    title="Mandatory 24h prayer & stationkeeping before master release"
+                    title="Mandatory 24h prayer & stationkeeping before master release (Nashville SOP Rule 1)"
                   >
                     <Heart className={`w-3.5 h-3.5 ${selectedTrack.selahPrayed ? 'fill-emerald-400 text-emerald-400' : ''}`} />
                     <span>{selectedTrack.selahPrayed ? 'Selah Done' : 'Selah Prayer'}</span>
@@ -2021,6 +2068,16 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </div>
           )}
 
+          {/* SOP TRACK LIFECYCLE STEPPER (NASHVILLE WORKFLOW PIPELINE) */}
+          {activeTab !== 'kanban' && (
+            <TrackLifecycleStepper
+              selectedTrack={selectedTrack}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
+              onOpenSelahGate={() => setIsSelahGateOpen(true)}
+              isDarkMode={isDarkMode}
+            />
+          )}
+
           {/* ENHANCED WORKBENCH TWO-ROW NAVIGATION (COLLAPSIBLE DOWN TO ICONS WITH HOVER DESCRIPTIONS) */}
           <StudioTwoRowNavigation
             activeTab={activeTab}
@@ -2028,6 +2085,10 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             isDarkMode={isDarkMode}
             onOpenSectionGuide={handleOpenSectionGuide}
             onOpenShortcutsCheatSheet={openCheatSheet}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}
+            isZenMode={isZenMode}
+            onToggleZenMode={() => setIsZenMode(prev => !prev)}
           />
 
           {/* ACTIVE SECTION CONTEXT BANNER & "HOW TO USE THIS SECTION" BUTTON */}
@@ -2119,6 +2180,10 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 showToast(`Compiled Whiteboard into ${selectedTrack.title} Lyrics!`, 'success');
               }}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
+              onSendToVideoExpress={(prompt) => {
+                setActiveTab('video_express');
+                showToast('Loaded Whiteboard scene into VideoExpress.ai!', 'info');
+              }}
               isDarkMode={isDarkMode}
             />
           )}
@@ -2190,747 +2255,29 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
           {/* TAB 4: VISUALS & VEO 3 VIDEO STUDIO */}
           {activeTab === 'veo_visuals' && (
-            <div className="space-y-4">
-              <SectionQuickHelpBanner
-                sectionId="veo_visuals"
-                onOpenModalGuide={handleOpenSectionGuide}
-                isDarkMode={isDarkMode}
-              />
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
-                <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-                  <div>
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      <Film className="w-5 h-5 text-rose-400" />
-                      <span>Visual & Veo 3 Video Studio</span>
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Create & edit album art with Gemini Flash, and generate or animate images into cinematic video using Google Veo 3.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSectionGuide('veo_visuals')}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                      title="Open Visuals & Veo 3 Operating Guide & SOP Rules"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>How To Use Veo Visuals</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* DEDICATED GOOGLE FLOW INTEGRATION & ASSET HUB */}
-                <GoogleFlowIntegrationHub
-                  catalogTracks={tracks}
-                  onAddVideoAsset={handleAddVideo}
-                  onOpenAssetEditor={(asset, mode) => {
-                    setWorkspaceEditingAsset(asset);
-                    setWorkspaceAssetModalMode(mode);
-                    setWorkspaceAssetModalOpen(true);
-                  }}
-                  isDarkMode={isDarkMode}
-                />
-
-                {/* PROMPT VAULT & STORYBOARD ENGINE (MMH, VENOM, MASK, CYHL, ETC.) */}
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                        Master Visual & Video Prompt Vault ({nightCafePrompts.length} Prompts Loaded)
-                      </h4>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      {/* Type Filter */}
-                      <div className="bg-slate-900 border border-slate-800 p-0.5 rounded-lg flex items-center gap-1 font-mono text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => setPromptTypeFilter('all')}
-                          className={`px-2 py-0.5 rounded ${promptTypeFilter === 'all' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
-                        >
-                          All Types
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPromptTypeFilter('image')}
-                          className={`px-2 py-0.5 rounded ${promptTypeFilter === 'image' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
-                        >
-                          Images
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPromptTypeFilter('video')}
-                          className={`px-2 py-0.5 rounded ${promptTypeFilter === 'video' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
-                        >
-                          Videos
-                        </button>
-                      </div>
-
-                      {/* Search */}
-                      <input
-                        type="text"
-                        placeholder="Search prompts (e.g. hands, rain, clock)..."
-                        value={promptSearchQuery}
-                        onChange={(e) => setPromptSearchQuery(e.target.value)}
-                        className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-48"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Song Filter Chips */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-800/60">
-                    <span className="text-[10px] text-slate-500 uppercase font-mono mr-1">Song:</span>
-                    {['All', 'Meet Me Here', 'Venom Into Victory', 'Trading In The Mask', 'Check Your Heart Light', "The Work Ain't Done"].map((songName) => {
-                      const count = songName === 'All' ? nightCafePrompts.length : nightCafePrompts.filter(p => p.song === songName).length;
-                      return (
-                        <button
-                          key={songName}
-                          type="button"
-                          onClick={() => setPromptSongFilter(songName)}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
-                            promptSongFilter === songName
-                              ? 'bg-amber-600 text-white shadow-sm'
-                              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-                          }`}
-                        >
-                          <span>{songName === 'Meet Me Here' ? 'Meet Me Here (MMH)' : songName}</span>
-                          <span className="px-1 rounded bg-black/40 text-[9px] font-mono">{count}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Filtered Prompts List */}
-                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                    {nightCafePrompts
-                      .filter((p) => {
-                        const matchesSong = promptSongFilter === 'All' || p.song === promptSongFilter;
-                        const matchesType = promptTypeFilter === 'all' || (p.type || 'image') === promptTypeFilter;
-                        const matchesQuery = !promptSearchQuery ||
-                          p.title.toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
-                          p.prompt.toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
-                          (p.tags && p.tags.some(t => t.toLowerCase().includes(promptSearchQuery.toLowerCase())));
-                        return matchesSong && matchesType && matchesQuery;
-                      })
-                      .map((p, idx) => (
-                        <div key={idx} className="p-3 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl space-y-2 transition text-xs">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-white text-[12px]">{p.title}</span>
-                              <span className="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[9px] border border-blue-800/40">
-                                {p.song}
-                              </span>
-                              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[9px]">
-                                {p.aspectRatio || '9:16'}
-                              </span>
-                              {p.engine && (
-                                <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[9px] border border-purple-800/40">
-                                  {p.engine}
-                                </span>
-                              )}
-                              {p.type === 'video' && (
-                                <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 font-mono text-[9px] border border-rose-800/40">
-                                  Video Short
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setImagePrompt(p.prompt);
-                                  if (p.aspectRatio) setImageAspectRatio(p.aspectRatio);
-                                  copyToClipboard(p.prompt, "Prompt loaded to Image Studio");
-                                }}
-                                className="px-2 py-1 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 text-[10px] font-bold flex items-center gap-1 transition"
-                                title="Load into Image Generator"
-                              >
-                                <Zap className="w-3 h-3 text-amber-300" />
-                                <span>⚡ Image</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setVideoPrompt(p.initialPrompt || p.prompt);
-                                  if (p.aspectRatio === '9:16' || p.aspectRatio === '16:9') {
-                                    setVideoAspectRatio(p.aspectRatio);
-                                  }
-                                  copyToClipboard(p.initialPrompt || p.prompt, "Prompt loaded to Veo Studio");
-                                }}
-                                className="px-2 py-1 rounded bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-[10px] font-bold flex items-center gap-1 transition"
-                                title="Load into Google Veo Video Generator"
-                              >
-                                <Film className="w-3 h-3 text-rose-400" />
-                                <span>🎬 Video</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(p.prompt, `Prompt: ${p.title}`)}
-                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold flex items-center gap-1 transition"
-                                title="Copy prompt"
-                              >
-                                <Copy className="w-3 h-3" />
-                                <span>Copy</span>
-                              </button>
-
-                              {p.extensionPrompt && (
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedPromptIdx(expandedPromptIdx === idx ? null : idx)}
-                                  className="px-1.5 py-1 rounded text-slate-400 hover:text-white text-[10px] font-mono"
-                                  title="Toggle extension & audio cues"
-                                >
-                                  {expandedPromptIdx === idx ? '▲ Less' : '▼ Details'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          <p className="text-[11px] text-slate-300 font-mono leading-relaxed line-clamp-3">
-                            {p.prompt}
-                          </p>
-
-                          {expandedPromptIdx === idx && (
-                            <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1.5 text-[11px] font-mono">
-                              {p.initialPrompt && (
-                                <div>
-                                  <span className="text-amber-400 font-bold">Initial 10s: </span>
-                                  <span className="text-slate-300">{p.initialPrompt}</span>
-                                </div>
-                              )}
-                              {p.extensionPrompt && (
-                                <div>
-                                  <span className="text-emerald-400 font-bold">Extension: </span>
-                                  <span className="text-slate-300">{p.extensionPrompt}</span>
-                                </div>
-                              )}
-                              {p.audioCues && (
-                                <div>
-                                  <span className="text-indigo-400 font-bold">Audio Cues: </span>
-                                  <span className="text-slate-300">{p.audioCues}</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Sub-grid: 1. Image Creation & Editing, 2. Veo Video Generation */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  
-                  {/* LEFT: IMAGE CREATOR & EDITOR */}
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4 text-indigo-400" />
-                        <span>Create & Edit Images (gemini-3.1-flash-image-preview)</span>
-                      </h4>
-                      <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800/40">
-                        {imageMode === 'create' ? 'Text-to-Image' : 'Image-to-Image Edit'}
-                      </span>
-                    </div>
-
-                    <textarea
-                      rows={3}
-                      value={imagePrompt}
-                      onChange={(e) => setImagePrompt(e.target.value)}
-                      placeholder="Describe the image or edit instructions..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-                    />
-
-                    {/* Aspect Ratio Selector */}
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        Aspect Ratio Affordance
-                      </label>
-                      <div className="grid grid-cols-4 gap-1.5 text-xs font-mono">
-                        {['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9'].map((ratio) => (
-                          <button
-                            key={ratio}
-                            onClick={() => setImageAspectRatio(ratio)}
-                            className={`py-1 rounded-lg border text-[11px] font-bold transition ${
-                              imageAspectRatio === ratio
-                                ? 'bg-indigo-600 border-indigo-400 text-white'
-                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {ratio}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Upload / Edit Anchor */}
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2">
-                        <label className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold cursor-pointer transition flex items-center gap-1.5 text-xs">
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Upload Photo to Edit/Animate</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  setSelectedImageForEdit(reader.result as string);
-                                  setImageMode('edit');
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
-                        {selectedImageForEdit && (
-                          <button
-                            onClick={() => {
-                              setSelectedImageForEdit(null);
-                              setImageMode('create');
-                            }}
-                            className="text-rose-400 hover:text-rose-300 text-xs font-bold"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={handleGenerateImage}
-                        disabled={isGeneratingImage}
-                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-indigo-950 disabled:opacity-50"
-                      >
-                        {isGeneratingImage ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
-                        <span>{isGeneratingImage ? 'Generating...' : imageMode === 'edit' ? 'Apply Edit' : 'Generate Image'}</span>
-                      </button>
-                    </div>
-
-                    {selectedImageForEdit && (
-                      <div className="p-2 bg-slate-900 rounded-xl border border-indigo-500/40 flex items-center gap-3">
-                        <img src={selectedImageForEdit} alt="Anchor" className="w-12 h-12 object-cover rounded-lg" />
-                        <span className="text-[11px] text-slate-300">Base image loaded for editing or Veo video animation.</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* RIGHT: VEO 3 VIDEO GENERATOR */}
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <Video className="w-4 h-4 text-rose-400" />
-                        <span>Google Veo 3 Video Generator (veo-3.1-fast-generate-preview)</span>
-                      </h4>
-                      <span className="text-[10px] font-mono text-rose-300 bg-rose-950 px-2 py-0.5 rounded border border-rose-800/40">
-                        {selectedImageForEdit ? 'Animate Photo' : 'Text-to-Video'}
-                      </span>
-                    </div>
-
-                    <textarea
-                      rows={3}
-                      value={videoPrompt}
-                      onChange={(e) => setVideoPrompt(e.target.value)}
-                      placeholder="Prompt for cinematic Veo video..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-rose-500 font-mono"
-                    />
-
-                    {/* Veo Aspect Ratio constraint (16:9 or 9:16) */}
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        Veo 3 Aspect Ratio (16:9 Landscape or 9:16 Portrait)
-                      </label>
-                      <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                        <button
-                          onClick={() => setVideoAspectRatio('16:9')}
-                          className={`py-1.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                            videoAspectRatio === '16:9'
-                              ? 'bg-rose-600 border-rose-400 text-white'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          <span>16:9 Landscape (YouTube / Desktop)</span>
-                        </button>
-                        <button
-                          onClick={() => setVideoAspectRatio('9:16')}
-                          className={`py-1.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                            videoAspectRatio === '9:16'
-                              ? 'bg-rose-600 border-rose-400 text-white'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          <span>9:16 Portrait (TikTok / Shorts)</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        {videoStatus}
-                      </span>
-                      <button
-                        onClick={handleGenerateVeoVideo}
-                        disabled={isGeneratingVideo}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-rose-950 disabled:opacity-50"
-                      >
-                        {isGeneratingVideo ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Film className="w-3.5 h-3.5 text-amber-200" />}
-                        <span>{isGeneratingVideo ? 'Rendering Veo...' : selectedImageForEdit ? 'Animate Photo into Video' : 'Generate Veo Video'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* GALLERY OF GENERATED IMAGES & VIDEOS */}
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-indigo-400" />
-                        <span>Visual Assets & Generated Renders ({generatedImages.length + generatedVideos.length})</span>
-                      </h4>
-
-                      {/* Filter Pills */}
-                      <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono">
-                        <button
-                          type="button"
-                          onClick={() => setMediaGalleryFilter('all')}
-                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                            mediaGalleryFilter === 'all'
-                              ? 'bg-indigo-600 text-white font-bold'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          All ({generatedImages.length + generatedVideos.length})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMediaGalleryFilter('flow')}
-                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                            mediaGalleryFilter === 'flow'
-                              ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white font-bold'
-                              : 'text-slate-400 hover:text-cyan-300'
-                          }`}
-                        >
-                          Google Flow ({generatedVideos.filter(v => v.source === 'google_flow').length})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMediaGalleryFilter('videos')}
-                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                            mediaGalleryFilter === 'videos'
-                              ? 'bg-rose-600 text-white font-bold'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          Veo 3 ({generatedVideos.filter(v => v.source !== 'google_flow').length})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMediaGalleryFilter('images')}
-                          className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                            mediaGalleryFilter === 'images'
-                              ? 'bg-purple-600 text-white font-bold'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          Images ({generatedImages.length})
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAddWorkspaceAsset('image')}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>+ Add Image</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAddWorkspaceAsset('video')}
-                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>+ Add Video</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Images */}
-                    {(mediaGalleryFilter === 'all' || mediaGalleryFilter === 'images') &&
-                      generatedImages.map((img) => (
-                      <div key={img.id} className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col group">
-                        <div className="relative aspect-square bg-slate-900 overflow-hidden">
-                          <img src={img.url} alt={img.prompt} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                          <div className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-mono text-white font-bold">
-                            {img.aspectRatio}
-                          </div>
-                          {img.linkedTrackIds && img.linkedTrackIds.length > 0 && (
-                            <div className="absolute top-2 left-2 bg-emerald-600 text-white px-1.5 py-0.2 rounded text-[8px] font-bold">
-                              +{img.linkedTrackIds.length} linked
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-3 space-y-2 flex-1 flex flex-col justify-between text-xs">
-                          <div>
-                            <div className="font-bold text-white text-xs truncate">{img.name || img.trackTitle || 'Studio Art'}</div>
-                            <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{img.prompt}</p>
-                          </div>
-                          <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                            <div className="flex items-center justify-between gap-1">
-                              <button
-                                onClick={() => {
-                                  setSelectedImageForEdit(img.url);
-                                  setImageMode('edit');
-                                }}
-                                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"
-                              >
-                                Animate
-                              </button>
-                              <button
-                                onClick={() => handleAnalyzeImage(img.url)}
-                                className="text-[10px] text-purple-400 hover:text-purple-300 font-bold"
-                              >
-                                Analyze (Pro)
-                              </button>
-                            </div>
-                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800/60">
-                              <button
-                                onClick={() => handleOpenEditImageModal(img, 'gemini')}
-                                className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800/40 text-[9px] font-bold flex items-center gap-1"
-                                title="Ask Gemini to change this image"
-                              >
-                                <Sparkles className="w-2.5 h-2.5" />
-                                <span>AI Edit</span>
-                              </button>
-                              <button
-                                onClick={() => handleOpenEditImageModal(img, 'edit')}
-                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold"
-                                title="Edit all aspects / reassign / link"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteImage(img.id)}
-                                className="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-[9px]"
-                                title="Delete image"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Videos (Veo 3 & Google Flow) */}
-                    {(mediaGalleryFilter === 'all'
-                      ? generatedVideos
-                      : mediaGalleryFilter === 'flow'
-                      ? generatedVideos.filter(v => v.source === 'google_flow')
-                      : mediaGalleryFilter === 'videos'
-                      ? generatedVideos.filter(v => v.source !== 'google_flow')
-                      : []
-                    ).map((vid) => {
-                      const isFlow = vid.source === 'google_flow' || vid.category?.toLowerCase().includes('flow');
-                      return (
-                        <div
-                          key={vid.id}
-                          className={`bg-slate-950 rounded-xl overflow-hidden flex flex-col group border transition ${
-                            isFlow
-                              ? 'border-cyan-500/40 hover:border-cyan-400/80 shadow-[0_0_15px_rgba(6,182,212,0.08)]'
-                              : 'border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className={`relative ${vid.aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'} bg-slate-900 flex items-center justify-center`}>
-                            {vid.videoUrl ? (
-                              <video src={vid.videoUrl} controls className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="text-center p-4">
-                                <RefreshCw className="w-6 h-6 text-rose-400 animate-spin mx-auto mb-2" />
-                                <span className="text-[10px] text-slate-400 font-mono">Video Rendering...</span>
-                              </div>
-                            )}
-
-                            {/* Top-Right Badge: Google Flow vs Veo */}
-                            {isFlow ? (
-                              <div className="absolute top-2 right-2 bg-gradient-to-r from-cyan-950 to-indigo-950/90 text-cyan-300 border border-cyan-700/60 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1 shadow-md">
-                                <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
-                                <span>Google Flow {vid.aspectRatio}</span>
-                              </div>
-                            ) : (
-                              <div className="absolute top-2 right-2 bg-slate-900/80 px-2 py-0.5 rounded text-[9px] font-mono text-white font-bold">
-                                Veo {vid.aspectRatio}
-                              </div>
-                            )}
-
-                            {/* Top-Left: Linked tracks indicator & Resolution */}
-                            <div className="absolute top-2 left-2 flex items-center gap-1">
-                              {vid.resolution && (
-                                <span className="bg-slate-900/85 backdrop-blur-sm text-slate-300 px-1.5 py-0.2 rounded text-[8px] font-mono border border-slate-700/60">
-                                  {vid.resolution}
-                                </span>
-                              )}
-                              {vid.linkedTrackIds && vid.linkedTrackIds.length > 1 && (
-                                <span className="bg-emerald-600/90 text-white px-1.5 py-0.2 rounded text-[8px] font-bold shadow-xs">
-                                  +{vid.linkedTrackIds.length} tracks
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="p-3 text-xs space-y-2 flex-1 flex flex-col justify-between">
-                            <div>
-                              <div className="flex items-center justify-between gap-1">
-                                <div className="font-bold text-white text-xs truncate">
-                                  {vid.name || (isFlow ? 'Google Flow Reel' : 'Veo Reel')}
-                                </div>
-                                {vid.flowAssetUrl && (
-                                  <a
-                                    href={vid.flowAssetUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[9px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5 font-mono shrink-0 px-1.5 py-0.2 rounded bg-cyan-950/50 border border-cyan-800/40"
-                                    title="Open video in Google Flow / Drive"
-                                  >
-                                    <ExternalLink className="w-2.5 h-2.5" />
-                                    <span>Flow</span>
-                                  </a>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">{vid.prompt}</p>
-                            </div>
-
-                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-800">
-                              <button
-                                onClick={() => handleOpenEditVideoModal(vid, 'gemini')}
-                                className="px-2 py-0.5 rounded bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800/40 text-[9px] font-bold flex items-center gap-1"
-                                title="Ask Gemini to change this video prompt"
-                              >
-                                <Sparkles className="w-2.5 h-2.5" />
-                                <span>AI Edit</span>
-                              </button>
-                              <button
-                                onClick={() => handleOpenEditVideoModal(vid, 'edit')}
-                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[9px] font-bold"
-                                title="Edit all aspects / reassign / link across projects"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteVideo(vid.id)}
-                                className="p-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-[9px]"
-                                title="Delete video"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Gemini Image / Video Analysis Result Box */}
-                  {imageAnalysisResult && (
-                    <div className="p-4 bg-slate-950 border border-purple-500/40 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h5 className="text-xs font-bold text-purple-300 flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-purple-400" />
-                          <span>Gemini Pro Image Understanding Audit</span>
-                        </h5>
-                        <button onClick={() => setImageAnalysisResult(null)} className="text-xs text-slate-400 hover:text-white">✕</button>
-                      </div>
-                      <p className="text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed">
-                        {imageAnalysisResult}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
+            <VeoVisualsTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              onAddVideoAsset={handleAddVideo}
+              onOpenAssetEditor={(asset, mode) => {
+                setWorkspaceEditingAsset(asset);
+                setWorkspaceAssetModalMode(mode);
+                setWorkspaceAssetModalOpen(true);
+              }}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
+              onCopySuccess={(msg) => showToast(msg, 'success')}
+            />
           )}
 
           {/* TAB 5: NIGHTCAFE QUEUE RUNNER */}
           {activeTab === 'nightcafe' && (
-            <div className="space-y-4">
-              <SectionQuickHelpBanner
-                sectionId="nightcafe"
-                onOpenModalGuide={handleOpenSectionGuide}
-                isDarkMode={isDarkMode}
-              />
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>NightCafe Studio Bulk Queue Runner</span>
-                      <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] font-bold border border-blue-700/50">
-                        {nightCafePrompts.length} Scenes Loaded
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400">Batch prompt dispatching for Google Veo & Flux Dev models on NightCafe Studio.</p>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSectionGuide('nightcafe')}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                      title="Open NightCafe Bulk Queue Operating Guide & SOP Rules"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>How To Use NightCafe</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        const payload = JSON.stringify(nightCafePrompts, null, 2);
-                        copyToClipboard(payload, "NightCafe Queue JSON");
-                      }}
-                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2 transition"
-                    >
-                      <Zap className="w-4 h-4 text-amber-300" />
-                      <span>⚡ Copy JSON for NightCafe</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Prompt Table */}
-                <div className="border border-slate-800 rounded-xl bg-slate-950 overflow-hidden max-h-[400px] overflow-y-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="bg-slate-900 border-b border-slate-800 sticky top-0 text-slate-400">
-                      <tr>
-                        <th className="py-2.5 px-3 w-10 text-center">#</th>
-                        <th className="py-2.5 px-3 w-36">Song</th>
-                        <th className="py-2.5 px-3 w-36">Scene Title</th>
-                        <th className="py-2.5 px-3">Cinematic Prompt</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 text-slate-300">
-                      {nightCafePrompts.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-900/60 transition">
-                          <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">{idx + 1}</td>
-                          <td className="py-2 px-3 font-semibold text-blue-300">{item.song}</td>
-                          <td className="py-2 px-3 font-medium text-slate-200">{item.title}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-slate-300">{item.prompt}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+            <NightCafeTab
+              prompts={NIGHTCAFE_DEFAULT_PROMPTS}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
+              onCopySuccess={(msg) => showToast(msg, 'success')}
+            />
           )}
 
           {/* TAB: VIDEOEXPRESS.AI TALKING AVATAR AGENT */}
@@ -2948,258 +2295,41 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
           {/* TAB 6: TELEMETRY & SURVIVAL LOOP */}
           {activeTab === 'telemetry' && (
-            <div className="space-y-4">
-              <SectionQuickHelpBanner
-                sectionId="telemetry"
-                onOpenModalGuide={handleOpenSectionGuide}
-                isDarkMode={isDarkMode}
-              />
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>T+60m Inbound Telemetry & Brutal Metric Loop</span>
-                      <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[10px] font-bold border border-purple-700/50">
-                        Active Audit
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400">Automated retention scoring. Videos with ≥70% completion trigger 10s video extensions instantly.</p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSectionGuide('telemetry')}
-                    className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                    title="Open Telemetry Operating Guide & SOP Rules"
-                  >
-                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>How To Use Telemetry</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-400 uppercase">Track: Meet Me Here (TRK-13)</span>
-                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-mono font-bold">VIRAL WINNER</span>
-                    </div>
-                    <div className="text-xs text-slate-300 space-y-1 font-mono">
-                      <div>3s Retention: <strong className="text-white">74.2%</strong> (&gt;65% Pass)</div>
-                      <div>Completion Rate: <strong className="text-white">71.5%</strong> (&gt;70% Winner)</div>
-                      <div>1h Views: <strong className="text-white">2,680</strong></div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 font-mono">
-                      <strong>Action Triggered:</strong> Generated 3 seamless 10-second video extensions (Scenes 4, 5, 6) via Gemini Flash.
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-400 uppercase">Track: Calvary Grit (TRK-09)</span>
-                      <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] font-mono font-bold">KILL CONCEPT</span>
-                    </div>
-                    <div className="text-xs text-slate-300 space-y-1 font-mono">
-                      <div>3s Retention: <strong className="text-white">58.2%</strong> (&lt;65% Kill)</div>
-                      <div>Completion Rate: <strong className="text-white">44.1%</strong></div>
-                      <div>1h Views: <strong className="text-white">640</strong></div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200 font-mono">
-                      <strong>Action Triggered:</strong> Campaign archived. Log weak visual hook in changelog.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <TelemetryTab
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
+            />
           )}
 
           {/* TAB 7: STUDIO CO-PRODUCER AI (GEMINI CHATBOT) */}
           {activeTab === 'coproducer' && (
-            <div className="space-y-4">
-              <SectionQuickHelpBanner
-                sectionId="coproducer"
-                onOpenModalGuide={handleOpenSectionGuide}
-                isDarkMode={isDarkMode}
-              />
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 flex flex-col h-[640px]">
-                <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-teal-400" />
-                    <div>
-                      <h3 className="text-sm font-bold text-white">Studio Co-Producer AI (Multi-Turn Chatbot)</h3>
-                      <p className="text-[11px] text-slate-400">Contextually aware of {selectedTrack.title} ({selectedTrack.genre})</p>
-                    </div>
-                  </div>
-
-                  {/* Role, Model Selectors and Guide button */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSectionGuide('coproducer')}
-                      className="px-3 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                      title="Open Studio Co-Producer AI Operating Guide & SOP Rules"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>How To Use Co-Producer</span>
-                    </button>
-
-                    <select
-                      value={chatRole}
-                      onChange={(e) => setChatRole(e.target.value as any)}
-                      className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 font-bold focus:outline-none"
-                    >
-                      <option value="lyric_assistant">Lyric & Theological Assistant</option>
-                      <option value="mastering_engineer">Senior Mastering Engineer</option>
-                      <option value="omnipost_strategist">Omnipost Social Strategist</option>
-                    </select>
-
-                    <select
-                      value={chatModel}
-                      onChange={(e) => setChatModel(e.target.value)}
-                      className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none"
-                    >
-                      <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-                      <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                      <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Message Thread */}
-                <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-950 rounded-xl border border-slate-800/80 custom-scrollbar">
-                  {chatMessages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                    >
-                      <div className="flex items-center gap-2 mb-1 text-[10px] text-slate-500 font-mono">
-                        <span>{msg.role === 'user' ? 'You' : 'brickOS AI'}</span>
-                        <span>•</span>
-                        <span>{msg.timestamp}</span>
-                        {msg.model && <span>({msg.model})</span>}
-                      </div>
-                      <div
-                        className={`p-3.5 rounded-2xl max-w-2xl text-xs leading-relaxed whitespace-pre-wrap ${
-                          msg.role === 'user'
-                            ? 'bg-indigo-600 text-white rounded-br-none'
-                            : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md font-mono'
-                        }`}
-                      >
-                        {msg.content}
-                      </div>
-                    </div>
-                  ))}
-                  {isChatLoading && (
-                    <div className="flex items-center gap-2 text-xs text-slate-500 font-mono p-2">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
-                      <span>Thinking with {chatModel}...</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chat Input */}
-                <div className="flex items-center gap-2 pt-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder={`Ask ${chatRole.replace('_', ' ')} anything about ${selectedTrack.title}...`}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={isChatLoading || !chatInput.trim()}
-                    className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Send</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <StudioCopilotTab
+              selectedTrack={selectedTrack}
+              chatMessages={chatMessages}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              onSendMessage={handleSendMessage}
+              isChatLoading={isChatLoading}
+              chatRole={chatRole}
+              setChatRole={setChatRole}
+              chatModel={chatModel}
+              setChatModel={setChatModel}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
+            />
           )}
 
           {/* TAB 8: SEARCH GROUNDING */}
           {activeTab === 'search' && (
-            <div className="space-y-4">
-              <SectionQuickHelpBanner
-                sectionId="search"
-                onOpenModalGuide={handleOpenSectionGuide}
-                isDarkMode={isDarkMode}
-              />
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Search className="w-4 h-4 text-cyan-400" />
-                      <span>Google Search Grounding (gemini-3.5-flash with googleSearch tool)</span>
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Retrieve up-to-date Billboard Christian/Gospel charts, BPM trends, Nashville mixing standards, and theological references.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSectionGuide('search')}
-                    className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                    title="Open Google Search Grounding Operating Guide & SOP Rules"
-                  >
-                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>How To Use Search</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearchGrounding()}
-                    placeholder="e.g. Current top 10 Christian Hip Hop tracks tempo and 808 style 2026..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                  <button
-                    onClick={handleSearchGrounding}
-                    disabled={isSearching}
-                    className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-cyan-950 disabled:opacity-50"
-                  >
-                    {isSearching ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                    <span>{isSearching ? 'Searching...' : 'Search Google Grounding'}</span>
-                  </button>
-                </div>
-
-                {searchResult && (
-                  <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-4">
-                    <div className="text-xs text-slate-200 font-mono leading-relaxed whitespace-pre-wrap">
-                      {searchResult.answer}
-                    </div>
-
-                    {searchResult.sources && searchResult.sources.length > 0 && (
-                      <div className="pt-3 border-t border-slate-800 space-y-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 font-mono block">
-                          Verified Web Sources:
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {searchResult.sources.map((src, idx) => (
-                            <a
-                              key={idx}
-                              href={src.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] text-cyan-400 hover:underline bg-slate-900 px-2.5 py-1 rounded border border-slate-800 flex items-center gap-1"
-                            >
-                              <span>{src.title || src.url}</span>
-                              <ExternalLink className="w-2.5 h-2.5 inline" />
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <SearchGroundingTab
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSearchGrounding={handleSearchGrounding}
+              isSearching={isSearching}
+              searchResult={searchResult}
+              onOpenSectionGuide={handleOpenSectionGuide}
+              isDarkMode={isDarkMode}
+            />
           )}
 
           {/* TAB: NEXTCLOUD BENTO LIVE WEBDAV & FOLDER 207332 ASSET MATCHER */}
@@ -3618,6 +2748,62 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         }}
         onDuplicateAsset={(dup) => {
           handleSaveWorkspaceAsset(dup);
+        }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* SPOTLIGHT STUDIO COMMAND PALETTE (Ctrl+K / Cmd+K) */}
+      <StudioCommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        tracks={tracks}
+        selectedTrack={selectedTrack}
+        onSelectTrack={(track) => {
+          setSelectedTrack(track);
+          showToast(`Switched track to: ${track.id} - ${track.title}`, 'info');
+        }}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab as any);
+          showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+        }}
+        onOpenSectionGuide={handleOpenSectionGuide}
+        onOpenShortcutsCheatSheet={openCheatSheet}
+        onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* SLIDE-OVER STUDIO COPILOT DRAWER (Ctrl+J / Cmd+J) */}
+      <StudioCopilotDrawer
+        isOpen={isCopilotDrawerOpen}
+        onClose={() => setIsCopilotDrawerOpen(false)}
+        selectedTrack={selectedTrack}
+        chatMessages={chatMessages}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSendMessage={handleSendMessage}
+        isChatLoading={isChatLoading}
+        chatRole={chatRole}
+        setChatRole={setChatRole}
+        chatModel={chatModel}
+        setChatModel={setChatModel}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        onSearchGrounding={handleSearchGrounding}
+        isSearching={isSearching}
+        searchResult={searchResult}
+        onOpenSectionGuide={handleOpenSectionGuide}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* 24-HOUR SELAH PRAYER GATE MODAL (NASHVILLE SOP RULE 1) */}
+      <SelahPrayerGateModal
+        isOpen={isSelahGateOpen}
+        onClose={() => setIsSelahGateOpen(false)}
+        track={selectedTrack}
+        onConfirmSelahPrayed={(reflection) => {
+          handleTrackUpdate('selahPrayed', true);
+          setIsSelahGateOpen(false);
+          showToast(`Selah Prayer Gate Unlocked for ${selectedTrack.title}!`, 'success');
         }}
         isDarkMode={isDarkMode}
       />

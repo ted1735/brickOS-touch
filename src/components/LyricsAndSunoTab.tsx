@@ -37,12 +37,14 @@ import {
   HelpCircle,
   Info,
   Settings,
-  Grid
+  Grid,
+  Code
 } from 'lucide-react';
 import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset } from '../types';
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
 import { SOPRulesEditorModal } from './SOPRulesEditorModal';
 import { SoundPresetLibraryModal } from './SoundPresetLibraryModal';
+import { SUNO_USERSCRIPT_CODE } from '../data/automationUserscripts';
 import { loadPresetsFromFirestore, subscribeToFirestorePresets, getLocalCachedPresets, isFirebaseConfigured } from '../lib/firebase';
 import { getNextVersionString } from '../utils/versioning';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
@@ -118,6 +120,8 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
   // Explanation Modal for Suno 4-Block Reactive Compiler
   const [showCompilerExplainer, setShowCompilerExplainer] = useState(false);
+  const [showSunoUserscriptModal, setShowSunoUserscriptModal] = useState(false);
+  const [copiedSunoUserscript, setCopiedSunoUserscript] = useState(false);
 
   // Nashville SOP Rules Manager State (Direct Markdown & Text Editing)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
@@ -1394,6 +1398,16 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
             <button
               type="button"
+              onClick={() => setShowSunoUserscriptModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-700/60 text-purple-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Get brickOS Suno 1-Click Auto-Fill Userscript"
+            >
+              <Code className="w-3.5 h-3.5 text-purple-400" />
+              <span>1-Click Auto-Fill HUD</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyAllBlocks}
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950/40 transition cursor-pointer"
             >
@@ -1412,6 +1426,78 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
             </a>
           </div>
         </div>
+
+        {/* Suno Userscript Modal */}
+        {showSunoUserscriptModal && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowSunoUserscriptModal(false)}
+          >
+            <div
+              className="w-full max-w-2xl bg-slate-900 border border-purple-500/40 rounded-2xl p-6 shadow-2xl space-y-4 text-slate-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Code className="w-5 h-5 text-purple-400" />
+                  <h4 className="text-sm font-bold text-white">
+                    brickOS Suno 1-Click Auto-Fill Userscript
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSunoUserscriptModal(false)}
+                  className="text-slate-400 hover:text-white text-sm cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                This userscript runs directly inside <code className="text-indigo-400">suno.com</code> via Violentmonkey or Tampermonkey. It injects a floating HUD that reads your clipboard and automatically populates Lyrics, Style, Excluded Styles, and Title in 1 click!
+              </p>
+
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-400 max-h-48 overflow-y-auto">
+                {SUNO_USERSCRIPT_CODE.slice(0, 600)}...
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([SUNO_USERSCRIPT_CODE], { type: 'application/javascript' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'suno_1_click_auto_fill_userscript.user.js';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    onCopyText('Downloaded suno_1_click_auto_fill_userscript.user.js', 'Userscript Download');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download .user.js</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(SUNO_USERSCRIPT_CODE);
+                      setCopiedSunoUserscript(true);
+                      setTimeout(() => setCopiedSunoUserscript(false), 3000);
+                      onCopyText(SUNO_USERSCRIPT_CODE, 'Suno 1-Click Userscript');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+                >
+                  {copiedSunoUserscript ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSunoUserscript ? 'Copied Script!' : 'Copy Userscript to Clipboard'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 4-BLOCK GRID: 2 COLUMNS OF BLOCKS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
