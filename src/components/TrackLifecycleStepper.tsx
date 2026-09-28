@@ -88,7 +88,7 @@ export const TrackLifecycleStepper: React.FC<TrackLifecycleStepperProps> = ({
       tab: 'kanban',
       icon: Lock,
       isCompleted: currentIndex >= 6,
-      isCurrent: currentIndex === 5 && status === 'In Review',
+      isCurrent: currentIndex === 5 && !selectedTrack.selahPrayed,
       badge: 'SOP 1'
     },
     {

@@ -39,7 +39,10 @@ import {
   BookOpen,
   HelpCircle,
   FolderSync,
-  Video
+  Video,
+  Search,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import {
   Track,
@@ -130,12 +133,80 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   const [newImageShotNumber, setNewImageShotNumber] = useState<string>('Scene 1 / Shot A');
   const [newImageNotes, setNewImageNotes] = useState<string>('');
 
+  // Whiteboard Canvas Lyrics & Word Search State
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const q = localStorage.getItem('brickos_whiteboard_search_query');
+      if (q) {
+        localStorage.removeItem('brickos_whiteboard_search_query');
+        return q;
+      }
+    }
+    return '';
+  });
+  const [searchFilterType, setSearchFilterType] = useState<'all' | 'lyrics' | 'notes' | 'chords' | 'images'>('all');
+  const [focusedMatchIndex, setFocusedMatchIndex] = useState<number>(0);
+  const [showSearchResultsList, setShowSearchResultsList] = useState<boolean>(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<any>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Filter matching blocks
+  const matchingBlocks = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const term = searchQuery.toLowerCase().trim();
+
+    return blocks.filter((b) => {
+      if (searchFilterType === 'lyrics' && b.type !== 'song_section') return false;
+      if (searchFilterType === 'notes' && b.type !== 'sticky_note') return false;
+      if (searchFilterType === 'chords' && b.type !== 'chords_prog') return false;
+      if (searchFilterType === 'images' && !b.imageUrl && b.type !== 'thumbnail_asset') return false;
+
+      const inTitle = (b.title || '').toLowerCase().includes(term);
+      const inSubtitle = (b.subtitle || '').toLowerCase().includes(term);
+      const inContent = (b.content || '').toLowerCase().includes(term);
+      const inSectionTag = (b.sectionTag || '').toLowerCase().includes(term);
+      const inChords = (b.chords || '').toLowerCase().includes(term);
+      const inShot = (b.shotNumber || '').toLowerCase().includes(term);
+      const inTags = (b.tags || []).some(t => t.toLowerCase().includes(term));
+
+      return inTitle || inSubtitle || inContent || inSectionTag || inChords || inShot || inTags;
+    });
+  }, [blocks, searchQuery, searchFilterType]);
+
+  const matchingBlockIds = useMemo(() => {
+    return matchingBlocks.map(b => b.id);
+  }, [matchingBlocks]);
+
+  // Pan canvas to center on block
+  const panToBlock = (blockId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const blockW = block.width || 280;
+    const targetX = (rect.width / 2) - (block.x + blockW / 2) * zoom;
+    const targetY = (rect.height / 2) - (block.y + 100) * zoom;
+    setPan({ x: targetX, y: targetY });
+    setSelectedBlockId(block.id);
+  };
+
+  const handleNextSearchMatch = () => {
+    if (!matchingBlocks.length) return;
+    const nextIdx = (focusedMatchIndex + 1) % matchingBlocks.length;
+    setFocusedMatchIndex(nextIdx);
+    panToBlock(matchingBlocks[nextIdx].id);
+  };
+
+  const handlePrevSearchMatch = () => {
+    if (!matchingBlocks.length) return;
+    const prevIdx = (focusedMatchIndex - 1 + matchingBlocks.length) % matchingBlocks.length;
+    setFocusedMatchIndex(prevIdx);
+    panToBlock(matchingBlocks[prevIdx].id);
   };
 
   // Helper to generate default blocks from track lyrics if empty
@@ -922,6 +993,110 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </button>
         </div>
 
+        {/* Center: Lyrics & Card Search Toolbar */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setFocusedMatchIndex(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (e.shiftKey) handlePrevSearchMatch();
+                  else handleNextSearchMatch();
+                }
+              }}
+              placeholder="Search whiteboard words..."
+              className="bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg pl-8 pr-12 py-1 text-xs text-white placeholder-slate-500 font-mono w-44 sm:w-56 outline-none"
+            />
+            {searchQuery && (
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <span className="text-[10px] font-mono font-bold text-amber-400">
+                  {matchingBlocks.length > 0 ? `${focusedMatchIndex + 1}/${matchingBlocks.length}` : '0'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFocusedMatchIndex(0);
+                  }}
+                  className="text-slate-500 hover:text-white text-xs px-1 cursor-pointer"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Previous / Next Match Buttons */}
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={handlePrevSearchMatch}
+              disabled={matchingBlocks.length === 0}
+              className="p-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer transition"
+              title="Previous Card Match (Shift+Enter)"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNextSearchMatch}
+              disabled={matchingBlocks.length === 0}
+              className="p-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer transition"
+              title="Next Card Match (Enter)"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Filter Type Selector */}
+          <select
+            value={searchFilterType}
+            onChange={(e) => setSearchFilterType(e.target.value as any)}
+            className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-[10px] font-mono text-slate-300 outline-none cursor-pointer"
+            title="Filter search by card type"
+          >
+            <option value="all">All Cards</option>
+            <option value="lyrics">Lyrics Only</option>
+            <option value="notes">Notes</option>
+            <option value="chords">Chords</option>
+            <option value="images">Thumbnails</option>
+          </select>
+
+          {/* Matches List Toggle Button */}
+          {matchingBlocks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSearchResultsList(!showSearchResultsList)}
+              className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition border cursor-pointer ${
+                showSearchResultsList ? 'bg-amber-600 text-slate-950 border-amber-400' : 'bg-slate-950 text-amber-400 border-amber-600/50 hover:bg-slate-800'
+              }`}
+              title="Toggle matching cards list"
+            >
+              {matchingBlocks.length} Found
+            </button>
+          )}
+
+          {/* Jump to Lyrics Tab Button */}
+          {onNavigateToTab && (
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('lyrics')}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-indigo-300 border border-indigo-900/50 cursor-pointer transition"
+              title="Switch to Lyrics & Suno Engine"
+            >
+              <FileText className="w-3 h-3 text-indigo-400" />
+              <span className="hidden xl:inline">To Lyrics</span>
+            </button>
+          )}
+        </div>
+
         {/* Right: Viewport Controls & Grid Styles (Only in Edgeless Mode) */}
         {viewMode === 'edgeless' && (
           <div className="flex items-center gap-2">
@@ -983,6 +1158,39 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </div>
         )}
       </div>
+
+      {/* SEARCH RESULTS MATCHES DRAWER (WHEN SEARCH IS ACTIVE) */}
+      {showSearchResultsList && matchingBlocks.length > 0 && (
+        <div className="px-4 py-2 bg-slate-950/95 border-b border-amber-500/30 flex items-center gap-2 overflow-x-auto custom-scrollbar z-30 text-xs font-mono animate-in slide-in-from-top-1 duration-150">
+          <span className="text-[10px] uppercase font-bold text-amber-400 shrink-0">Matching Cards:</span>
+          {matchingBlocks.map((b, idx) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => {
+                setFocusedMatchIndex(idx);
+                panToBlock(b.id);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border shrink-0 transition cursor-pointer ${
+                focusedMatchIndex === idx
+                  ? 'bg-amber-500 text-slate-950 font-bold border-amber-300 shadow-md shadow-amber-950'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+              }`}
+            >
+              <span className="text-[9px] opacity-75 uppercase">{b.sectionTag || b.type.replace('_', ' ')}</span>
+              <span className="truncate max-w-[150px]">{b.title}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowSearchResultsList(false)}
+            className="text-slate-500 hover:text-white text-xs px-1 ml-auto shrink-0 cursor-pointer"
+            title="Close results bar"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Notification Toast */}
       {toastMessage && (
@@ -1082,6 +1290,10 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 const isConnectingSource = connectingSourceId === block.id;
                 const colorConfig = COLOR_OPTIONS.find(c => c.id === block.color) || COLOR_OPTIONS[0];
 
+                const isMatch = matchingBlockIds.includes(block.id);
+                const isFocusedMatch = matchingBlocks[focusedMatchIndex]?.id === block.id;
+                const isSearchActive = searchQuery.trim().length > 0;
+
                 return (
                   <div
                     key={block.id}
@@ -1102,14 +1314,20 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                         y: (e.clientY - pan.y) / zoom - block.y
                       });
                     }}
-                    className={`absolute pointer-events-auto rounded-xl border backdrop-blur-md shadow-2xl transition-shadow flex flex-col ${
+                    className={`absolute pointer-events-auto rounded-xl border backdrop-blur-md shadow-2xl transition-all flex flex-col ${
                       colorConfig.bg
                     } ${colorConfig.border} ${
-                      isSelected
+                      isFocusedMatch
+                        ? 'ring-4 ring-amber-300 shadow-[0_0_35px_rgba(251,191,36,0.7)] z-20 scale-[1.02]'
+                        : isMatch
+                        ? 'ring-2 ring-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] z-10'
+                        : isSelected
                         ? 'ring-2 ring-indigo-400 shadow-[0_0_25px_rgba(99,102,241,0.25)]'
                         : isConnectingSource
                         ? 'ring-2 ring-amber-400 animate-pulse'
                         : 'hover:border-slate-500'
+                    } ${
+                      isSearchActive && !isMatch ? 'opacity-35 hover:opacity-90' : 'opacity-100'
                     }`}
                   >
                     {/* Block Header & Drag Handle */}
@@ -1119,6 +1337,11 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: colorConfig.hex }}
                         />
+                        {isMatch && (
+                          <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-black text-[8px] uppercase tracking-wider shrink-0 animate-pulse">
+                            MATCH
+                          </span>
+                        )}
                         <input
                           type="text"
                           value={block.title}
@@ -1293,17 +1516,27 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0) || a.y - b.y)
                 .map((block, index) => {
                   const colorConfig = COLOR_OPTIONS.find(c => c.id === block.color) || COLOR_OPTIONS[0];
+                  const isMatch = matchingBlockIds.includes(block.id);
 
                   return (
                     <div
                       key={block.id}
-                      className={`p-4 rounded-xl border bg-slate-900/60 ${colorConfig.border} space-y-2`}
+                      className={`p-4 rounded-xl border space-y-2 transition-all ${
+                        isMatch
+                          ? 'border-amber-400 bg-amber-950/25 ring-2 ring-amber-400/50 shadow-lg shadow-amber-950/40'
+                          : `bg-slate-900/60 ${colorConfig.border}`
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono text-slate-500 font-bold">
                             #{index + 1}
                           </span>
+                          {isMatch && (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-black text-[8px] uppercase tracking-wider shrink-0 animate-pulse">
+                              MATCH
+                            </span>
+                          )}
                           <span className={`text-xs font-mono font-bold ${colorConfig.text}`}>
                             {block.title}
                           </span>

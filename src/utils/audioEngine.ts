@@ -200,6 +200,9 @@ class MiniDawEngine {
   }
 
   public getAnalyser(): AnalyserNode | null {
+    if (!this.analyser) {
+      this.init();
+    }
     return this.analyser;
   }
 

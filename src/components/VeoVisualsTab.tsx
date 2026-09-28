@@ -23,7 +23,7 @@ interface VeoVisualsTabProps {
   tracks: Track[];
   selectedTrack: Track;
   onAddVideoAsset?: (asset: GeneratedVideo) => void;
-  onOpenAssetEditor?: (asset: UniversalAssetItem, mode: 'view' | 'edit') => void;
+  onOpenAssetEditor?: (asset: UniversalAssetItem, mode: 'view' | 'edit' | 'add' | 'gemini') => void;
   onOpenSectionGuide?: (sectionId: string) => void;
   isDarkMode?: boolean;
   onCopySuccess?: (msg: string) => void;
@@ -71,7 +71,7 @@ export const VeoVisualsTab: React.FC<VeoVisualsTabProps> = ({
   const [videoPrompt, setVideoPrompt] = useState(
     'Cinematic slow dolly push in toward the vintage microphone as atmospheric haze drifts across the warm studio lights, 4k 24fps.'
   );
-  const [videoAspectRatio, setVideoAspectRatio] = useState('9:16');
+  const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16'>('9:16');
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [videoStatus, setVideoStatus] = useState('');
   const [videoOperationName, setVideoOperationName] = useState('');
@@ -429,7 +429,7 @@ export const VeoVisualsTab: React.FC<VeoVisualsTabProps> = ({
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-slate-400 uppercase font-mono">Aspect:</span>
-                {['9:16', '16:9'].map(ratio => (
+                {(['9:16', '16:9'] as const).map(ratio => (
                   <button
                     key={ratio}
                     type="button"

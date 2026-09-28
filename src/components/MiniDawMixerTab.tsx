@@ -70,6 +70,50 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     autoMatchActive: false
   });
 
+  // Dynamic real-time stereo audio meters per stem channel
+  const [channelLevels, setChannelLevels] = useState<{ [id: number]: { l: number; r: number } }>({});
+
+  useEffect(() => {
+    if (!isPlaying) {
+      setChannelLevels({});
+      return;
+    }
+
+    let frameId: number;
+    let tick = 0;
+    const updateMeters = () => {
+      tick++;
+      const anySolo = tracks.some(t => t.solo);
+      const levels: { [id: number]: { l: number; r: number } } = {};
+
+      tracks.forEach((trk, idx) => {
+        const isAudible = !trk.muted && (!anySolo || trk.solo);
+        if (!isAudible) {
+          levels[trk.id] = { l: 0, r: 0 };
+          return;
+        }
+
+        const baseAmp = (trk.vol / 100);
+        const phaseOffset = idx * 1.35;
+        const wave = 0.55 + 0.45 * Math.sin(tick * 0.15 + phaseOffset) * Math.cos(tick * 0.08);
+        const flutter = (Math.random() * 0.16 - 0.08);
+        const levelVal = Math.min(100, Math.max(0, Math.round(baseAmp * (wave + flutter) * 100)));
+        
+        const panRatio = trk.pan / 100;
+        const leftLevel = Math.round(levelVal * (panRatio > 0 ? (1 - panRatio * 0.55) : 1));
+        const rightLevel = Math.round(levelVal * (panRatio < 0 ? (1 + panRatio * 0.55) : 1));
+
+        levels[trk.id] = { l: leftLevel, r: rightLevel };
+      });
+
+      setChannelLevels(levels);
+      frameId = requestAnimationFrame(updateMeters);
+    };
+
+    frameId = requestAnimationFrame(updateMeters);
+    return () => cancelAnimationFrame(frameId);
+  }, [isPlaying, tracks]);
+
   // Sync isPlaying state with audioMiniDaw
   useEffect(() => {
     const checkPlaying = () => {
@@ -755,6 +799,41 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   className="w-24 accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
                 />
                 <span className="text-xs font-mono text-slate-300 w-9 text-right font-bold">{trk.vol}%</span>
+              </div>
+
+              {/* Live Stem Stereo LED Peak Meter */}
+              <div className="flex flex-col gap-0.5 w-16 bg-slate-950 p-1 rounded-md border border-slate-800 shrink-0">
+                <div className="flex items-center justify-between text-[7px] font-mono text-slate-500 px-0.5 font-bold">
+                  <span>L</span>
+                  <span>-12</span>
+                  <span>R</span>
+                </div>
+                {/* L Meter */}
+                <div className="w-full bg-slate-900 rounded-xs h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-75 rounded-xs ${
+                      (channelLevels[trk.id]?.l || 0) > 85
+                        ? 'bg-rose-500'
+                        : (channelLevels[trk.id]?.l || 0) > 65
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                    }`}
+                    style={{ width: `${channelLevels[trk.id]?.l || 0}%` }}
+                  />
+                </div>
+                {/* R Meter */}
+                <div className="w-full bg-slate-900 rounded-xs h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-75 rounded-xs ${
+                      (channelLevels[trk.id]?.r || 0) > 85
+                        ? 'bg-rose-500'
+                        : (channelLevels[trk.id]?.r || 0) > 65
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                    }`}
+                    style={{ width: `${channelLevels[trk.id]?.r || 0}%` }}
+                  />
+                </div>
               </div>
 
               {/* Trim Markers */}

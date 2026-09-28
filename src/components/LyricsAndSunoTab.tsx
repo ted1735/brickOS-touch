@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   FileText,
   Copy,
@@ -126,6 +126,95 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   // Nashville SOP Rules Manager State (Direct Markdown & Text Editing)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [sopRules, setSopRules] = useState<SOPRulesPackage>(() => getLocalCachedSOPRules());
+
+  // Lyric Word & Tag Search State
+  const [searchWord, setSearchWord] = useState('');
+  const [replaceWord, setReplaceWord] = useState('');
+  const [showReplace, setShowReplace] = useState(false);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [searchStatusMsg, setSearchStatusMsg] = useState<string | null>(null);
+
+  // Compute all match positions
+  const lyricMatches = useMemo(() => {
+    if (!searchWord.trim() || !track.lyrics) return [];
+    try {
+      const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = wholeWord ? `\\b${escapeRegex(searchWord)}\\b` : escapeRegex(searchWord);
+      const flags = caseSensitive ? 'g' : 'gi';
+      const regex = new RegExp(pattern, flags);
+      const matches: { index: number; length: number; text: string; line: number }[] = [];
+      let match: RegExpExecArray | null;
+
+      while ((match = regex.exec(track.lyrics)) !== null) {
+        const textBefore = track.lyrics.substring(0, match.index);
+        const line = textBefore.split('\n').length;
+        matches.push({
+          index: match.index,
+          length: match[0].length,
+          text: match[0],
+          line
+        });
+      }
+      return matches;
+    } catch {
+      return [];
+    }
+  }, [searchWord, track.lyrics, caseSensitive, wholeWord]);
+
+  // Jump to specific match in textarea
+  const jumpToMatch = (idx: number) => {
+    if (!lyricMatches.length) return;
+    const targetIdx = ((idx % lyricMatches.length) + lyricMatches.length) % lyricMatches.length;
+    setActiveMatchIndex(targetIdx);
+    const m = lyricMatches[targetIdx];
+    if (pane1Ref.current && m) {
+      pane1Ref.current.focus();
+      pane1Ref.current.setSelectionRange(m.index, m.index + m.length);
+      const totalLines = (track.lyrics || '').split('\n').length || 1;
+      const lineHeight = pane1Ref.current.scrollHeight / totalLines;
+      pane1Ref.current.scrollTop = Math.max(0, (m.line - 3) * lineHeight);
+    }
+  };
+
+  const handleNextMatch = () => {
+    jumpToMatch(activeMatchIndex + 1);
+  };
+
+  const handlePrevMatch = () => {
+    jumpToMatch(activeMatchIndex - 1);
+  };
+
+  const handleReplaceCurrent = () => {
+    if (!lyricMatches.length || !searchWord.trim()) return;
+    const m = lyricMatches[activeMatchIndex] || lyricMatches[0];
+    if (!m) return;
+    const newLyrics = track.lyrics.substring(0, m.index) + replaceWord + track.lyrics.substring(m.index + m.length);
+    onUpdateTrack('lyrics', newLyrics);
+    setSearchStatusMsg(`Replaced 1 occurrence of "${m.text}" with "${replaceWord}"`);
+    setTimeout(() => setSearchStatusMsg(null), 3000);
+  };
+
+  const handleReplaceAll = () => {
+    if (!lyricMatches.length || !searchWord.trim()) return;
+    const count = lyricMatches.length;
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = wholeWord ? `\\b${escapeRegex(searchWord)}\\b` : escapeRegex(searchWord);
+    const flags = caseSensitive ? 'g' : 'gi';
+    const regex = new RegExp(pattern, flags);
+    const newLyrics = track.lyrics.replace(regex, replaceWord);
+    onUpdateTrack('lyrics', newLyrics);
+    setSearchStatusMsg(`Replaced all ${count} occurrences with "${replaceWord}"`);
+    setTimeout(() => setSearchStatusMsg(null), 3500);
+  };
+
+  // Cross-version search count
+  const matchingVersionsCount = useMemo(() => {
+    if (!searchWord.trim()) return 0;
+    const term = searchWord.toLowerCase();
+    return track.versions.filter(v => v.lyrics && v.lyrics.toLowerCase().includes(term)).length;
+  }, [searchWord, track.versions]);
 
   // Sound Preset Library State (4-Block Engine Configurations)
   const [isPresetLibraryOpen, setIsPresetLibraryOpen] = useState(false);
@@ -1008,6 +1097,188 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
               </div>
               <div className="text-[10px] font-mono text-slate-400">
                 {linesCount} lines • {wordCount} words
+              </div>
+            </div>
+
+            {/* INTERACTIVE LYRICS & WORD SEARCH TOOLBAR */}
+            <div className="bg-slate-900/95 border border-slate-800 rounded-xl p-2.5 space-y-2 shadow-inner">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                {/* Search Input & Match Navigation */}
+                <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchWord}
+                      onChange={(e) => {
+                        setSearchWord(e.target.value);
+                        setActiveMatchIndex(0);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (e.shiftKey) handlePrevMatch();
+                          else handleNextMatch();
+                        }
+                      }}
+                      placeholder="Search lyrics, words, or [tags]..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-16 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                    {searchWord && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <span className="text-[10px] font-mono font-bold text-slate-400">
+                          {lyricMatches.length > 0 ? `${activeMatchIndex + 1}/${lyricMatches.length}` : '0'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchWord('');
+                            setActiveMatchIndex(0);
+                          }}
+                          className="text-slate-500 hover:text-white text-xs px-1 cursor-pointer"
+                          title="Clear search"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Previous / Next Match Buttons */}
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={handlePrevMatch}
+                      disabled={lyricMatches.length === 0}
+                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer transition"
+                      title="Previous Match (Shift+Enter)"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextMatch}
+                      disabled={lyricMatches.length === 0}
+                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer transition"
+                      title="Next Match (Enter)"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Match Options: Case Sensitive & Whole Word */}
+                  <button
+                    type="button"
+                    onClick={() => setCaseSensitive(!caseSensitive)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition border cursor-pointer ${
+                      caseSensitive ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                    title="Toggle Case Sensitivity"
+                  >
+                    Aa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWholeWord(!wholeWord)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition border cursor-pointer ${
+                      wholeWord ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                    title="Match Whole Word Only"
+                  >
+                    \bW\b
+                  </button>
+                </div>
+
+                {/* Find & Replace Toggle + Cross-Workflow Whiteboard Search */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowReplace(!showReplace)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition border cursor-pointer ${
+                      showReplace ? 'bg-amber-600 text-slate-950 border-amber-400' : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                    title="Toggle Find & Replace"
+                  >
+                    Replace
+                  </button>
+
+                  {onNavigateToTab && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (searchWord) localStorage.setItem('brickos_whiteboard_search_query', searchWord);
+                        onNavigateToTab('whiteboard');
+                      }}
+                      className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-slate-950 hover:bg-slate-800 text-indigo-400 border border-slate-800 flex items-center gap-1 cursor-pointer transition"
+                      title="Search for this word or lyrics on the BlockSuite Whiteboard canvas"
+                    >
+                      <Grid className="w-3 h-3" />
+                      <span>In Whiteboard</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Expandable Replace Row */}
+              {showReplace && (
+                <div className="flex items-center gap-1.5 pt-1 border-t border-slate-800/80 animate-in slide-in-from-top-1 duration-150">
+                  <input
+                    type="text"
+                    value={replaceWord}
+                    onChange={(e) => setReplaceWord(e.target.value)}
+                    placeholder="Replace with..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-amber-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleReplaceCurrent}
+                    disabled={lyricMatches.length === 0}
+                    className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 text-[10px] font-bold font-mono transition disabled:opacity-40 cursor-pointer"
+                  >
+                    Replace
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReplaceAll}
+                    disabled={lyricMatches.length === 0}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black font-mono transition disabled:opacity-40 cursor-pointer"
+                  >
+                    Replace All ({lyricMatches.length})
+                  </button>
+                </div>
+              )}
+
+              {/* Status / Feedback message */}
+              {searchStatusMsg && (
+                <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-1 rounded border border-emerald-800/40">
+                  ✓ {searchStatusMsg}
+                </div>
+              )}
+
+              {/* Quick Jump Structural Tag Pills & Version Matches */}
+              <div className="flex items-center justify-between gap-1 flex-wrap text-[10px] font-mono text-slate-400 pt-0.5">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-slate-500 text-[9px] uppercase">Jump To:</span>
+                  {(['[Verse 1]', '[Chorus]', '[Bridge]', '[Hook]', '[Outro]'] as const).map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        setSearchWord(tag);
+                        setActiveMatchIndex(0);
+                        setTimeout(() => jumpToMatch(0), 50);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 cursor-pointer transition"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+
+                {matchingVersionsCount > 0 && (
+                  <span className="text-[10px] font-mono text-indigo-400">
+                    Also in {matchingVersionsCount} saved version{matchingVersionsCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
             </div>
 

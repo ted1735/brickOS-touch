@@ -87,6 +87,8 @@ export interface Track {
   versions: TrackVersion[];
   auditHistory?: AuditFeedbackRecord[];
   selahPrayed?: boolean;
+  epCollection?: string;
+  camelotKey?: string;
   notes?: string;
 }
 

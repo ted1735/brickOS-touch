@@ -364,14 +364,14 @@ export const MiniDawSpectrumVisualizer: React.FC<MiniDawSpectrumVisualizerProps>
       }
 
       // Check if we have active audio data
-      const isSounding = isPlaying || testToneActive !== null;
+      const isSounding = isPlaying || testToneActive !== null || audioMiniDaw.getIsPlaying();
       let freqData: Uint8Array;
       let timeData: Uint8Array;
 
       if (isFrozen && frozenDataRef.current) {
         freqData = frozenDataRef.current.freqData;
         timeData = frozenDataRef.current.timeData;
-      } else if (activeAnalyser && isSounding) {
+      } else if (activeAnalyser && (isSounding || true)) {
         const binCount = activeAnalyser.frequencyBinCount;
         freqData = new Uint8Array(binCount);
         timeData = new Uint8Array(binCount);
@@ -379,7 +379,7 @@ export const MiniDawSpectrumVisualizer: React.FC<MiniDawSpectrumVisualizerProps>
         activeAnalyser.getByteTimeDomainData(timeData);
         frozenDataRef.current = { freqData, timeData };
       } else {
-        // Standby idle data (very quiet noise floor floor at -90dB)
+        // Standby idle data (very quiet noise floor at -90dB)
         const binCount = activeAnalyser ? activeAnalyser.frequencyBinCount : 512;
         freqData = new Uint8Array(binCount);
         timeData = new Uint8Array(binCount);
