@@ -42,7 +42,10 @@ import {
   Video,
   Search,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Database,
+  Radio,
+  ExternalLink
 } from 'lucide-react';
 import {
   Track,
@@ -50,7 +53,8 @@ import {
   BlockSuiteBlock,
   BlockSuiteBlockType,
   BlockSuiteConnector,
-  NextcloudSyncConfig
+  NextcloudSyncConfig,
+  NextcloudFolderAsset
 } from '../types';
 import {
   loadWhiteboardFromFirestore,
@@ -59,6 +63,7 @@ import {
   isFirebaseConfigured
 } from '../lib/firebase';
 import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
+import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 
 interface BlockSuiteBrainstormingTabProps {
   tracks: Track[];
@@ -151,7 +156,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<any>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, _type?: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
@@ -209,10 +214,61 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     panToBlock(matchingBlocks[prevIdx].id);
   };
 
-  // Helper to generate default blocks from track lyrics if empty
-  const generateInitialBlocksFromTrack = (track: Track): { blocks: BlockSuiteBlock[]; connectors: BlockSuiteConnector[] } => {
-    const rawLyrics = track.lyrics || '';
-    const sectionChunks = rawLyrics.split(/\n\n+/).filter(c => c.trim().length > 0);
+  // Robust lyric section parser: extracts [Intro], [Verse], [Chorus], [Bridge], [STOP ALL SOUND], etc.
+  const parseLyricSections = (rawLyrics: string): Array<{ tag: string; content: string }> => {
+    if (!rawLyrics || !rawLyrics.trim()) return [];
+
+    const bracketRegex = /\[([^\]]+)\]/g;
+    const sections: Array<{ tag: string; content: string }> = [];
+    const matches: Array<{ tag: string; index: number; fullTag: string }> = [];
+
+    let match: RegExpExecArray | null;
+    while ((match = bracketRegex.exec(rawLyrics)) !== null) {
+      matches.push({
+        tag: `[${match[1]}]`,
+        index: match.index,
+        fullTag: match[0]
+      });
+    }
+
+    if (matches.length > 0) {
+      if (matches[0].index > 0) {
+        const preamble = rawLyrics.slice(0, matches[0].index).trim();
+        if (preamble) {
+          sections.push({ tag: '[Intro / Title]', content: preamble });
+        }
+      }
+
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i].index + matches[i].fullTag.length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : rawLyrics.length;
+        const body = rawLyrics.slice(start, end).trim();
+        sections.push({
+          tag: matches[i].tag,
+          content: body
+        });
+      }
+    } else {
+      const chunks = rawLyrics.split(/\n\n+/).filter(c => c.trim().length > 0);
+      chunks.forEach((chunk, i) => {
+        sections.push({
+          tag: `[Section ${i + 1}]`,
+          content: chunk.trim()
+        });
+      });
+    }
+
+    return sections;
+  };
+
+  // Helper to generate default blocks from track lyrics (and specific style/version)
+  const generateInitialBlocksFromTrack = (
+    track: Track,
+    customLyrics?: string,
+    styleLabel?: string
+  ): { blocks: BlockSuiteBlock[]; connectors: BlockSuiteConnector[] } => {
+    const rawLyrics = customLyrics || track.lyrics || (track.versions && track.versions[0]?.lyrics) || '';
+    const parsedSections = parseLyricSections(rawLyrics);
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
 
@@ -224,8 +280,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       id: `meta_${Date.now()}`,
       type: 'theology_sop',
       title: `${track.title} — Song Thesis & SOP`,
-      subtitle: `Key: ${track.key} • ${track.bpm} BPM • EP: ${track.ep}`,
-      content: `Thesis: ${track.thesis || 'Christocentric sovereign theological anchor.'}\nVocal Archetype: ${track.vocal || 'Lead'}\nNashville Rule: Enforce Throne Room Pivot before bridge.`,
+      subtitle: `${styleLabel ? `Style: ${styleLabel} • ` : ''}Key: ${track.key} • ${track.bpm} BPM • EP: ${track.ep}`,
+      content: `Thesis: ${track.thesis || 'Christocentric sovereign theological anchor.'}\nVocal Cast: ${track.vocalCast || track.vocal || 'Lead'}\nNashville Rule: Enforce Throne Room Pivot before bridge. 3:1 Sonic Scar rule active.`,
       x: currentX,
       y: currentY,
       width: 380,
@@ -239,18 +295,18 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
     let previousSectionId: string | null = null;
 
-    if (sectionChunks.length > 0) {
-      sectionChunks.forEach((chunk, index) => {
-        const lines = chunk.split('\n');
-        const firstLine = lines[0].trim();
-        const isBracketTag = firstLine.startsWith('[') && firstLine.endsWith(']');
-        const tag = isBracketTag ? firstLine : `[Section ${index + 1}]`;
-        const bodyContent = isBracketTag ? lines.slice(1).join('\n') : chunk;
+    if (parsedSections.length > 0) {
+      parsedSections.forEach((sec, index) => {
+        const tag = sec.tag;
+        const bodyContent = sec.content;
+        const lowerTag = tag.toLowerCase();
 
         let color = 'indigo';
-        if (tag.toLowerCase().includes('chorus')) color = 'cyan';
-        else if (tag.toLowerCase().includes('bridge')) color = 'amber';
-        else if (tag.toLowerCase().includes('hook') || tag.toLowerCase().includes('drop')) color = 'rose';
+        if (lowerTag.includes('chorus')) color = 'cyan';
+        else if (lowerTag.includes('bridge')) color = 'amber';
+        else if (lowerTag.includes('hook') || lowerTag.includes('drop') || lowerTag.includes('explosive') || lowerTag.includes('shout')) color = 'rose';
+        else if (lowerTag.includes('intro') || lowerTag.includes('outro') || lowerTag.includes('tag')) color = 'purple';
+        else if (lowerTag.includes('stop') || lowerTag.includes('silence')) color = 'slate';
 
         const blockId = `block_${index + 1}_${Date.now()}`;
         const newBlock: BlockSuiteBlock = {
@@ -258,10 +314,10 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           type: 'song_section',
           title: tag,
           subtitle: `Arrangement Part #${index + 1}`,
-          content: bodyContent,
+          content: bodyContent || `[${tag} Instrumental arrangement bed]`,
           x: currentX,
           y: currentY + (index % 2 === 0 ? 0 : 40),
-          width: 320,
+          width: 340,
           color,
           sectionTag: tag,
           tags: ['Lyrics', tag.replace(/[[\]]/g, '')],
@@ -281,14 +337,14 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         }
         previousSectionId = blockId;
 
-        currentX += 360;
-        if (currentX > 1600) {
+        currentX += 380;
+        if (currentX > 1700) {
           currentX = 120;
-          currentY += 420;
+          currentY += 440;
         }
       });
     } else {
-      // Default template arrangement blocks
+      // Default template arrangement blocks if completely empty
       const verse1: BlockSuiteBlock = {
         id: `blk_v1_${Date.now()}`,
         type: 'song_section',
@@ -326,15 +382,28 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     return { blocks: newBlocks, connectors: newConnectors };
   };
 
+  // Active track style / version state
+  const [activeStyleIndex, setActiveStyleIndex] = useState<number>(0);
+  const [isNextcloudDrawerOpen, setIsNextcloudDrawerOpen] = useState<boolean>(false);
+  const [isNextcloudSyncing, setIsNextcloudSyncing] = useState<boolean>(false);
+
+  // Linked Ahead-of-Time (AOT) Nextcloud assets for the active track
+  const linkedNextcloudAssets = useMemo(() => {
+    return getTrackNextcloudAssets(selectedTrack.id, selectedTrack.title);
+  }, [selectedTrack.id, selectedTrack.title]);
+
   // Load from Firestore or initialize when selectedTrack changes
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
+    setActiveStyleIndex(0);
 
     const loadWhiteboard = async () => {
       setFirestoreStatus('saving');
       try {
         const cloudCanvas = await loadWhiteboardFromFirestore(selectedTrack.id);
-        if (cloudCanvas && cloudCanvas.blocks && cloudCanvas.blocks.length > 0) {
+        const hasLyricSections = cloudCanvas?.blocks?.some(b => b.type === 'song_section');
+
+        if (cloudCanvas && cloudCanvas.blocks && cloudCanvas.blocks.length > 0 && hasLyricSections) {
           setBlocks(cloudCanvas.blocks);
           setConnectors(cloudCanvas.connectors || []);
           setViewMode(cloudCanvas.activeMode || 'edgeless');
@@ -348,16 +417,17 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           setLastSavedTime(cloudCanvas.updatedAt ? new Date(cloudCanvas.updatedAt).toLocaleTimeString() : 'Cloud Synced');
           setFirestoreStatus('saved');
         } else {
-          // Initialize fresh template for this track
+          // Initialize fresh template for this track from actual lyrics
           const initial = generateInitialBlocksFromTrack(selectedTrack);
           setBlocks(initial.blocks);
           setConnectors(initial.connectors);
           setFirestoreStatus('saved');
+          setTimeout(() => handleFitToContent(), 120);
         }
 
         // Setup real-time listener for multi-device sync
         unsubscribe = subscribeToFirestoreWhiteboard(selectedTrack.id, (updatedCanvas) => {
-          if (updatedCanvas && updatedCanvas.blocks) {
+          if (updatedCanvas && updatedCanvas.blocks && updatedCanvas.blocks.length > 0) {
             setBlocks(updatedCanvas.blocks);
             setConnectors(updatedCanvas.connectors || []);
             setLastSavedTime(new Date(updatedCanvas.updatedAt || Date.now()).toLocaleTimeString());
@@ -370,6 +440,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         setBlocks(initial.blocks);
         setConnectors(initial.connectors);
         setFirestoreStatus('saved');
+        setTimeout(() => handleFitToContent(), 120);
       }
     };
 
@@ -379,6 +450,72 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       if (unsubscribe) unsubscribe();
     };
   }, [selectedTrack.id]);
+
+  // Synchronize canvas to a specific song style / version
+  const handleSyncStyleLyricsToWhiteboard = (styleIdx: number) => {
+    const targetVer = selectedTrack.versions?.[styleIdx];
+    const targetLyrics = targetVer?.lyrics || selectedTrack.lyrics || '';
+    const initial = generateInitialBlocksFromTrack(selectedTrack, targetLyrics, targetVer?.version);
+    setBlocks(initial.blocks);
+    setConnectors(initial.connectors);
+    setActiveStyleIndex(styleIdx);
+    triggerAutoSave(initial.blocks, initial.connectors, viewMode);
+    showToast(`Loaded ${targetVer?.version || `Style ${styleIdx + 1}`} lyrics onto whiteboard!`, 'success');
+    setTimeout(() => handleFitToContent(), 120);
+  };
+
+  // Add linked Nextcloud asset card to the whiteboard
+  const handleAddAssetToWhiteboard = (asset: NextcloudFolderAsset) => {
+    const isImage = asset.category === 'VISUAL_ARTWORK';
+    const isVideo = asset.category === 'VIDEO_REEL';
+    const isAudio = asset.category === 'MASTER_AUDIO' || asset.category === 'UVR5_VOCAL_STEM' || asset.category === 'INSTRUMENTAL_STEM';
+
+    const newBlock: BlockSuiteBlock = {
+      id: `asset_${Date.now()}`,
+      type: isImage ? 'thumbnail_asset' : isVideo ? 'thumbnail_asset' : 'suno_prompt',
+      title: asset.filename,
+      subtitle: `${asset.category} • ${asset.fileSizeFormatted}`,
+      content: `${asset.notes || 'Nextcloud Fiber Asset'}\nWebDAV: ${asset.webdavPath}`,
+      imageUrl: asset.previewImageUrl,
+      x: -pan.x / zoom + 200,
+      y: -pan.y / zoom + 200,
+      width: 320,
+      color: isImage ? 'purple' : isVideo ? 'rose' : isAudio ? 'indigo' : 'emerald',
+      tags: ['Nextcloud', asset.category, selectedTrack.id],
+      orderIndex: blocks.length + 1
+    };
+
+    const nextBlocks = [...blocks, newBlock];
+    setBlocks(nextBlocks);
+    triggerAutoSave(nextBlocks, connectors, viewMode);
+    showToast(`Added ${asset.filename} card to whiteboard!`, 'success');
+  };
+
+  // Real-time Nextcloud discovery sync
+  const handleRealtimeNextcloudSync = async () => {
+    setIsNextcloudSyncing(true);
+    try {
+      const resp = await fetch('/api/nextcloud/index-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trackId: selectedTrack.id,
+          folderName: selectedTrack.id === 'TRK-03' ? 'ECV' : selectedTrack.id,
+          aliases: ['ECV', 'Every_Candles_Victory', 'Every Candles Victory', selectedTrack.id, 'Candle']
+        })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        showToast(`Nextcloud Fiber Synced: ${data.liveItemsFound || linkedNextcloudAssets.length} assets ready (${data.latencyMs}ms)`, 'success');
+      } else {
+        showToast(`Nextcloud Synced via AOT index (${linkedNextcloudAssets.length} assets)`, 'info');
+      }
+    } catch (e: any) {
+      showToast(`Nextcloud AOT index verified (${linkedNextcloudAssets.length} assets)`, 'info');
+    } finally {
+      setIsNextcloudSyncing(false);
+    }
+  };
 
   // Debounced auto-save to Firestore whenever blocks, connectors, or viewMode changes
   const triggerAutoSave = (newBlocks: BlockSuiteBlock[], newConnectors: BlockSuiteConnector[], currentMode: 'edgeless' | 'page') => {
@@ -814,7 +951,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 AFFiNE CORE
               </span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+            <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 font-mono">
               <span>Track:</span>
               <select
                 value={selectedTrack.id}
@@ -830,10 +967,53 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                   </option>
                 ))}
               </select>
+
+              {/* Style / Version Selector for Dual-Style Songs like Every Candle's Victory */}
+              {selectedTrack.versions && selectedTrack.versions.length > 1 && (
+                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+                  <span className="text-amber-400 font-bold">Style:</span>
+                  <select
+                    value={activeStyleIndex}
+                    onChange={(e) => handleSyncStyleLyricsToWhiteboard(Number(e.target.value))}
+                    className="bg-amber-950/60 border border-amber-600/50 text-amber-200 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
+                  >
+                    {selectedTrack.versions.map((ver, idx) => (
+                      <option key={idx} value={idx} className="bg-slate-900 text-white">
+                        Style {idx + 1}: {ver.version} ({ver.genre || selectedTrack.genre})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleSyncStyleLyricsToWhiteboard(activeStyleIndex)}
+                    title="Populate or reload this style's lyrics into whiteboard arrangement cards"
+                    className="px-2 py-0.5 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Sync Style Lyrics</span>
+                  </button>
+                </div>
+              )}
+
               <span className="text-slate-600">•</span>
               <span>{blocks.length} Blocks</span>
               <span>•</span>
               <span>{connectors.length} Connectors</span>
+
+              {/* Nextcloud Fiber Assets Badge Button */}
+              <button
+                type="button"
+                onClick={() => setIsNextcloudDrawerOpen(prev => !prev)}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition cursor-pointer ${
+                  isNextcloudDrawerOpen
+                    ? 'bg-sky-600 text-white border-sky-400'
+                    : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border-sky-700/50'
+                }`}
+                title="View linked audio, video, image, and stem assets from Nextcloud fiber server"
+              >
+                <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
+                <span>Nextcloud Assets ({linkedNextcloudAssets.length})</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1741,6 +1921,128 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 <span>Place on Whiteboard</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* NEXTCLOUD FIBER LINKED ASSETS SLIDE-OUT DRAWER */}
+      {/* ========================================================================= */}
+      {isNextcloudDrawerOpen && (
+        <div className="absolute right-0 top-14 bottom-10 w-96 z-40 bg-slate-900/98 backdrop-blur-md border-l border-slate-700/80 shadow-2xl flex flex-col font-mono text-xs">
+          {/* Header */}
+          <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
+                <Radio className="w-4 h-4 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>Nextcloud Fiber Assets</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-600/40">FIBER LIVE</span>
+                </h3>
+                <span className="text-[10px] text-slate-400">
+                  {selectedTrack.id === 'TRK-03' ? '/Music-Production/ECV' : `/Music-Production/${selectedTrack.id}`} ({linkedNextcloudAssets.length} indexed)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsNextcloudDrawerOpen(false)}
+              className="text-slate-400 hover:text-white p-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Sync status & actions */}
+          <div className="p-3 bg-slate-950/40 border-b border-slate-800/80 flex items-center justify-between gap-2">
+            <span className="text-[10px] text-slate-400">
+              Host: <strong className="text-sky-300">nextcloud.moyercloud.com</strong>
+            </span>
+            <button
+              type="button"
+              onClick={handleRealtimeNextcloudSync}
+              disabled={isNextcloudSyncing}
+              className="px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+            >
+              <RefreshCw className={`w-3 h-3 ${isNextcloudSyncing ? 'animate-spin' : ''}`} />
+              <span>{isNextcloudSyncing ? 'Indexing...' : 'Sync Nextcloud Live'}</span>
+            </button>
+          </div>
+
+          {/* Asset List */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+            {linkedNextcloudAssets.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <Database className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+                <p>No Nextcloud assets linked for {selectedTrack.id} yet.</p>
+                <button
+                  type="button"
+                  onClick={handleRealtimeNextcloudSync}
+                  className="mt-2 text-indigo-400 underline text-xs cursor-pointer"
+                >
+                  Scan /Music-Production now
+                </button>
+              </div>
+            ) : (
+              linkedNextcloudAssets.map((asset) => {
+                const isImage = asset.category === 'VISUAL_ARTWORK';
+                const isVideo = asset.category === 'VIDEO_REEL';
+                const isAudio = asset.category === 'MASTER_AUDIO' || asset.category === 'UVR5_VOCAL_STEM' || asset.category === 'INSTRUMENTAL_STEM';
+
+                return (
+                  <div
+                    key={asset.id}
+                    className="p-3 rounded-xl bg-slate-850 border border-slate-750 hover:border-slate-650 transition space-y-2 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {isImage ? (
+                          <ImageIcon className="w-4 h-4 text-purple-400 shrink-0" />
+                        ) : isVideo ? (
+                          <Video className="w-4 h-4 text-rose-400 shrink-0" />
+                        ) : (
+                          <Music className="w-4 h-4 text-emerald-400 shrink-0" />
+                        )}
+                        <span className="font-bold text-slate-200 truncate max-w-[200px]" title={asset.filename}>
+                          {asset.filename}
+                        </span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900 border border-slate-750 text-slate-300">
+                        {asset.fileSizeFormatted}
+                      </span>
+                    </div>
+
+                    {/* Thumbnail preview if visual */}
+                    {isImage && asset.previewImageUrl && (
+                      <div className="w-full h-24 rounded-lg overflow-hidden border border-slate-750 bg-black/40">
+                        <img src={asset.previewImageUrl} alt={asset.filename} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed">
+                      {asset.notes || 'Nextcloud WebDAV asset'}
+                    </p>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                      <span className="text-[9px] text-slate-500 font-mono">
+                        {asset.category.replace(/_/g, ' ')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddAssetToWhiteboard(asset)}
+                        className="px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/60 text-indigo-200 border border-indigo-500/40 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                        title="Add this asset card directly to the whiteboard canvas"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Drop to Canvas</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}

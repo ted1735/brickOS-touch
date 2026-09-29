@@ -164,6 +164,11 @@ export interface MixerTrack {
   freq: number;
   waveType: OscillatorType;
   color: string;
+  audioUrl?: string;
+  webdavPath?: string;
+  stemType?: 'vocal' | 'choir' | 'organ' | 'piano' | 'guitar' | 'drums' | 'bass' | 'master';
+  isRealAudio?: boolean;
+  assetId?: string;
 }
 
 export interface GeneratedImage {

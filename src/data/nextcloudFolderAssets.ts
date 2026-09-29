@@ -1,4 +1,7 @@
 import { NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig, Track } from '../types';
+import { ECV_CANONICAL_ASSETS, getTrackNextcloudAssets, matchNextcloudFilenameToTrack } from './nextcloudAssetIndex';
+
+export { ECV_CANONICAL_ASSETS, getTrackNextcloudAssets, matchNextcloudFilenameToTrack };
 
 export const DEFAULT_NEXTCLOUD_CONFIG: NextcloudSyncConfig = {
   serverUrl: 'https://nextcloud.moyercloud.com',
@@ -160,29 +163,7 @@ export const INITIAL_FOLDER_207332_ASSETS: NextcloudFolderAsset[] = [
     notes: '9:16 Vertical Video Reel. Truck cab in freezing rain at 5 AM, amber dash glow.',
     lastSyncedAt: '2026-09-24T20:30:00Z',
   },
-  {
-    id: 'NC-207332-08',
-    filename: 'TRK-03_B3_Organ_Worship_Bed_G_Major.wav',
-    folderId: '207332',
-    category: 'INSTRUMENTAL_STEM',
-    fileSizeBytes: 30828134,
-    fileSizeFormatted: '29.4 MB',
-    mimeType: 'audio/wav',
-    webdavPath: '/remote.php/dav/files/ncted/Music-Production/TRK-03/stems/TRK-03_B3_Organ_Worship_Bed_G_Major.wav',
-    shareUrl: 'https://nextcloud.moyercloud.com/index.php/f/207332',
-    matchedTrackId: 'TRK-03',
-    matchedTrackTitle: 'Altar Coal',
-    matchConfidence: 100,
-    suggestedTrackId: 'TRK-03',
-    suggestedCategory: 'INSTRUMENTAL_STEM',
-    isMatched: true,
-    bpm: 72,
-    key: 'G Major',
-    audioDurationSeconds: 198,
-    previewAudioType: 'harmony',
-    notes: 'Overdriven Hammond B3 organ with slow Leslie cabinet rotation.',
-    lastSyncedAt: '2026-09-24T20:30:00Z',
-  },
+  ...ECV_CANONICAL_ASSETS,
   {
     id: 'NC-207332-09',
     filename: 'Resurrection_Dawn_Ruach_Vocal_Choir_Stem.wav',

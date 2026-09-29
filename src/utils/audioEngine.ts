@@ -46,11 +46,16 @@ class MiniDawEngine {
   private rawTimeDataBuffer: Float32Array = new Float32Array(1024);
 
   private trackNodes: Map<number, {
-    osc: OscillatorNode;
+    osc?: OscillatorNode;
+    extraOscs?: OscillatorNode[];
+    lfo?: OscillatorNode;
+    source?: AudioBufferSourceNode;
+    audioEl?: HTMLAudioElement;
     gain: GainNode;
     panner: StereoPannerNode;
     filter: BiquadFilterNode;
   }> = new Map();
+  private audioBufferCache: Map<string, AudioBuffer> = new Map();
   private isMono: boolean = false;
   private currentBus: string = 'master';
   private currentEffects: DawEffectsState = { ...DEFAULT_DAW_EFFECTS };
@@ -675,7 +680,7 @@ class MiniDawEngine {
     }
   }
 
-  public startPlayback(tracks: MixerTrack[], bpm: number = 100) {
+  public startPlayback(tracks: MixerTrack[], bpm: number = 78, songKey: string = 'G Major') {
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -686,53 +691,172 @@ class MiniDawEngine {
     this.stopPlayback();
     this.isRunning = true;
 
-    // Musical frequency relationships based on BPM
-    const rootNotes = [110, 220, 330, 440]; // A2, A3, E4, A4
+    // Musical frequency relationships based on Key (defaults to G Major for ECV)
+    // G2 = 98Hz, G3 = 196Hz, B3 = 246.94Hz, D4 = 293.66Hz, G4 = 392Hz
+    const isGMajor = songKey.toLowerCase().includes('g');
+    const rootNotes = isGMajor 
+      ? [196, 246.94, 293.66, 392] // G3, B3, D4, G4
+      : [110, 220, 330, 440];
 
     tracks.forEach((t) => {
       if (!this.ctx || !this.masterGain) return;
 
-      const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       const panner = this.ctx.createStereoPanner();
       const filter = this.ctx.createBiquadFilter();
+      const extraOscs: OscillatorNode[] = [];
+      let lfoNode: OscillatorNode | undefined;
+      let primaryOsc: OscillatorNode | undefined;
 
-      // Stem tone shaping
+      // Check if track has an audioUrl or webdavPath to stream
+      if (t.audioUrl) {
+        try {
+          const audioEl = new Audio(t.audioUrl);
+          audioEl.crossOrigin = 'anonymous';
+          audioEl.loop = true;
+          const mediaSource = this.ctx.createMediaElementSource(audioEl);
+          mediaSource.connect(filter);
+          audioEl.play().catch(() => {});
+          
+          filter.connect(panner);
+          panner.connect(gain);
+          gain.connect(this.masterGain);
+
+          const initialVol = t.muted ? 0 : (t.vol / 100) * 0.28;
+          gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
+          panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
+
+          this.trackNodes.set(t.id, { audioEl, gain, panner, filter });
+          return;
+        } catch (_) {}
+      }
+
+      // RICH ACOUSTIC & GOSPEL INSTRUMENT MODELING (No raw monotone sine waves)
       if (t.id === 1) {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(rootNotes[0], this.ctx.currentTime);
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(650, this.ctx.currentTime);
-      } else if (t.id === 2) {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(rootNotes[1], this.ctx.currentTime);
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(1400, this.ctx.currentTime);
-        filter.Q.setValueAtTime(2.5, this.ctx.currentTime);
-      } else if (t.id === 3) {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(rootNotes[2], this.ctx.currentTime);
+        // Track 1: Lead Vocal / Mrs T & Brandon Melody
+        // Warm dual-harmonic vowel formant modeling with vocal vibrato
+        primaryOsc = this.ctx.createOscillator();
+        primaryOsc.type = 'sawtooth';
+        primaryOsc.frequency.setValueAtTime(rootNotes[0], this.ctx.currentTime);
+
+        const subOsc = this.ctx.createOscillator();
+        subOsc.type = 'triangle';
+        subOsc.frequency.setValueAtTime(rootNotes[0] * 1.003, this.ctx.currentTime); // Slight detune for warmth
+        extraOscs.push(subOsc);
+
+        // Vocal Formant Filter: warm chest resonance peaking at 1050 Hz
         filter.type = 'peaking';
-        filter.frequency.setValueAtTime(2800, this.ctx.currentTime);
+        filter.frequency.setValueAtTime(1050, this.ctx.currentTime);
+        filter.Q.setValueAtTime(2.8, this.ctx.currentTime);
+        filter.gain.setValueAtTime(4.0, this.ctx.currentTime);
+
+        // Human Vibrato LFO (5.2 Hz gentle pitch modulation)
+        lfoNode = this.ctx.createOscillator();
+        const lfoGain = this.ctx.createGain();
+        lfoNode.frequency.setValueAtTime(5.2, this.ctx.currentTime);
+        lfoGain.gain.setValueAtTime(2.5, this.ctx.currentTime);
+        lfoNode.connect(lfoGain);
+        lfoGain.connect(primaryOsc.frequency);
+        lfoNode.start();
+
+        primaryOsc.connect(filter);
+        subOsc.connect(filter);
+        primaryOsc.start();
+        subOsc.start();
+      } else if (t.id === 2) {
+        // Track 2: Gospel Choir & Worship Harmonies
+        // Full choir triad chord swell (G3 + B3 + D4)
+        primaryOsc = this.ctx.createOscillator();
+        primaryOsc.type = 'triangle';
+        primaryOsc.frequency.setValueAtTime(rootNotes[1], this.ctx.currentTime); // Third (B3)
+
+        const chordFifth = this.ctx.createOscillator();
+        chordFifth.type = 'sine';
+        chordFifth.frequency.setValueAtTime(rootNotes[2], this.ctx.currentTime); // Fifth (D4)
+        extraOscs.push(chordFifth);
+
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1250, this.ctx.currentTime);
+        filter.Q.setValueAtTime(1.8, this.ctx.currentTime);
+
+        primaryOsc.connect(filter);
+        chordFifth.connect(filter);
+        primaryOsc.start();
+        chordFifth.start();
+      } else if (t.id === 3) {
+        // Track 3: Hammond B3 Organ with Leslie Rotary Cabinet
+        // Additive drawbar synthesis (88 8000 000 setting: Fundamental 196Hz + 4' Octave 392Hz + 16' Sub 98Hz)
+        primaryOsc = this.ctx.createOscillator();
+        primaryOsc.type = 'sine';
+        primaryOsc.frequency.setValueAtTime(rootNotes[0], this.ctx.currentTime); // 8' Fundamental
+
+        const drawbar4 = this.ctx.createOscillator();
+        drawbar4.type = 'sine';
+        drawbar4.frequency.setValueAtTime(rootNotes[3], this.ctx.currentTime); // 4' Octave
+        extraOscs.push(drawbar4);
+
+        const drawbar16 = this.ctx.createOscillator();
+        drawbar16.type = 'sine';
+        drawbar16.frequency.setValueAtTime(rootNotes[0] / 2, this.ctx.currentTime); // 16' Sub
+        extraOscs.push(drawbar16);
+
+        // Warm organ tone shaping
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2200, this.ctx.currentTime);
+
+        // Leslie Rotary Speaker Chorus/Tremolo (1.2 Hz slow chorale rotation)
+        lfoNode = this.ctx.createOscillator();
+        const tremoloGain = this.ctx.createGain();
+        lfoNode.frequency.setValueAtTime(1.2, this.ctx.currentTime);
+        tremoloGain.gain.setValueAtTime(0.06, this.ctx.currentTime);
+        lfoNode.connect(tremoloGain);
+        tremoloGain.connect(gain.gain);
+        lfoNode.start();
+
+        primaryOsc.connect(filter);
+        drawbar4.connect(filter);
+        drawbar16.connect(filter);
+        primaryOsc.start();
+        drawbar4.start();
+        drawbar16.start();
       } else {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(rootNotes[3], this.ctx.currentTime);
-        filter.type = 'highpass';
-        filter.frequency.setValueAtTime(3000, this.ctx.currentTime);
+        // Track 4: Acoustic Martin D-28 Guitar & Rhythm Bed
+        // Warm plucked acoustic harmonics & subtle sub-bass pulse
+        primaryOsc = this.ctx.createOscillator();
+        primaryOsc.type = 'sawtooth';
+        primaryOsc.frequency.setValueAtTime(rootNotes[0] / 2, this.ctx.currentTime); // Deep acoustic body
+
+        const guitarJangle = this.ctx.createOscillator();
+        guitarJangle.type = 'triangle';
+        guitarJangle.frequency.setValueAtTime(rootNotes[3] * 1.5, this.ctx.currentTime); // High wood string chime
+        extraOscs.push(guitarJangle);
+
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(850, this.ctx.currentTime);
+        filter.Q.setValueAtTime(1.2, this.ctx.currentTime);
+
+        primaryOsc.connect(filter);
+        guitarJangle.connect(filter);
+        primaryOsc.start();
+        guitarJangle.start();
       }
 
       const initialVol = t.muted ? 0 : (t.vol / 100) * 0.25;
       gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
       panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
 
-      osc.connect(filter);
       filter.connect(panner);
       panner.connect(gain);
       gain.connect(this.masterGain);
 
-      osc.start();
-
-      this.trackNodes.set(t.id, { osc, gain, panner, filter });
+      this.trackNodes.set(t.id, {
+        osc: primaryOsc,
+        extraOscs,
+        lfo: lfoNode,
+        gain,
+        panner,
+        filter
+      });
     });
 
     this.updateBusRouting(this.currentEffects.busRouting || this.currentBus, tracks);
@@ -784,8 +908,25 @@ class MiniDawEngine {
     this.stopTestTone();
     this.trackNodes.forEach((node) => {
       try {
-        node.osc.stop();
-        node.osc.disconnect();
+        if (node.osc) {
+          node.osc.stop();
+          node.osc.disconnect();
+        }
+        if (node.extraOscs) {
+          node.extraOscs.forEach(o => {
+            try { o.stop(); o.disconnect(); } catch (_) {}
+          });
+        }
+        if (node.lfo) {
+          try { node.lfo.stop(); node.lfo.disconnect(); } catch (_) {}
+        }
+        if (node.audioEl) {
+          node.audioEl.pause();
+          node.audioEl.currentTime = 0;
+        }
+        if (node.source) {
+          try { node.source.stop(); node.source.disconnect(); } catch (_) {}
+        }
       } catch (_) {}
     });
     this.trackNodes.clear();

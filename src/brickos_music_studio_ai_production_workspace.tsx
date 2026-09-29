@@ -120,6 +120,7 @@ import {
   generateWindowsDriveMountCommand,
   generateCatalogJsonManifest
 } from './data/relationalCatalogBridge';
+import { ECV_CANONICAL_ASSETS } from './data/nextcloudAssetIndex';
 
 export default function BrickOSMusicStudioWorkspace() {
   const [tracks, setTracks] = useState<Track[]>(() => {
@@ -804,10 +805,38 @@ export default function BrickOSMusicStudioWorkspace() {
         aspectRatio: '1:1',
         timestamp: '2026-09-06',
         mode: 'create',
-        trackTitle: 'The Master\'s Hand',
+        trackTitle: "The Master's Hand",
         trackId: 'SOV-001',
         category: 'Cover Art',
         tags: ['Woodwork', 'Golden Hour', 'Nashville', 'Kintsugi']
+      },
+      {
+        id: 'img-ecv-1',
+        name: "Every Candle's Victory (4K Sanctuary Cover)",
+        url: ECV_CANONICAL_ASSETS[7].previewImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800',
+        prompt: 'Flickering golden beeswax candle on ancient cathedral altar stone, cross light illuminating limestone, 4K album master',
+        aspectRatio: '1:1',
+        timestamp: '2026-09-24',
+        mode: 'create',
+        trackTitle: "Every Candle's Victory",
+        trackId: 'TRK-03',
+        linkedTrackIds: ['TRK-03', 'ECV'],
+        category: 'Cover Art',
+        tags: ['ECV', 'Every Candles Victory', 'Nextcloud', 'Candle', 'Sanctuary', 'Restoration']
+      },
+      {
+        id: 'img-ecv-2',
+        name: "Every Candle's Victory (Open Skies Storyboard Plate)",
+        url: ECV_CANONICAL_ASSETS[8].previewImageUrl || 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800',
+        prompt: 'Deep purple twilight sky breaking into golden horizon underneath the open skies, cancer survival testimony visual plate',
+        aspectRatio: '16:9',
+        timestamp: '2026-09-24',
+        mode: 'create',
+        trackTitle: "Every Candle's Victory",
+        trackId: 'TRK-03',
+        linkedTrackIds: ['TRK-03', 'ECV'],
+        category: 'Storyboard Scene Plate',
+        tags: ['ECV', 'Every Candles Victory', 'Nextcloud', 'Open Skies', 'Scene 2', 'Survivor Tribute']
       },
       {
         id: 'img-2',
@@ -892,6 +921,46 @@ export default function BrickOSMusicStudioWorkspace() {
       flowAssetUrl: 'https://labs.google/flow',
       resolution: '1080x1920 Vertical HD',
       durationSec: 15
+    },
+    {
+      id: 'video-ecv-1',
+      name: "Every Candle's Victory - 9:16 Devotional Cinematic Reel",
+      operationName: 'nextcloud-fiber-asset',
+      prompt: 'Flickering beeswax candle in stone cathedral dissolving into mother underneath open skies, 9:16 cinematic morning devotional',
+      aspectRatio: '9:16',
+      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+      status: 'ready',
+      timestamp: '2026-09-24',
+      modelUsed: 'Nextcloud Fiber WebDAV / Veo 2',
+      trackTitle: "Every Candle's Victory",
+      trackId: 'TRK-03',
+      linkedTrackIds: ['TRK-03', 'ECV'],
+      tags: ['ECV', 'Every Candles Victory', 'Nextcloud', '9:16', 'TikTok', 'Devotional', 'Gospel Shout'],
+      notes: 'Nextcloud WebDAV: /remote.php/dav/files/ncted/Music-Production/ECV/video/ECV_Studio_Cinematic_Reel_1080p_9x16.mp4',
+      category: 'Social Reel Plate',
+      source: 'nextcloud_fiber',
+      resolution: '1080x1920 Vertical HD',
+      durationSec: 30
+    },
+    {
+      id: 'video-ecv-2',
+      name: "Every Candle's Victory - 4K Candle Flame Visualizer Loop",
+      operationName: 'nextcloud-fiber-asset',
+      prompt: '4K ambient candle flame visualizer loop with synced audio spectrum waves and sanctuary stone reflections',
+      aspectRatio: '16:9',
+      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      status: 'ready',
+      timestamp: '2026-09-24',
+      modelUsed: 'Nextcloud Fiber WebDAV / Veo 2',
+      trackTitle: "Every Candle's Victory",
+      trackId: 'TRK-03',
+      linkedTrackIds: ['TRK-03', 'ECV'],
+      tags: ['ECV', 'Every Candles Victory', 'Nextcloud', '16:9', 'YouTube', 'Visualizer Loop', '4K'],
+      notes: 'Nextcloud WebDAV: /remote.php/dav/files/ncted/Music-Production/ECV/video/ECV_Candle_Flame_Visualizer_Loop_4k_16x9.mp4',
+      category: 'YouTube 16:9 Video',
+      source: 'nextcloud_fiber',
+      resolution: '3840x2160 4K UHD',
+      durationSec: 45
     }
   ];
 
