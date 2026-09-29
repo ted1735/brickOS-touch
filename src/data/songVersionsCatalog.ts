@@ -3213,72 +3213,255 @@ export interface SongVersionCatalogItem {
 }
 
 export const songVersionsCatalog: Record<string, SongVersionCatalogItem> = {
-  'song-001': {
-    id: 'song-001',
-    title: 'Standing in the Holy Place (Sample Baseline)',
+  'TRK-01': {
+    id: 'TRK-01',
+    title: 'Brick by Brick',
     versions: [
       {
-        id: 'v1',
-        versionTag: 'v1.0 - Initial Suno Acoustic Draft',
-        updatedAt: '2026-03-01',
-        content: `[Verse 1]
-Standing in the quiet place
-Shadows fall across my face
-Whisper through the broken stone
-Tell me I am not alone
+        id: 'bbb-v3',
+        versionTag: 'v3.0 (Master Boom-Bap Cut)',
+        updatedAt: '2026-09-24',
+        content: `[Intro]
+They see ruins, 
+I see the blueprint. 
+B-R-I-C-K, 
+Yeah, let’s build.
+
+[Verse 1]
+Streets hum a hymn, 
+But the chords ring hollow. 
+Lost sheep move, 
+In the paths they follow. 
+Stones start to crack, 
+Under weights of sorrow, 
+But we’re grabbing the hammer, 
+For a new tomorrow.
+
+[Pre-Chorus]
+Alleyway prayers, 
+On the cracked cement. 
+Grace spilled like oil, 
+From a jagged vessel. 
+It’s a heavy lift, 
+It’s a soul-level wrestle, 
+But the Architect’s here, 
+And He’s making a statement.
 
 [Chorus]
-You are the rock that will not shake
-The only promise that won't break
-Through fire and the raging sea
-Your sovereign hand is holding me`
-      },
-      {
-        id: 'v2',
-        versionTag: 'v2.0 - Studio Cinematic Rewrite',
-        updatedAt: '2026-03-05',
-        content: `[Verse 1]
-Standing in the hollow space
-Echoes fall across my face
-Whisper through the shattered stone
-Declare that I am not alone
+Kingdom Come, 
+Kingdom Come. 
+Where the broken hearts run, 
+Where the lost find home. 
+Yeah, we’re stacking the stones, 
+We’re starting the fix, 
+Building the hope, 
+Brick by brick.
+
+[Verse 2]
+Brokenness Redeemed, 
+In Christ’s Kingdom. 
+That’s the code, 
+That’s the life, 
+That’s the freedom. 
+Not a polished palace, 
+For the proud and the vain, 
+But a shelter for the weary, 
+In the pouring rain.
+
+[Bridge]
+You’re a brick, 
+I’m a brick, 
+Weathered and worn. 
+Mortar made of mercy, 
+Since the day we were born. 
+Put the pride in the dirt, 
+Let the old walls fall, 
+The Master is building, 
+A house for us all!
 
 [Chorus]
-You are the rock that will not bend
-The faithful author to the end
-Through towering flame and rising sea
-Your holy hand is holding me`
+Kingdom Come, 
+Kingdom Come. 
+Where the broken hearts run, 
+Where the lost find home. 
+Yeah, we’re stacking the stones, 
+We’re starting the fix, 
+Building the hope, 
+Brick by brick.`
       },
       {
-        id: 'v3',
-        versionTag: 'v3.0 - Ministry Live Final Master',
-        updatedAt: '2026-03-10',
-        content: `[Verse 1] (Key: Abm | BPM: 128)
-Standing in the holy place
-Glory falling on my face
-Crying through the altar stone
-Jesus, I am not alone
+        id: 'bbb-v1',
+        versionTag: 'v1.0 (Acoustic Blueprint Sketch)',
+        updatedAt: '2026-09-01',
+        content: `[Verse 1]
+They see ruins, I see the blueprint.
+Grab the hammer, let's start to fix.
+Stack the stones, brick by brick.
 
-[Chorus] (Drums Build Full)
-You are the rock that will not move
-Every promise You will prove
-Through trial, fire, and storming sea
-Your mighty hand delivers me`
+[Chorus]
+Brokenness redeemed in Christ's Kingdom.
+Where the weary run and the lost find home.
+We are building the hope, brick by brick.`
       }
     ]
   },
-  'TRK-09': {
-    id: 'TRK-09',
-    title: "The Work Ain't Done",
-    versions: THE_WORK_AINT_DONE_VERSIONS.map((v, i) => ({
-      id: `twad-${i + 1}`,
+  'TRK-02': {
+    id: 'TRK-02',
+    title: "The Master's Hand",
+    versions: THE_MASTERS_HAND_VERSIONS.map((v, i) => ({
+      id: `tmh-${i + 1}`,
       versionTag: v.version,
       updatedAt: v.timestamp,
       content: v.lyrics
     }))
   },
-  'TRK-10': {
-    id: 'TRK-10',
+  'TRK-03': {
+    id: 'TRK-03',
+    title: "Every Candle's Victory",
+    versions: EVERY_CANDLES_VICTORY_VERSIONS.map((v, i) => ({
+      id: `ecv-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-04': {
+    id: 'TRK-04',
+    title: 'Nothing But The Blood',
+    versions: NOTHING_BUT_THE_BLOOD_VERSIONS.map((v, i) => ({
+      id: `nbtb-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-05': {
+    id: 'TRK-05',
+    title: 'The Higher Measure',
+    versions: [
+      {
+        id: 'thm-v1',
+        versionTag: 'v1.0 (Hard Stomp-Clap Folk Master)',
+        updatedAt: '2026-09-20',
+        content: `[Intro]
+[Hard stomp-clap rhythm, heavy on the 1 and 3]
+[Rhythmic Acoustic Guitar]
+
+The clock doesn't stop, 
+The doors never close, 
+Twenty-four-seven, 
+Highs and lows, 
+We see the charts, 
+We see the trends, 
+But that’s only where, 
+The story begins
+
+[Verse 1]
+[Rhythmic, percussive delivery]
+[Cello pluck underneath]
+
+Check the dashboard, 
+Watch the data climb, 
+Efficiency models, 
+Trading life for time, 
+It’s a man-made measure, 
+A target for someone to score, 
+But at the bedside, 
+We see the soul
+
+[Pre-Chorus]
+[Bass drops in, building pulse]
+
+We look at the Savior, 
+The way that He stood, 
+Healing the broken, 
+Exactly as Christ would
+
+[Chorus]
+[Full energy, steady power]
+[Soaring Violin melody]
+
+It’s not about... the metrics, 
+It’s about... the mission, 
+Extending the ministry, 
+With a Heaven-sent vision, 
+Every patient, 
+Every bed, 
+Every word, 
+That Christ has said, 
+The stakes are eternal, 
+Not a mark on a page, 
+The absolute best, 
+Is the promise we gave, 
+Twenty-four seven, 
+We’re the light in the hall, 
+He is the mission, 
+Inside of it all.
+
+[Verse 2]
+[Building intensity, double-time percussion]
+
+Twenty-four-seven, 
+In the absolute best way, 
+We think and we act, 
+Through the grit of the day, 
+The metric is the floor, 
+But the mission is the sky, 
+We don’t just hit the mark, 
+We let the Spirit fly, 
+Because when the work is Holy, 
+And the heart is aligned, 
+Those human-made numbers, 
+Get left far behind
+
+[Refrain Outro]
+[Stripped back to beat and vocals]
+
+If you care like Christ did, 
+With every touch and breath, 
+You don’t just hit a target, 
+You conquer life and death, 
+If you care like Christ did, 
+With every touch and breath, 
+You don’t just hit a target, 
+You conquer life and death`
+      }
+    ]
+  },
+  'TRK-06': {
+    id: 'TRK-06',
+    title: 'Break the Bond / Correction is Restoration',
+    versions: [
+      {
+        id: 'btb-v1',
+        versionTag: 'v2.0 (Cinematic CHH / Industrial Gospel)',
+        updatedAt: '2026-09-15',
+        content: `[Verse 1]
+Tied to the metrics of a hollow town,
+Building towers that were meant to fall down.
+Correction isn't vengeance, correction is the cure,
+Pruning back the branches to make the harvest pure!
+
+[Chorus]
+Break the bond! Shatter the chain!
+Mercy rising out of the pain!
+Not my glory, not my pride,
+Let the sovereign truth abide!`
+      }
+    ]
+  },
+  'TRK-07': {
+    id: 'TRK-07',
+    title: 'Leaning Not Leaving',
+    versions: LEANING_NOT_LEAVING_VERSIONS.map((v, i) => ({
+      id: `lnl-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-08': {
+    id: 'TRK-08',
     title: 'Check Your Heart Light',
     versions: CHECK_YOUR_HEART_LIGHT_VERSIONS.map((v, i) => ({
       id: `cyhl-${i + 1}`,
@@ -3287,25 +3470,143 @@ Your mighty hand delivers me`
       content: v.lyrics
     }))
   },
+  'TRK-09': {
+    id: 'TRK-09',
+    title: 'Glitter',
+    versions: [
+      {
+        id: 'glit-v1',
+        versionTag: 'v1.0 (Original Acoustic & Pop Master)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+The paint was holding up, the bones were good
+I looked like all the other houses in the neighborhood
+But inside there was silence, a chill in the air
+I'd gotten used to no one knowing I was there
+
+[Chorus]
+'Cause I was a house with no lights on
+Just waiting for someone to come home
+I was a frame with no picture
+'Til you brought all your glitter
+
+[Verse 2]
+We'd talk about the intimate details
+No subject was ever off the rails
+We'd sit for hours in that car at night
+And wouldn't leave until we got it right
+
+[Chorus]
+'Cause I was a house with no lights on
+Just waiting for someone to come home
+I was a frame with no picture
+'Til you brought all your glitter
+
+[Bridge]
+So let the storms rage outside the door
+I'm not the man I was before
+I see it now, you're all glitter
+And I'm not scared anymore
+
+[Chorus]
+'Cause I was a house with no lights on
+Just waiting for someone to come home
+I was a frame with no picture
+'Til you brought all your glitter`
+      }
+    ]
+  },
+  'TRK-10': {
+    id: 'TRK-10',
+    title: 'The Blueprint & The Blood',
+    versions: [
+      {
+        id: 'bpb-v1',
+        versionTag: 'v1.0 (Built to Last Heartland Rock)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+Heavy lifting, CNC designs,
+Balancing spiritual weight across the lines.
+A father's hands, weathered and strong,
+Building a foundation where his kids belong.
+
+[Chorus]
+The blueprint and the blood,
+Standing against the flood.
+Built to last, built to stand,
+Guided by the Master's hand.`
+      }
+    ]
+  },
   'TRK-11': {
     id: 'TRK-11',
-    title: 'Nothing But the Blood',
-    versions: NOTHING_BUT_THE_BLOOD_VERSIONS.map((v, i) => ({
-      id: `nbtb-${i + 1}`,
-      versionTag: v.version,
-      updatedAt: v.timestamp,
-      content: v.lyrics
-    }))
+    title: 'Unity in the Friction',
+    versions: [
+      {
+        id: 'uif-v1',
+        versionTag: 'v1.0 (Trap-Gospel Duet - Kane & Monica)',
+        updatedAt: '2026-09-24',
+        content: `[Intro]
+[Heavy 808 Sub-Bass; Stomp-and-clap rhythm; Cinematic Brass stabs]
+[Kane - Spoken Word] Yeah. Two stones. One house. Let's build the fire.
+
+[Verse 1]
+[Monica - Gritty, soulful]
+We tried to keep it quiet, walkin' on the glass
+Tiptoe round the living room, hopin' it would pass
+But silence isn't safety when the walls are made of stone
+You can't build a kingdom if you're buildin' it alone
+
+[Pre-Chorus]
+[Kane - Harmonizing; building trap percussion]
+Yeah, we hit the edges, yeah, we feel the grind
+But that's the heavy lifting when two lives align
+I don't want the easy road if it means we fall apart
+I want the holy collision of the messy heart!
+
+[Chorus]
+Don't run from the spark when the stones collide!
+The fire in the friction keeps the cold outside!
+It's the sharpening of iron, it's the testing of the mold
+Unity is stronger when the truth is being told!
+Yeah, there's unity in the friction!
+
+[Bridge]
+[Throne Room Pivot - Music strips back to heavy dry stomps]
+[Monica] The sparks fly, but they just make a flame
+[Kane] Exposing what's fake and calling it by name
+[Monica] The heat reveals the cracks from no communication
+[Both Vocals - Massive build] That's how the Father turns two into one — sanctification!
+
+[Final Chorus]
+Don't run from the spark when the stones collide!
+The fire in the friction keeps the cold outside!
+It's the sharpening of iron, it's the testing of the mold
+Unity is stronger when the truth is being told!`
+      }
+    ]
   },
   'TRK-12': {
     id: 'TRK-12',
-    title: 'Meet Me Here',
-    versions: MEET_ME_HERE_VERSIONS.map((v, i) => ({
-      id: `mmh-${i + 1}`,
-      versionTag: v.version,
-      updatedAt: v.timestamp,
-      content: v.lyrics
-    }))
+    title: 'The Anchor',
+    versions: [
+      {
+        id: 'anch-v1',
+        versionTag: 'v1.0 (Cinematic Orchestral Worship - PATD)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+You lived a transient life on shifting sand,
+Searching for a steady hold across the land.
+I promise to be unmoving, deep in the stone,
+A foundation guarding your heart so you're never alone.
+
+[Chorus]
+I'll be the anchor in the storm,
+Keeping your weary spirit warm.
+When waves crash high and foundations shake,
+Here is the promise that will not break.`
+      }
+    ]
   },
   'TRK-13': {
     id: 'TRK-13',
@@ -3319,7 +3620,134 @@ Your mighty hand delivers me`
   },
   'TRK-14': {
     id: 'TRK-14',
-    title: 'Ghost in the Machine',
+    title: 'Venom Into Victory',
+    versions: [
+      {
+        id: 'viv-v1',
+        versionTag: 'v1.0 (K-Pop Hyper-Pop - The Pop Prodigy)',
+        updatedAt: '2026-09-24',
+        content: `[Intro | Cinematic Whistle & Heavy K-Pop 808 Pulse]
+[Vocal: The Pop Prodigy | Assertive & Focused]
+
+[Verse 1]
+Pink venom in the veins, but the soul’s turning gold
+Greatest show on the planet in the stories untold
+Got the squish-mallow comfort, stacking peace in the wild
+While the sunflowers dance for the Kingdom-bought child
+
+[Chorus | Massive Volcano Drop]
+The glory in the spirit, got me beautifully whole
+Heaven’s got the rhythm and He’s taking all the control
+Sparkle-sparkle, shimmer-glow 
+Sparkle-sparkle, shimmer-glow 
+Sparkle-sparkle, shimmer-glow
+VENOM INTO VICTORY!
+VENOM INTO VICTORY!
+VENOM INTO VICTORY!
+The Greatest Show in history has only just begun!`
+      }
+    ]
+  },
+  'TRK-15': {
+    id: 'TRK-15',
+    title: 'The Final Say',
+    versions: [
+      {
+        id: 'tfs-v1',
+        versionTag: 'v1.0 (Cinematic Stadium Worship)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+When the King speaks His decree,
+No earthly force can set it free.
+What He has planned is good as done,
+His sovereign promise has begun.
+
+[Chorus]
+The schemes the enemy may deploy,
+Cannot steal our peace or kill our joy.
+The power that rules the earth and sky,
+Will always be the one... 
+The reason I survive.
+The Lamb of God has overcome,
+He has the final say.`
+      }
+    ]
+  },
+  'TRK-16': {
+    id: 'TRK-16',
+    title: 'Meet Me Here',
+    versions: MEET_ME_HERE_VERSIONS.map((v, i) => ({
+      id: `mmh-${i + 1}`,
+      versionTag: v.version,
+      updatedAt: v.timestamp,
+      content: v.lyrics
+    }))
+  },
+  'TRK-17': {
+    id: 'TRK-17',
+    title: 'In Our Veins',
+    versions: [
+      {
+        id: 'iov-v1',
+        versionTag: 'v1.0 (Heavy Tribal Worship Ballad)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+We bow in the silence, we shout in the light,
+The God of the galaxies running through our veins tonight.
+From the dust of the ground to the breath in our chest,
+His power is alive, His presence our rest.
+
+[Chorus]
+In our veins, in our veins,
+The blood of the Lion that broke every chain!
+No sickness, no fear, no shadow remains,
+The King of the ages is in our veins!`
+      }
+    ]
+  },
+  'TRK-18': {
+    id: 'TRK-18',
+    title: 'We Bow We Shout',
+    versions: [
+      {
+        id: 'wbws-v1',
+        versionTag: 'v1.0 (Modern Tribal Anthem of Reverence)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+We bow in the silence, trembling low,
+Before the Holy One we know.
+
+[Chorus]
+We shout in the light! We roar with the sound!
+Holy ground! Holy ground!
+Falling on our knees to lift Him high,
+The Lord of the earth and the sky!`
+      }
+    ]
+  },
+  'TRK-19': {
+    id: 'TRK-19',
+    title: 'Through The Valley Or The Flame',
+    versions: [
+      {
+        id: 'tvtf-v1',
+        versionTag: 'v1.0 (Genre-Bending Battleground Roots)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+Walking through the furnace, heat upon the stone,
+Fourth Man in the fire, I never walk alone.
+
+[Chorus]
+Through the valley or the flame,
+Glory to His holy Name!
+Unburned, unbroken, unbowed by the fear,
+The God of the covenant is standing right here!`
+      }
+    ]
+  },
+  'TRK-20': {
+    id: 'TRK-20',
+    title: 'Ghost In The Machine',
     versions: GHOST_IN_THE_MACHINE_VERSIONS.map((v, i) => ({
       id: `gitm-${i + 1}`,
       versionTag: v.version,
@@ -3327,9 +3755,9 @@ Your mighty hand delivers me`
       content: v.lyrics
     }))
   },
-  'TRK-15': {
-    id: 'TRK-15',
-    title: 'Confident and Consistent',
+  'TRK-21': {
+    id: 'TRK-21',
+    title: 'The Milestone (Consistent & Confident)',
     versions: CONFIDENT_AND_CONSISTENT_VERSIONS.map((v, i) => ({
       id: `cac-${i + 1}`,
       versionTag: v.version,
@@ -3337,8 +3765,47 @@ Your mighty hand delivers me`
       content: v.lyrics
     }))
   },
-  'TRK-16': {
-    id: 'TRK-16',
+  'TRK-22': {
+    id: 'TRK-22',
+    title: 'Breath and Bone',
+    versions: [
+      {
+        id: 'bab-v1',
+        versionTag: 'v1.0 (Resurrection Physical Master)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+The iron was bolted
+The cedar was scarred
+We’d walled out the world
+Every window was barred
+We were huddling in shadows
+Nursing our grief
+Locked in a prison
+Of pure unbelief
+But You didn’t need permission
+You didn’t need a key
+Through the grain of the wood
+Through the weight of the stone
+You stood in our terror
+And called us Your own
+
+[Chorus]
+Oh, behold the hands! Behold the feet!
+Where mercy and my wonder meet
+You’re not a shadow, You’re not a dream
+You’re the breath and the bone of the King
+My heart is amazed
+My soul is undone
+Touching the scars
+Of the Living One
+It’s really You—not a ghost, but the Life
+Standing here whole
+Through the death and the strife`
+      }
+    ]
+  },
+  'TRK-23': {
+    id: 'TRK-23',
     title: 'Blindfold Blessing',
     versions: BLINDFOLD_BLESSING_VERSIONS.map((v, i) => ({
       id: `bb-${i + 1}`,
@@ -3347,8 +3814,8 @@ Your mighty hand delivers me`
       content: v.lyrics
     }))
   },
-  'TRK-17': {
-    id: 'TRK-17',
+  'TRK-24': {
+    id: 'TRK-24',
     title: 'Trading in the Mask',
     versions: TRADING_IN_THE_MASK_VERSIONS.map((v, i) => ({
       id: `titm-${i + 1}`,
@@ -3357,35 +3824,86 @@ Your mighty hand delivers me`
       content: v.lyrics
     }))
   },
-  'TRK-18': {
-    id: 'TRK-18',
-    title: 'Leaning Not Leaving',
-    versions: LEANING_NOT_LEAVING_VERSIONS.map((v, i) => ({
-      id: `lnl-${i + 1}`,
-      versionTag: v.version,
-      updatedAt: v.timestamp,
-      content: v.lyrics
-    }))
+  'TRK-25': {
+    id: 'TRK-25',
+    title: 'Never-ending What’s Next',
+    versions: [
+      {
+        id: 'newn-v1',
+        versionTag: 'v1.0 (Deep Soulful Alto Solo)',
+        updatedAt: '2026-09-24',
+        content: `[Verse 1]
+I’m living in the margins 
+Of a calendar that bleeds
+Planting rows of "maybe" 
+When I should be sowing seeds
+The ink is barely settled 
+On the task I just turned in
+Before the ghost of "What Is Next" 
+Is crawling ‘neath my skin
+
+[Chorus]
+Trust isn't a feeling
+It’s a total lean
+Into the spaces 
+Of the "yet unseen"
+In every frantic hallway
+In every "what’s to come"
+I acknowledge the Father 
+Until the noise is dumb
+
+[Bridge]
+Stop the clock! 
+Stop the chase!
+The "What’s Next" is found 
+In the "Present Grace!"
+He’s not just the goal 
+At the end of the road
+He’s the One who’s carrying 
+The entire load!`
+      }
+    ]
   },
-  'TRK-19': {
-    id: 'TRK-19',
-    title: "The Master's Hand",
-    versions: THE_MASTERS_HAND_VERSIONS.map((v, i) => ({
-      id: `tmh-${i + 1}`,
-      versionTag: v.version,
-      updatedAt: v.timestamp,
-      content: v.lyrics
-    }))
+  'TRK-26': {
+    id: 'TRK-26',
+    title: 'Meet Me Here (Harder Scream)',
+    versions: [
+      {
+        id: 'mmh-scream-v1',
+        versionTag: 'v2.0 (Harder Scream Reprise)',
+        updatedAt: '2026-09-24',
+        content: `[Intro]
+(Whisper) Calvary. They don't see the work. 
+(Shout) THEY JUST SEE THE JERSEY!
+
+[Verse 1]
+Coffee black at 4:47.
+Mask strapped on by 6.
+Fixing the leaky sink while everything inside me is about to split.
+
+[Chorus]
+Who helps the man when the man is the help?
+Who catches the one carrying everybody else?
+End of my rope, the knot is slipping loose…
+Lord, I’m dying here for You!
+
+[Bridge]
+I don't have it. I don't have the answer this time!
+WHO CAN'T DO IT THIS TIME?!
+I DON'T HAVE IT! LOGIC'S GONE!
+I'M AT THE EDGE — THIS IS THE LAST LINE!
+Please... God... Just meet me here.`
+      }
+    ]
   },
-  'TRK-20': {
-    id: 'TRK-20',
-    title: "Every Candle's Victory",
-    versions: EVERY_CANDLES_VICTORY_VERSIONS.map((v, i) => ({
-      id: `ecv-${i + 1}`,
+  'TRK-27': {
+    id: 'TRK-27',
+    title: "The Work Ain't Done",
+    versions: THE_WORK_AINT_DONE_VERSIONS.map((v, i) => ({
+      id: `twad-${i + 1}`,
       versionTag: v.version,
       updatedAt: v.timestamp,
       content: v.lyrics
     }))
   }
 };
-

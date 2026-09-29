@@ -205,4 +205,26 @@ All major milestones, song creations, and revision checkpoints in the studio inc
   - **Architectural Cleanup**:
     - Extracted monolithic inline tabs into clean, maintainable modular components (`VeoVisualsTab`, `NightCafeTab`, `TelemetryTab`, `StudioCopilotTab`, `SearchGroundingTab`).
 
+---
+
+## [v2.2] — Industry-Standard Section-by-Section A/B/X Critical Listening Engine & Universal Nextcloud Indexing Standard
+- **Date**: 2026-09-28
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.2`**.
+  - **Universal Nextcloud Linking & Indexing Standard**:
+    - Universalized ECV standard across all 27 canonical tracks in the master catalog (`/Music-Production/{PROJECT}/`).
+    - Standardized 24-bit/48kHz WAV master prints, isolated 4-stems (BS-Roformer lead, choir/harmonies, instrumental bed, rhythm), 4K visual art, 9:16 vertical reels, and SOP documents.
+    - Established `/skills/nextcloud-music-production-indexing/SKILL.md` enforcing the default behavior.
+    - Added `/api/nextcloud/index-all-catalog` and `NextcloudBentoSyncTab` "Index All Projects" one-click action.
+  - **Industry-Standard Section-by-Section A/B/X Critical Listening Engine (`SectionCriticalComparator.tsx`)**:
+    - **Section-Locked Synchronized Auditioning**: Seamlessly loop and evaluate specific song sections (`[Chorus]`, `[Verse 1]`, `[Bridge]`, `[Outro]`) across 3 versions simultaneously.
+    - **Zero-Latency Instant Hotkey Switching (`1`, `2`, `3` or `A`, `B`, `C`)**: Eliminates auditory memory decay (under 2-3 seconds) allowing critical, objective comparison of vocal presence, hook lift, and transients without playhead pause or glitch.
+    - **LUFS Loudness Normalization Matching (-14.0 LUFS)**: Combats the Fletcher-Munson psychoacoustic illusion ("louder sounds better") with real-time automatic gain trim so decisions are based on arrangement, mix depth, and performance.
+    - **Double-Blind ABX Audition Mode ("Blind Taste Test")**: Scrambles and masks version labels as Alpha, Beta, Gamma with reveal lock to eliminate confirmation bias.
+    - **Multi-Factor Critical Listening Rubric**: 5-point evaluation across Vocal Presence (1-10), Dynamic Hook Punch (1-10), Lyrical Cadence & Rhyme (1-10), Mix Space & Low-End (1-10), and SOP Theological Conviction (1-10).
+    - **Composite Master Arrangement Assembler**: Select winning takes per section across the entire song and assemble a cohesive "Frankenstein Master Cut" with 1-click export to the Lyric Suite.
+    - **Authentic Catalog Alignment**: Corrected default version loading to bind directly to the imported master Google doc catalog (`TRK-01` to `TRK-27`).
+
+
 

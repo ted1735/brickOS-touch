@@ -38,6 +38,7 @@ import {
   Info,
   Settings,
   Grid,
+  Trophy,
   Code
 } from 'lucide-react';
 import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset } from '../types';
@@ -703,6 +704,18 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
             <Sliders className="w-3.5 h-3.5 text-amber-300" />
             <span>Sound Presets ({presets.length})</span>
           </button>
+
+          {onNavigateToTab && (
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('versions')}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-900/60 to-indigo-900/60 hover:from-amber-800/80 hover:to-indigo-800/80 text-amber-200 font-bold text-xs border border-amber-600/40 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open Section Shootout (A/B/X) to compare choruses and verses across versions with LUFS loudness matching"
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              <span>Section Shootout</span>
+            </button>
+          )}
 
           {onNavigateToTab && (
             <button

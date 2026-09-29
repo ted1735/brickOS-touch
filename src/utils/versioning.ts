@@ -3,7 +3,7 @@
  * Enforces strict incremental versioning (+0.1 per revision)
  */
 
-export const CURRENT_STUDIO_VERSION = 'v2.1';
+export const CURRENT_STUDIO_VERSION = 'v2.2';
 
 export function parseVersionNumber(versionStr: string): number {
   if (!versionStr) return 1.0;

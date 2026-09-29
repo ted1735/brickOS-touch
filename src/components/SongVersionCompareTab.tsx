@@ -22,9 +22,11 @@ import {
   ArrowUpRight,
   CheckCircle2,
   AlertCircle,
-  Layers
+  Layers,
+  Trophy
 } from 'lucide-react';
 import { VisionBoardCanvas } from './VisionBoardCanvas';
+import { SectionCriticalComparator } from './SectionCriticalComparator';
 import { songVersionsCatalog } from '../data/songVersionsCatalog';
 import { Track } from '../types';
 
@@ -81,9 +83,10 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   isDarkMode = true,
   showToast
 }) => {
-  // Demo baseline state initialized from catalog or local state
-  const [selectedSongId, setSelectedSongId] = useState<string>('song-001');
-  const [viewMode, setViewMode] = useState<'edit' | 'cards' | 'diff' | 'board'>('edit');
+  // Baseline state initialized from canonical catalog or activeTrack
+  const initialSongId = activeTrack?.id || 'TRK-27';
+  const [selectedSongId, setSelectedSongId] = useState<string>(initialSongId);
+  const [viewMode, setViewMode] = useState<'sections' | 'edit' | 'cards' | 'diff' | 'board'>('sections');
   const [syncScroll, setSyncScroll] = useState<boolean>(true);
   const [copiedCol, setCopiedCol] = useState<number | null>(null);
 
@@ -94,10 +97,16 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.5-flash'>('gemini-3.1-pro-preview');
   const [diffBaseIndex, setDiffBaseIndex] = useState<number>(0);
 
-  // Default triple-stack versions
+  // Default triple-stack versions loaded directly from master Google doc catalog
   const [versions, setVersions] = useState<SongVersion[]>(() => {
-    if (songVersionsCatalog && songVersionsCatalog['song-001']) {
-      return songVersionsCatalog['song-001'].versions.slice(0, 3);
+    const songId = activeTrack?.id || 'TRK-27';
+    if (songVersionsCatalog && songVersionsCatalog[songId]) {
+      return songVersionsCatalog[songId].versions.slice(0, 3);
+    }
+    // Fallback to first available song in catalog
+    const firstSong = Object.values(songVersionsCatalog)[0];
+    if (firstSong && firstSong.versions.length > 0) {
+      return firstSong.versions.slice(0, 3);
     }
     return [
       {
@@ -332,8 +341,18 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
             <span>Sync Scroll</span>
           </button>
 
-          {/* Mode Selector (Edit, Cards, Diff) */}
+          {/* Mode Selector (Sections, Edit, Cards, Diff, Board) */}
           <div className="flex bg-slate-950 border border-slate-800 rounded p-0.5">
+            <button
+              onClick={() => setViewMode('sections')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-bold transition ${
+                viewMode === 'sections' ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Industry-standard section-by-section A/B/X critical listening engine (Chorus vs Chorus, Verse vs Verse)"
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-300" />
+              <span>Section Shootout</span>
+            </button>
             <button
               onClick={() => setViewMode('edit')}
               className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-medium transition ${
@@ -423,8 +442,53 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
         </div>
       )}
 
-      {/* Mode Viewport: Vision Board vs 3-Column Markdown Viewports */}
-      {viewMode === 'board' ? (
+      {/* Mode Viewport: Section Shootout vs Vision Board vs 3-Column Markdown Viewports */}
+      {viewMode === 'sections' ? (
+        <div className="flex-1 min-h-[620px] overflow-hidden">
+          <SectionCriticalComparator
+            activeTrack={activeTrack || (songVersionsCatalog[selectedSongId] ? {
+              id: selectedSongId,
+              title: songVersionsCatalog[selectedSongId].title,
+              bpm: 120,
+              key: 'D Minor',
+              genre: 'Sovereign Production',
+              vocal: 'Studio Roster',
+              ep: 'EP 1: Restoration',
+              thesis: 'Sovereign Catalog Production',
+              status: 'Audio Master',
+              vocalCast: 'Studio Cast',
+              sunoPrompt: '',
+              negativePrompt: '',
+              engineSliders: { weirdness: 10, styleInfluence: 70, voiceAudio: 100 },
+              lyrics: versions[0]?.content || ''
+            } as any : undefined)}
+            versions={versions}
+            onApplyCompositeMaster={(compositeLyrics, summary) => {
+              // Apply composite master to column 3
+              setVersions(prev => {
+                const next = [...prev];
+                if (next[2]) {
+                  next[2] = {
+                    ...next[2],
+                    versionTag: `${next[2].versionTag} (Golden Composite)`,
+                    updatedAt: new Date().toISOString().split('T')[0],
+                    content: compositeLyrics
+                  };
+                }
+                return next;
+              });
+              if (onUpdateTrackLyrics) {
+                onUpdateTrackLyrics(compositeLyrics, 'Golden Composite Master');
+              }
+              if (showToast) {
+                showToast(`Applied Golden Composite Master! ${summary}`, 'success');
+              }
+            }}
+            onNavigateToTab={onNavigateToTab}
+            showToast={showToast}
+          />
+        </div>
+      ) : viewMode === 'board' ? (
         <VisionBoardCanvas
           initialLyrics={versions[2]?.content || versions[0]?.content || ''}
           trackTitle={songVersionsCatalog[selectedSongId]?.title || activeTrack?.title}
