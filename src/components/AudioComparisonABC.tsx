@@ -179,6 +179,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
   };
 
   // Master comparison modes
+  const [syncPlayback, setSyncPlayback] = useState<boolean>(true); // Forces all 3 tracks to start/stop simultaneously
   const [syncPlayheads, setSyncPlayheads] = useState<boolean>(true); // Locked scrub across A, B, C
   const [loudnessMatchEnabled, setLoudnessMatchEnabled] = useState<boolean>(true); // -14 LUFS auto gain trim
   const [blindModeEnabled, setBlindModeEnabled] = useState<boolean>(false); // Double-blind ABX testing
@@ -373,8 +374,12 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     });
   }, [slots, loudnessMatchEnabled, activeSoloSlot]);
 
-  // Playhead loop animation frame
+  // Playhead loop animation frame - optimized to sleep when paused
+  const isAnyPlaying = useMemo(() => slots.some(s => s.isPlaying), [slots]);
+
   useEffect(() => {
+    if (!isAnyPlaying) return;
+
     let animId: number;
     let lastTime = performance.now();
 
@@ -383,9 +388,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       lastTime = now;
 
       setSlots(prevSlots => {
-        // Check if any slot is currently playing
-        const anyPlaying = prevSlots.some(s => s.isPlaying);
-        if (!anyPlaying) return prevSlots;
+        if (!prevSlots.some(s => s.isPlaying)) return prevSlots;
 
         return prevSlots.map(slot => {
           if (!slot.isPlaying) return slot;
@@ -421,7 +424,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
 
     animId = requestAnimationFrame(updateLoop);
     return () => cancelAnimationFrame(animId);
-  }, [activeSectionRange]);
+  }, [isAnyPlaying, activeSectionRange]);
 
   // Canvas waveform rendering loop
   useEffect(() => {
@@ -493,23 +496,43 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
   // Handle Play/Pause for a specific slot
   const handleTogglePlay = (slotId: string) => {
     ensureAudioGraph();
-    setSlots(prev => prev.map(s => {
-      if (s.id === slotId) {
-        const nextState = !s.isPlaying;
-        return { ...s, isPlaying: nextState };
+    setSlots(prev => {
+      const target = prev.find(s => s.id === slotId);
+      const nextPlayState = !target?.isPlaying;
+
+      if (syncPlayback) {
+        // When Sync Playback is ON, force all three audio tracks to start/stop simultaneously
+        const referenceTime = target?.currentTimeSeconds ?? 0;
+        return prev.map(s => ({
+          ...s,
+          isPlaying: nextPlayState,
+          currentTimeSeconds: syncPlayheads ? referenceTime : s.currentTimeSeconds
+        }));
       }
-      return s;
-    }));
+
+      // Independent playback per track when Sync Playback is OFF
+      return prev.map(s => {
+        if (s.id === slotId) {
+          return { ...s, isPlaying: nextPlayState };
+        }
+        return s;
+      });
+    });
   };
 
   // Master Global Play All / Pause All
   const handleToggleGlobalPlay = () => {
     ensureAudioGraph();
-    const anyPlaying = slots.some(s => s.isPlaying);
-    setSlots(prev => prev.map(s => ({
-      ...s,
-      isPlaying: !anyPlaying
-    })));
+    setSlots(prev => {
+      const anyPlaying = prev.some(s => s.isPlaying);
+      const nextPlayState = !anyPlaying;
+      const referenceTime = prev[0]?.currentTimeSeconds ?? 0;
+      return prev.map(s => ({
+        ...s,
+        isPlaying: nextPlayState,
+        currentTimeSeconds: syncPlayheads ? referenceTime : s.currentTimeSeconds
+      }));
+    });
   };
 
   // Rewind a slot to beginning
@@ -572,6 +595,15 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       } else if (e.code === 'Space') {
         e.preventDefault();
         handleToggleGlobalPlay();
+      } else if (e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setSyncPlayback(prev => {
+          const next = !prev;
+          if (showToast) {
+            showToast(next ? 'Sync Playback enabled (HotKey P)' : 'Sync Playback disabled (HotKey P)', 'info');
+          }
+          return next;
+        });
       } else if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         setSyncPlayheads(prev => !prev);
@@ -860,6 +892,31 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
               <span>Sync Playheads: {syncPlayheads ? 'LOCKED' : 'FREE'}</span>
             </button>
 
+            {/* Sync Playback Toggle */}
+            <button
+              onClick={() => {
+                const nextState = !syncPlayback;
+                setSyncPlayback(nextState);
+                if (showToast) {
+                  showToast(
+                    nextState
+                      ? 'Sync Playback enabled: starting or pausing any track controls all 3 simultaneously.'
+                      : 'Sync Playback disabled: independent playback controls per track.',
+                    'info'
+                  );
+                }
+              }}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                syncPlayback
+                  ? 'bg-amber-950/80 border-amber-500/70 text-amber-300 shadow-sm shadow-amber-950/40'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Forces all three tracks to start and stop simultaneously for direct critical comparison (Hotkey: P)"
+            >
+              <FastForward className="w-3.5 h-3.5 text-amber-400" />
+              <span>Sync Playback: {syncPlayback ? 'SIMULTANEOUS' : 'INDEPENDENT'}</span>
+            </button>
+
             {/* LUFS Loudness Match (-14.0 LUFS) */}
             <button
               onClick={() => setLoudnessMatchEnabled(!loudnessMatchEnabled)}
@@ -982,6 +1039,9 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
             <span className="text-slate-600">|</span>
             <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">Space</kbd>
             <span>Play/Pause</span>
+            <span className="text-slate-600">|</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">P</kbd>
+            <span>Sync Play</span>
           </div>
         </div>
       </div>
@@ -1152,10 +1212,19 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                           ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
                           : 'bg-indigo-600 text-white hover:bg-indigo-500'
                       }`}
-                      title={displaySlot.isPlaying ? 'Pause this track' : 'Play this track'}
+                      title={
+                        syncPlayback
+                          ? (displaySlot.isPlaying ? 'Sync Playback: Pause all 3 tracks simultaneously' : 'Sync Playback: Start all 3 tracks simultaneously in lockstep')
+                          : (displaySlot.isPlaying ? 'Pause this track' : 'Play this track')
+                      }
                     >
                       {displaySlot.isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
                     </button>
+                    {syncPlayback && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold" title="Sync Playback active: this channel starts/stops all 3 tracks simultaneously">
+                        SYNC
+                      </span>
+                    )}
 
                     {/* Rewind */}
                     <button

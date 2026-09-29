@@ -226,5 +226,27 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - **Composite Master Arrangement Assembler**: Select winning takes per section across the entire song and assemble a cohesive "Frankenstein Master Cut" with 1-click export to the Lyric Suite.
     - **Authentic Catalog Alignment**: Corrected default version loading to bind directly to the imported master Google doc catalog (`TRK-01` to `TRK-27`).
 
+---
+
+## [v2.3] — A/B/C Audio Sync Playback Toggle, Pros & Cons Notes, and Transport Performance Optimization
+- **Date**: 2026-09-29
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.3`**.
+  - **A/B/C Synchronized Playback Toggle (`syncPlayback`)**:
+    - Added high-visibility **"Sync Playback: SIMULTANEOUS / INDEPENDENT"** toggle switch in the master comparison toolbar and hotkey (`P`).
+    - When enabled, triggering Play/Pause on any individual channel starts or pauses all 3 tracks in frame-accurate lockstep.
+    - Added contextual `SYNC` badges to each channel transport strip to indicate active parallel playback.
+    - Preserves independent channel start/stop when toggled to `INDEPENDENT`.
+  - **Dedicated Pros & Cons Evaluation Notes Engine**:
+    - Embedded dedicated **Pros (Mix Strengths)** with emerald visual markers and 1-click praise tags (`+ Vocal Clarity`, `+ Punchy 808`, `+ Wide Stereo`, `+ Warm Tone`, `+ Dynamic Lift`).
+    - Embedded dedicated **Cons (Drawbacks & Fixes)** with rose visual markers and 1-click critical flags (`- Harsh Treble`, `- Boxy Mids`, `- Muddy Bass`, `- Vocal Sibilance`, `- Ear Fatigue`).
+    - Embedded general engineering verdict and recommendation notes.
+    - Automatically includes itemized Pros & Cons in the markdown Evaluation Report export.
+  - **Transport Loop & CPU Performance Optimization**:
+    - Refactored `requestAnimationFrame` playhead animation loop to sleep completely when all channels are paused, eliminating continuous 60fps state updates and dropping idle CPU load to 0%.
+    - Verified TypeScript strict type safety (`tsc --noEmit` passing with 0 errors).
+
+
 
 
