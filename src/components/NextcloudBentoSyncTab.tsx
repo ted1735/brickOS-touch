@@ -47,7 +47,8 @@ import {
   saveNextcloudConfig,
   autoMatchAssetToCatalog,
   INITIAL_FOLDER_207332_ASSETS,
-  DEFAULT_NEXTCLOUD_CONFIG
+  DEFAULT_NEXTCLOUD_CONFIG,
+  ALL_CANONICAL_NEXTCLOUD_ASSETS
 } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { HelpCircle } from 'lucide-react';
