@@ -147,7 +147,7 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
               ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
               : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
           }`}
-          title="Google Search Grounding (gemini-3.5-flash)"
+          title="Google Search Grounding (gemini-3.8-flash)"
         >
           <Search className="w-3.5 h-3.5 text-blue-400" />
           <span className="hidden md:inline">Grounding</span>

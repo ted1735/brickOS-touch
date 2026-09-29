@@ -90,9 +90,9 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
               onChange={(e) => setChatModel(e.target.value)}
               className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none"
             >
-              <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-              <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-              <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+              <option value="gemini-3.8-flash">gemini-3.8-flash (Fast & Cost-Effective)</option>
+              <option value="gemini-3.1-pro-preview">gemini-3.1-pro (Deep Reasoning)</option>
+              <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Ultra Fast)</option>
             </select>
           </div>
         </div>

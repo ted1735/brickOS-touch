@@ -247,6 +247,52 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Refactored `requestAnimationFrame` playhead animation loop to sleep completely when all channels are paused, eliminating continuous 60fps state updates and dropping idle CPU load to 0%.
     - Verified TypeScript strict type safety (`tsc --noEmit` passing with 0 errors).
 
+---
+
+## [v2.4] — Global Master Volume Bus Fader, Universal 3-Theme Engine (Sun • Moon • Stars), and Studio Workflow Guide
+- **Date**: 2026-09-29
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.4`**.
+  - **Mini-DAW Global Master Output Bus Channel Strip**:
+    - Added dedicated **Master Output Bus Strip** in the stem mixer console controlling combined gain across all tracks.
+    - Large tactile master fader with precision dB scaling (-∞ dB to +3.0 dB, 85% unity gain = 0.0 dB).
+    - Dual stereo Master VU peak level meters (Left & Right) with reactive LED segments and clip warning indicator.
+    - Master Mute toggle (`MUTE BUS`), Master Dim toggle (`-20 dB` monitor pad for ear fatigue protection), and Mono Sum compatibility check.
+    - 1-click **"0 dB Unity"** gain reset.
+  - **Universal 3-Theme Engine (Sun • Moon • Stars) with Tailwind**:
+    - **Sun (Daylight Nashville)**: High-clarity light theme with crisp white cards, clean borders, and high legibility.
+    - **Moon (Dark Studio)**: High-contrast OLED Obsidian dark theme tailored for pro-DAW production.
+    - **Stars (Muted Starlight)**: Soft-contrast, low-fatigue midnight twilight theme (`#0c101c` base, `#131929` muted cards, gentle `#cbd5e1` silver text, and soft ambient pastel highlights) engineered for late-night critical listening and reduced ocular strain.
+    - Immediate 1-click 3-way toggle button group (`Sun ☀️ • Moon 🌙 • Stars ✨`) in the main header, persistent across sessions via `localStorage`.
+    - Universal CSS overrides in `index.css` letting Tailwind classes automatically morph across all screens, modals, and modules.
+  - **Studio Workflow Guide & Stage Navigator (`StudioWorkflowGuide.tsx`)**:
+    - Addressed visual overwhelm with an intuitive 5-step production roadmap:
+      `1. Vision & Structure` ➔ `2. Lyrics & Suno v5.5` ➔ `3. A/B/C Audio Comparison` ➔ `4. Mini-DAW 4-Track Mix` ➔ `5. Master & Deliverables`.
+    - Live "Where You Are" badge with one-click navigation between key phases.
+    - Contextual "Next Recommended Action" prompt.
+    - Integrated **Zen Focus Mode** toggle (`Focus: ON`) to hide extraneous sidebars and distractions.
+
+---
+
+## [v2.5] — Gemini 3.8 Flash Upgrade, Multi-Model Cascade Fallback, & Copilot Chat Fix
+- **Date**: 2026-09-29
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.5`**.
+  - **Upgraded from Deprecated `gemini-3.5-flash` to `gemini-3.8-flash`**:
+    - Standardized all basic text, chat, research, and co-producer tasks to **`gemini-3.8-flash`** as officially designated in `@google/genai` SDK guidelines.
+    - Updated Co-Producer chat dropdown to feature `gemini-3.8-flash` (Fast & Cost-Effective), `gemini-3.1-pro-preview` (Deep Reasoning), and `gemini-3.1-flash-lite` (Ultra Low Latency).
+    - Upgraded Google Search Grounding engine, Lyric Audit Engine, Automated Rewrite Engine, and 3-Way Comparative Audits to `gemini-3.8-flash`.
+  - **Intelligent Multi-Model Cascade Fallback (`generateContentWithFallback`)**:
+    - Resolved the issue where chat or co-producer would stall or fail on 503 high-demand spikes:
+      `Preferred Model` ➔ `gemini-3.8-flash` ➔ `gemini-3.1-flash-lite` ➔ `gemini-2.5-flash`.
+    - Guarantees instant, zero-hang responses even during upstream server demand surges.
+  - **Fixed Silent Failure in Chat Interface**:
+    - Fixed response status handling in `handleSendMessage`: non-OK HTTP responses now throw and render informative assistant notices rather than silently swallowing errors and leaving the user in an infinite thinking state.
+
+
+
 
 
 

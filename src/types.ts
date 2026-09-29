@@ -1,3 +1,5 @@
+export type StudioTheme = 'sun' | 'moon' | 'stars';
+
 export type TrackStatus = 
   | 'Idea / Concept' 
   | 'Lyrics Finalized' 

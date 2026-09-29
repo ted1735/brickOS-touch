@@ -96,7 +96,7 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   const [isAiAuditOpen, setIsAiAuditOpen] = useState<boolean>(false);
   const [isAuditing, setIsAuditing] = useState<boolean>(false);
   const [auditResult, setAuditResult] = useState<string>('');
-  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.5-flash'>('gemini-3.1-pro-preview');
+  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.8-flash'>('gemini-3.8-flash');
   const [diffBaseIndex, setDiffBaseIndex] = useState<number>(0);
 
   // Default triple-stack versions loaded directly from master Google doc catalog
@@ -739,8 +739,8 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
                   onChange={(e) => setAuditModel(e.target.value as any)}
                   className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded px-2 py-1 focus:outline-none"
                 >
+                  <option value="gemini-3.8-flash">Gemini 3.8 Flash (Fast & Efficient)</option>
                   <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Theological)</option>
-                  <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fast)</option>
                 </select>
                 <button
                   onClick={() => setIsAiAuditOpen(false)}
@@ -756,7 +756,7 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
               {isAuditing ? (
                 <div className="flex flex-col items-center justify-center py-16 space-y-3">
                   <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
-                  <p className="text-sm font-semibold text-white">Analyzing 3-Way Version Stack with {auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.5 Flash'}...</p>
+                  <p className="text-sm font-semibold text-white">Analyzing 3-Way Version Stack with {auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash'}...</p>
                   <p className="text-xs text-slate-500">Evaluating theological progression, Christianese filter, and Throne Room Pivot...</p>
                 </div>
               ) : (

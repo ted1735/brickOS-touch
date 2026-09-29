@@ -46,7 +46,7 @@ export const SearchGroundingTab: React.FC<SearchGroundingTabProps> = ({
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Search className="w-5 h-5 text-cyan-400" />
-              <span>Google Search Grounding (gemini-3.5-flash with googleSearch tool)</span>
+              <span>Google Search Grounding (gemini-3.8-flash with googleSearch tool)</span>
             </h3>
             <p className="text-xs text-slate-400">
               Retrieve real-time Billboard Christian/Gospel charts, BPM trends, Nashville mixing standards, and verified biblical citations.

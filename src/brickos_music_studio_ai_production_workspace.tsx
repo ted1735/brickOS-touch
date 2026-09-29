@@ -58,7 +58,8 @@ import {
   Edit3,
   Trash2
 } from 'lucide-react';
-import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem, UniversalAssetItem } from './types';
+import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem, UniversalAssetItem, StudioTheme } from './types';
+import { StudioWorkflowGuide } from './components/StudioWorkflowGuide';
 import { UniversalAssetEditorModal } from './components/UniversalAssetEditorModal';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
@@ -187,32 +188,49 @@ export default function BrickOSMusicStudioWorkspace() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isCommandPaletteOpen, isCopilotDrawerOpen]);
 
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+  const [studioTheme, setStudioTheme] = useState<StudioTheme>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('brickos_theme');
-      if (saved) return saved === 'dark';
-      return true; // Default dark studio aesthetic
+      const saved = localStorage.getItem('brickos_studio_theme') as StudioTheme;
+      if (saved && (saved === 'sun' || saved === 'moon' || saved === 'stars')) return saved;
+      const legacy = localStorage.getItem('brickos_theme');
+      if (legacy === 'light') return 'sun';
+      return 'moon'; // Default pro-DAW dark studio aesthetic
     }
-    return true;
+    return 'moon';
   });
+
+  const isDarkMode = studioTheme !== 'sun';
+  const [focusMode, setFocusMode] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      if (isDarkMode) {
-        document.documentElement.classList.add('dark');
-        document.documentElement.classList.remove('light');
+      const root = document.documentElement;
+      root.classList.remove('sun', 'moon', 'stars', 'light', 'dark');
+      root.removeAttribute('data-theme');
+
+      if (studioTheme === 'sun') {
+        root.classList.add('light', 'sun');
+        root.setAttribute('data-theme', 'sun');
+      } else if (studioTheme === 'stars') {
+        root.classList.add('dark', 'stars');
+        root.setAttribute('data-theme', 'stars');
       } else {
-        document.documentElement.classList.remove('dark');
-        document.documentElement.classList.add('light');
+        root.classList.add('dark', 'moon');
+        root.setAttribute('data-theme', 'moon');
       }
     }
     if (typeof window !== 'undefined') {
-      localStorage.setItem('brickos_theme', isDarkMode ? 'dark' : 'light');
+      localStorage.setItem('brickos_studio_theme', studioTheme);
+      localStorage.setItem('brickos_theme', studioTheme === 'sun' ? 'light' : 'dark');
     }
-  }, [isDarkMode]);
+  }, [studioTheme]);
 
   const handleToggleTheme = () => {
-    setIsDarkMode(prev => !prev);
+    setStudioTheme(prev => {
+      if (prev === 'moon') return 'stars';
+      if (prev === 'stars') return 'sun';
+      return 'moon';
+    });
   };
 
   // Firestore persistent cloud database synchronization state
@@ -1146,14 +1164,14 @@ export default function BrickOSMusicStudioWorkspace() {
 
   // Gemini Chatbot State
   const [chatRole, setChatRole] = useState<'lyric_assistant' | 'mastering_engineer' | 'omnipost_strategist'>('lyric_assistant');
-  const [chatModel, setChatModel] = useState('gemini-3.5-flash');
+  const [chatModel, setChatModel] = useState('gemini-3.8-flash');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
       role: 'assistant',
-      content: "Welcome to brickOS Master Studio. I am your Lead Theological & Lyrical Assistant. Let's ensure every track passes the OBI Funnel, strips all tired 'Christianese' clichés, and drives home the Throne Room Pivot by the bridge.",
+      content: "Welcome to brickOS Master Studio. I am your Lead Theological & Lyrical Assistant powered by Gemini 3.8 Flash. Let's ensure every track passes the OBI Funnel, strips all tired 'Christianese' clichés, and drives home the Throne Room Pivot by the bridge.",
       timestamp: '01:00 AM',
-      model: 'gemini-3.5-flash'
+      model: 'gemini-3.8-flash'
     }
   ]);
   const [chatInput, setChatInput] = useState('');
@@ -1531,6 +1549,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Failed to receive response from Gemini (${res.status})`);
+      }
       if (data.reply) {
         setChatMessages(prev => [
           ...prev,
@@ -1549,7 +1570,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         {
           id: `msg-${Date.now()}`,
           role: 'assistant',
-          content: `Error connecting to Gemini: ${err.message}`,
+          content: `⚠️ Gemini Response Notice: ${err.message}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           model: chatModel
         }
@@ -1857,20 +1878,70 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </kbd>
           </button>
 
-          {/* LIGHT / DARK MODE TOGGLE SWITCH */}
+          {/* 3-THEME SELECTOR: SUN / MOON / STARS */}
+          <div className="flex items-center bg-slate-950/80 p-0.5 rounded-xl border border-slate-800" role="group" aria-label="Studio Theme Selector">
+            <button
+              type="button"
+              onClick={() => setStudioTheme('sun')}
+              className={`px-2 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
+                studioTheme === 'sun'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-amber-300'
+              }`}
+              title="Sun: Daylight Nashville Light Theme (Crisp, High Contrast)"
+            >
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xl:inline">Sun</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudioTheme('moon')}
+              className={`px-2 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
+                studioTheme === 'moon'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-indigo-300'
+              }`}
+              title="Moon: Obsidian Dark Studio (OLED Pro-DAW High Contrast)"
+            >
+              <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden xl:inline">Moon</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudioTheme('stars')}
+              className={`px-2 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
+                studioTheme === 'stars'
+                  ? 'bg-purple-900/80 text-purple-200 border border-purple-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-purple-300'
+              }`}
+              title="Stars: Muted Twilight Theme (Soft Contrast, Easy on the Eyes, Zero Fatigue)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+              <span className="hidden xl:inline">Stars</span>
+            </button>
+          </div>
+
+          {/* FOCUS MODE TOGGLE */}
           <button
-            onClick={handleToggleTheme}
-            className={`p-2 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
-              isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            type="button"
+            onClick={() => {
+              setFocusMode(prev => {
+                const next = !prev;
+                if (next) setIsSideNavOpen(false);
+                return next;
+              });
+            }}
+            className={`p-2 rounded-xl border flex items-center gap-1 transition cursor-pointer ${
+              focusMode
+                ? 'bg-purple-900/60 text-purple-200 border-purple-500/50 shadow-xs'
+                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'
             }`}
-            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            aria-label="Toggle Light and Dark Mode"
+            title="Focus Mode: Hides secondary sidebars to reduce visual clutter and fatigue"
+            aria-label="Toggle Focus Mode"
           >
-            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
-            <span className="text-xs font-bold hidden xl:inline">
-              {isDarkMode ? 'Light' : 'Dark'}
+            <Eye className="w-3.5 h-3.5 text-purple-400" />
+            <span className="text-xs font-bold font-mono hidden xl:inline">
+              {focusMode ? 'Zen ON' : 'Focus'}
             </span>
           </button>
         </div>
@@ -1932,6 +2003,24 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
         <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
           
+          {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR */}
+          <div className="flex-shrink-0">
+            <StudioWorkflowGuide
+              activeTab={activeTab}
+              onSelectTab={(tabKey) => setActiveTab(tabKey as any)}
+              theme={studioTheme}
+              isDarkMode={isDarkMode}
+              focusMode={focusMode}
+              onToggleFocusMode={() => {
+                setFocusMode(prev => {
+                  const next = !prev;
+                  if (next) setIsSideNavOpen(false);
+                  return next;
+                });
+              }}
+            />
+          </div>
+
           {/* TRACK HEADER BANNER (Shown only on single-track workbench views) */}
           {activeTab !== 'kanban' && (
             <div
@@ -2898,7 +2987,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
         }}
         activeTab={activeTab}
-        onToggleTheme={() => setIsDarkMode(prev => !prev)}
+        onToggleTheme={handleToggleTheme}
         onToggleZenMode={() => setIsZenMode(prev => !prev)}
         onOpenSectionGuide={(sec) => sec && handleOpenSectionGuide(sec as any)}
         onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}

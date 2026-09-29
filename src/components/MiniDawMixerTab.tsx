@@ -3,6 +3,7 @@ import {
   Play,
   Square,
   Volume2,
+  VolumeX,
   Sliders,
   Scissors,
   Activity,
@@ -125,6 +126,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [masterVolume, setMasterVolume] = useState(85);
+  const [isMasterMuted, setIsMasterMuted] = useState(false);
+  const [isMasterDimmed, setIsMasterDimmed] = useState(false);
+  const [isMonoCollapsed, setIsMonoCollapsed] = useState(false);
+  const [masterLevels, setMasterLevels] = useState<{ l: number; r: number }>({ l: 0, r: 0 });
   const [tracks, setTracks] = useState<MixerTrack[]>(() => getTrackStems(track));
   const [isExportingWav, setIsExportingWav] = useState(false);
   const [cropPreset, setCropPreset] = useState<'30s' | '60s' | 'full'>('60s');
@@ -164,6 +169,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   useEffect(() => {
     if (!isPlaying) {
       setChannelLevels({});
+      setMasterLevels({ l: 0, r: 0 });
       return;
     }
 
@@ -173,6 +179,9 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
       tick++;
       const anySolo = tracks.some(t => t.solo);
       const levels: { [id: number]: { l: number; r: number } } = {};
+      let sumL = 0;
+      let sumR = 0;
+      let audibleCount = 0;
 
       tracks.forEach((trk, idx) => {
         const isAudible = !trk.muted && (!anySolo || trk.solo);
@@ -192,15 +201,35 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         const rightLevel = Math.round(levelVal * (panRatio < 0 ? (1 + panRatio * 0.55) : 1));
 
         levels[trk.id] = { l: leftLevel, r: rightLevel };
+        sumL += leftLevel;
+        sumR += rightLevel;
+        audibleCount++;
       });
 
       setChannelLevels(levels);
+
+      // Compute Master Output Bus Summed Levels
+      if (audibleCount > 0 && !isMasterMuted) {
+        const masterMult = isMasterDimmed ? (masterVolume / 100) * 0.15 : (masterVolume / 100);
+        const normalizer = Math.sqrt(audibleCount);
+        let mLeft = Math.min(100, Math.round((sumL / normalizer) * masterMult));
+        let mRight = Math.min(100, Math.round((sumR / normalizer) * masterMult));
+        if (isMonoCollapsed) {
+          const monoAvg = Math.round((mLeft + mRight) / 2);
+          mLeft = monoAvg;
+          mRight = monoAvg;
+        }
+        setMasterLevels({ l: mLeft, r: mRight });
+      } else {
+        setMasterLevels({ l: 0, r: 0 });
+      }
+
       frameId = requestAnimationFrame(updateMeters);
     };
 
     frameId = requestAnimationFrame(updateMeters);
     return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, tracks]);
+  }, [isPlaying, tracks, masterVolume, isMasterMuted, isMasterDimmed, isMonoCollapsed]);
 
   // Sync isPlaying state with audioMiniDaw
   useEffect(() => {
@@ -304,10 +333,50 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     }
   };
 
-  // Handle master volume
+  // Apply effective master gain considering Mute and Dim states
+  const applyMasterGain = (vol: number, muted: boolean, dimmed: boolean) => {
+    if (muted) {
+      audioMiniDaw.setMasterVolume(0);
+    } else if (dimmed) {
+      audioMiniDaw.setMasterVolume(Math.round(vol * 0.15));
+    } else {
+      audioMiniDaw.setMasterVolume(vol);
+    }
+  };
+
+  // Handle master volume fader change
   const handleMasterVolChange = (val: number) => {
     setMasterVolume(val);
-    audioMiniDaw.setMasterVolume(val);
+    applyMasterGain(val, isMasterMuted, isMasterDimmed);
+  };
+
+  // Toggle Master Mute (Mutes all tracks combined)
+  const handleToggleMasterMute = () => {
+    const nextMuted = !isMasterMuted;
+    setIsMasterMuted(nextMuted);
+    applyMasterGain(masterVolume, nextMuted, isMasterDimmed);
+  };
+
+  // Toggle Master Dim (-20 dB monitor pad)
+  const handleToggleMasterDim = () => {
+    const nextDimmed = !isMasterDimmed;
+    setIsMasterDimmed(nextDimmed);
+    applyMasterGain(masterVolume, isMasterMuted, nextDimmed);
+  };
+
+  // Toggle Mono Collapse
+  const handleToggleMonoCollapse = () => {
+    const nextMono = !isMonoCollapsed;
+    setIsMonoCollapsed(nextMono);
+    audioMiniDaw.setMonoCollapse(nextMono);
+  };
+
+  // Reset Master to 0 dB Unity Gain (85%)
+  const handleResetMasterUnity = () => {
+    setMasterVolume(85);
+    setIsMasterMuted(false);
+    setIsMasterDimmed(false);
+    audioMiniDaw.setMasterVolume(85);
   };
 
   // Update Effects parameter and immediately push to Web Audio graph
@@ -1010,6 +1079,146 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
             </div>
           </div>
         ))}
+
+        {/* GLOBAL MASTER OUTPUT BUS CHANNEL STRIP (Controls Combined Output Gain of all tracks) */}
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-2 border-indigo-500/50 rounded-xl p-4 shadow-xl flex items-center justify-between flex-wrap gap-4 mt-3 ring-1 ring-indigo-500/20">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-600 to-amber-500 flex items-center justify-center font-mono font-black text-white text-xs shadow-lg ring-1 ring-white/20">
+              M
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-black text-white tracking-wider font-mono uppercase flex items-center gap-1.5">
+                  <span>GLOBAL MASTER OUTPUT BUS</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    COMBINED GAIN
+                  </span>
+                </h4>
+              </div>
+              <p className="text-[10px] font-mono text-slate-400 mt-0.5">
+                Controls combined output gain across all {tracks.length} tracks • Unity: 85% (0.0 dB)
+              </p>
+            </div>
+          </div>
+
+          {/* Master Channel Strip Controls: Mute, Dim, Mono, Fader, Meters */}
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Quick Action Buttons: Mute All, Dim -20dB, Mono Sum, Unity Reset */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleToggleMasterMute}
+                className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono flex items-center gap-1 cursor-pointer ${
+                  isMasterMuted
+                    ? 'bg-rose-600 text-white shadow-rose-950 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                }`}
+                title={isMasterMuted ? 'Unmute Master Output' : 'Mute Master Output (All Tracks)'}
+              >
+                {isMasterMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                <span>{isMasterMuted ? 'MUTED' : 'MUTE'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleMasterDim}
+                className={`px-2 py-1 rounded text-[10px] font-bold transition font-mono cursor-pointer ${
+                  isMasterDimmed
+                    ? 'bg-amber-500 text-slate-950 font-black'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+                title="Dim Output by -20 dB (Protection / Conversation Mode)"
+              >
+                DIM -20dB
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleMonoCollapse}
+                className={`px-2 py-1 rounded text-[10px] font-bold transition font-mono cursor-pointer ${
+                  isMonoCollapsed
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+                title="Mono Sum Check (Verify Phase Cancellation)"
+              >
+                {isMonoCollapsed ? 'MONO' : 'STEREO'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetMasterUnity}
+                className="px-2 py-1 rounded text-[10px] font-mono text-slate-400 hover:text-indigo-300 bg-slate-800/80 hover:bg-slate-800 transition cursor-pointer"
+                title="Reset Master to 0 dB Unity Gain (85%)"
+              >
+                0 dB Unity
+              </button>
+            </div>
+
+            {/* Master Volume Fader with Scale */}
+            <div className="flex items-center gap-2.5 bg-slate-900/90 px-3 py-1.5 rounded-lg border border-slate-800">
+              <span className="text-[10px] font-mono font-bold uppercase text-slate-400">Master Fader:</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={isMasterMuted ? 0 : masterVolume}
+                disabled={isMasterMuted}
+                onChange={(e) => handleMasterVolChange(parseInt(e.target.value))}
+                className="w-32 accent-indigo-500 h-2 bg-slate-800 rounded-lg cursor-pointer disabled:opacity-40"
+              />
+              <div className="font-mono text-right min-w-[70px]">
+                <div className="text-xs font-black text-indigo-300">
+                  {isMasterMuted
+                    ? '-∞ dB'
+                    : masterVolume === 85
+                    ? '0.0 dB'
+                    : masterVolume > 85
+                    ? `+${((masterVolume - 85) * 0.2).toFixed(1)} dB`
+                    : `${((masterVolume - 85) * 0.4).toFixed(1)} dB`}
+                </div>
+                <div className="text-[9px] text-slate-500">{masterVolume}% gain</div>
+              </div>
+            </div>
+
+            {/* Dual Stereo Master VU Peak Meters */}
+            <div className="flex flex-col gap-0.5 w-24 bg-slate-950 p-1.5 rounded-md border border-slate-800 shrink-0">
+              <div className="flex items-center justify-between text-[7px] font-mono text-slate-400 px-0.5 font-bold">
+                <span>MASTER L</span>
+                <span className={masterLevels.l > 85 || masterLevels.r > 85 ? 'text-rose-400 font-black' : 'text-slate-500'}>
+                  {masterLevels.l > 85 || masterLevels.r > 85 ? 'CLIP' : '0 dB'}
+                </span>
+                <span>R</span>
+              </div>
+              {/* L Meter */}
+              <div className="w-full bg-slate-900 rounded-xs h-2 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-75 rounded-xs ${
+                    masterLevels.l > 85
+                      ? 'bg-rose-500'
+                      : masterLevels.l > 65
+                      ? 'bg-amber-400'
+                      : 'bg-indigo-400'
+                  }`}
+                  style={{ width: `${masterLevels.l}%` }}
+                />
+              </div>
+              {/* R Meter */}
+              <div className="w-full bg-slate-900 rounded-xs h-2 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-75 rounded-xs ${
+                    masterLevels.r > 85
+                      ? 'bg-rose-500'
+                      : masterLevels.r > 65
+                      ? 'bg-amber-400'
+                      : 'bg-indigo-400'
+                  }`}
+                  style={{ width: `${masterLevels.r}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* OPTIONAL SECONDARY RECHARTS TELEMETRY (COLLAPSIBLE) */}

@@ -53,6 +53,42 @@ async function resolveImageData(input: string, fallbackMime = 'image/png'): Prom
   return stripBase64Header(input);
 }
 
+// Robust Cascade Fallback Generator for Text & Chat Tasks
+// Shields against temporary 503 high-demand spikes on gemini-3.8-flash
+async function generateContentWithFallback(
+  ai: GoogleGenAI,
+  preferredModel: string,
+  params: { contents: any; config?: any }
+): Promise<{ text: string; usedModel: string; rawResponse?: any }> {
+  const normalizedPreferred = preferredModel === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : preferredModel;
+  const candidateModels = Array.from(
+    new Set([
+      normalizedPreferred,
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash'
+    ].filter(Boolean))
+  );
+
+  let lastError: any = null;
+  for (const model of candidateModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: params.contents,
+        config: params.config,
+      });
+      if (response && response.text) {
+        return { text: response.text, usedModel: model, rawResponse: response };
+      }
+    } catch (err: any) {
+      console.warn(`Model candidate ${model} failed, cascading to next model:`, err?.message || err);
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('All model candidates in the cascade failed to respond.');
+}
+
 // 1. Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -63,7 +99,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Search Grounding using gemini-3.5-flash with googleSearch tool
+// 2. Search Grounding using gemini-3.8-flash with googleSearch tool
 app.post('/api/gemini/search', async (req, res) => {
   try {
     const { query } = req.body;
@@ -72,7 +108,7 @@ app.post('/api/gemini/search', async (req, res) => {
     }
     const ai = getGenAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-3.8-flash',
       contents: `You are an elite music industry research consultant grounded in current Billboard Christian/Gospel chart trends, Nashville Christian audio production benchmarks, and theological scripture reference indexing.\n\nQuery: ${query}`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -105,10 +141,10 @@ app.post('/api/gemini/search', async (req, res) => {
   }
 });
 
-// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-3.5-flash)
+// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-3.8-flash)
 app.post('/api/gemini/audit-lyric', async (req, res) => {
   try {
-    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.1-pro-preview' } = req.body;
+    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.8-flash' } = req.body;
     const ai = getGenAI();
 
     const systemPrompt = `You are the Lead Theological & Lyrical Supervisor for brickOS Sovereign Records.
@@ -134,23 +170,12 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
 - 60-Second Standalone Hook Assessment
 - Ready-to-use Rewrite Suggestions for weak sections.`;
 
-    let responseText = '';
-    try {
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`,
-      });
-      responseText = response.text || '';
-    } catch (primaryErr) {
-      console.warn(`Model ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
-      const fallbackResponse = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`,
-      });
-      responseText = fallbackResponse.text || '';
-    }
+    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const result = await generateContentWithFallback(ai, targetModel, {
+      contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`
+    });
 
-    res.json({ audit: responseText });
+    res.json({ audit: result.text, modelUsed: result.usedModel });
   } catch (err: any) {
     console.error('Lyric audit error:', err);
     res.status(500).json({ error: err.message || 'Lyric audit failed' });
@@ -160,7 +185,7 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
 // 3b. Automated Lyric Rewrite Engine incorporating approved audit feedback
 app.post('/api/gemini/rewrite-lyrics', async (req, res) => {
   try {
-    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.1-pro-preview' } = req.body;
+    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.8-flash' } = req.body;
     if (!lyrics) {
       return res.status(400).json({ error: 'Original lyrics are required' });
     }
@@ -196,26 +221,13 @@ ${lyrics}
 
 Output the full rewritten lyrics now:`;
 
-    let responseText = '';
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-      });
-      responseText = response.text || '';
-    } catch (primaryErr) {
-      console.warn(`Rewrite with ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
-      const fallback = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-      });
-      responseText = fallback.text || '';
-    }
+    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const result = await generateContentWithFallback(ai, targetModel, { contents: prompt });
 
     // Strip any markdown code blocks if the model wrapped output
-    responseText = responseText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '').trim();
+    const cleaned = result.text.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '').trim();
 
-    res.json({ rewrittenLyrics: responseText });
+    res.json({ rewrittenLyrics: cleaned, modelUsed: result.usedModel });
   } catch (err: any) {
     console.error('Lyric rewrite error:', err);
     res.status(500).json({ error: err.message || 'Lyric rewrite failed' });
@@ -225,7 +237,7 @@ Output the full rewritten lyrics now:`;
 // 3c. 3-Way Song Version Comparative Audit Engine
 app.post('/api/gemini/compare-versions', async (req, res) => {
   try {
-    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-3.1-pro-preview' } = req.body;
+    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-3.8-flash' } = req.body;
     if (!versions || !Array.isArray(versions) || versions.length < 2) {
       return res.status(400).json({ error: 'At least 2 versions are required for comparative audit' });
     }
@@ -266,23 +278,10 @@ ${versionBlocks}
 
 Deliver your comprehensive comparative audit now:`;
 
-    let responseText = '';
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-      });
-      responseText = response.text || '';
-    } catch (primaryErr) {
-      console.warn(`Version compare with ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
-      const fallback = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-      });
-      responseText = fallback.text || '';
-    }
+    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const result = await generateContentWithFallback(ai, targetModel, { contents: prompt });
 
-    res.json({ audit: responseText });
+    res.json({ audit: result.text, modelUsed: result.usedModel });
   } catch (err: any) {
     console.error('Version compare error:', err);
     res.status(500).json({ error: err.message || 'Version comparison failed' });
@@ -292,7 +291,7 @@ Deliver your comprehensive comparative audit now:`;
 // 4. Multi-Turn Gemini Chatbot (with custom roles)
 app.post('/api/gemini/chat', async (req, res) => {
   try {
-    const { messages, systemInstruction, model = 'gemini-3.5-flash' } = req.body;
+    const { messages, systemInstruction, model = 'gemini-3.8-flash' } = req.body;
     const ai = getGenAI();
 
     // Map conversation messages to GenAI format
@@ -301,29 +300,19 @@ app.post('/api/gemini/chat', async (req, res) => {
       parts: [{ text: m.content }],
     }));
 
-    let responseText = '';
-    try {
-      const response = await ai.models.generateContent({
-        model: model,
-        contents,
-        config: {
-          systemInstruction: systemInstruction || 'You are an elite music producer and theologian inside brickOS Studio.',
-        },
-      });
-      responseText = response.text || '';
-    } catch (primaryErr) {
-      console.warn(`Chat model ${model} failed, falling back to gemini-3.5-flash:`, primaryErr);
-      const fallbackResponse = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents,
-        config: {
-          systemInstruction: systemInstruction || 'You are an elite music producer and theologian inside brickOS Studio.',
-        },
-      });
-      responseText = fallbackResponse.text || '';
+    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const result = await generateContentWithFallback(ai, targetModel, {
+      contents,
+      config: {
+        systemInstruction: systemInstruction || 'You are an elite music producer and theologian inside brickOS Studio.',
+      },
+    });
+
+    if (!result.text) {
+      return res.status(500).json({ error: 'Gemini returned an empty response. Please retry.' });
     }
 
-    res.json({ reply: responseText });
+    res.json({ reply: result.text, modelUsed: result.usedModel });
   } catch (err: any) {
     console.error('Chat error:', err);
     res.status(500).json({ error: err.message || 'Chat generation failed' });
@@ -485,7 +474,7 @@ app.post('/api/gemini/modify-asset', async (req, res) => {
       let refinedPrompt = currentPrompt || editPrompt;
       try {
         const textResponse = await ai.models.generateContent({
-          model: 'gemini-3.5-flash',
+          model: 'gemini-3.8-flash',
           contents: `A music producer asked Gemini to change an album visual: "${userInstruction}".
 Original title: "${currentName || 'Album Visual'}"
 Original prompt: "${currentPrompt || ''}"
@@ -530,7 +519,7 @@ Return actionable JSON:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-3.8-flash',
         contents: `Process user modification request: ${userInstruction}`,
         config: {
           systemInstruction,
@@ -554,7 +543,7 @@ Return actionable JSON:
   }
 });
 
-// 6. Analyze Images with Gemini Pro (gemini-3.1-pro-preview)
+// 6. Analyze Images with Gemini Pro (gemini-3.1-pro-preview / gemini-3.8-flash)
 app.post('/api/gemini/analyze-image', async (req, res) => {
   try {
     const { base64Image, mimeType = 'image/png', prompt } = req.body;
@@ -567,7 +556,7 @@ app.post('/api/gemini/analyze-image', async (req, res) => {
     const userPrompt = prompt || 'Analyze this image in detail for album art, video seed frame suitability, color harmony, visual mood, theological symbolism, and short-form hook retention.';
 
     let responseText = '';
-    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.5-flash'];
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.8-flash'];
 
     for (const model of candidates) {
       try {
@@ -746,7 +735,7 @@ app.post('/api/gemini/analyze-video', async (req, res) => {
       ];
     }
 
-    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.5-flash'];
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.8-flash'];
     let responseText = '';
 
     for (const model of candidates) {

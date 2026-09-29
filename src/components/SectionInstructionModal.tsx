@@ -421,7 +421,7 @@ export const SECTION_GUIDES: Record<StudioSectionId, SectionGuideItem> = {
     title: 'Google Search Grounding',
     badge: 'Live Market Intel',
     icon: Search,
-    summary: 'Real-time web research engine powered by gemini-3.5-flash with Google Search grounding tool.',
+    summary: 'Real-time web research engine powered by gemini-3.8-flash with Google Search grounding tool.',
     purpose: 'Retrieve verified real-time Billboard Christian & Gospel chart trends, Nashville production techniques, BPM ranges, and scripture cross-references.',
     keySteps: [
       'Enter a search query (e.g. "Current top 10 Christian Hip Hop tracks tempo and 808 style 2026").',

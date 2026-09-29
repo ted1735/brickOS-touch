@@ -89,7 +89,7 @@ Template focus: ${template}
 Ensure high 3-second hook velocity, blue-collar authenticity, zero religious clichés, and clear Call To Action.`
             }
           ],
-          model: 'gemini-3.5-flash'
+          model: 'gemini-3.8-flash'
         })
       });
       const data = await res.json();

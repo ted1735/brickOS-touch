@@ -20,62 +20,230 @@
   transition: all 0.2s ease-in-out;
 }
 
-/* Dark Mode Defaults */
+/* Dark Mode Defaults: Moon (High-Contrast Obsidian Studio) */
 html.dark,
-:root.dark {
+:root.dark,
+html.moon,
+:root.moon,
+html[data-theme="moon"] {
   color-scheme: dark;
   background-color: #020617;
   color: #f8fafc;
 }
 
-/* Light Mode Comprehensive Theme Inversion */
+/* ========================================================================= */
+/* STARS THEME: Soft contrast, easy on the eyes, muted twilight aesthetic   */
+/* Designed for late-night critical listening & zero ocular fatigue          */
+/* ========================================================================= */
+html.stars,
+:root.stars,
+html[data-theme="stars"] {
+  color-scheme: dark;
+  background-color: #0c101c !important;
+  color: #cbd5e1 !important;
+}
+
+html.stars body,
+html[data-theme="stars"] body {
+  background-color: #0c101c !important;
+  color: #cbd5e1 !important;
+}
+
+/* Main workspace backgrounds in Stars Mode */
+html.stars main,
+html[data-theme="stars"] main {
+  background-color: #0c101c !important;
+  color: #cbd5e1 !important;
+}
+
+/* Soft muted containers and cards in Stars Mode */
+html.stars .bg-slate-900,
+html[data-theme="stars"] .bg-slate-900 {
+  background-color: #131929 !important;
+  color: #cbd5e1 !important;
+}
+
+html.stars .bg-slate-950,
+html[data-theme="stars"] .bg-slate-950 {
+  background-color: #0a0d17 !important;
+  color: #cbd5e1 !important;
+}
+
+html.stars .bg-slate-800,
+html[data-theme="stars"] .bg-slate-800 {
+  background-color: #1a2236 !important;
+  color: #cbd5e1 !important;
+}
+
+html.stars .bg-slate-900\/90,
+html.stars .bg-slate-900\/95,
+html[data-theme="stars"] .bg-slate-900\/90,
+html[data-theme="stars"] .bg-slate-900\/95 {
+  background-color: rgba(19, 25, 41, 0.95) !important;
+}
+
+html.stars .bg-slate-950\/80,
+html.stars .bg-slate-950\/90,
+html[data-theme="stars"] .bg-slate-950\/80,
+html[data-theme="stars"] .bg-slate-950\/90 {
+  background-color: rgba(10, 13, 23, 0.9) !important;
+}
+
+/* Gentle, muted border styles in Stars Mode */
+html.stars .border-slate-800,
+html.stars .border-slate-700,
+html.stars .border-slate-800\/80,
+html.stars .border-slate-800\/60,
+html.stars .border-slate-800\/90,
+html[data-theme="stars"] .border-slate-800,
+html[data-theme="stars"] .border-slate-700,
+html[data-theme="stars"] .border-slate-800\/80,
+html[data-theme="stars"] .border-slate-800\/60 {
+  border-color: #212b42 !important;
+}
+
+/* Soft muted typography in Stars Mode (eliminates stark high-contrast glare) */
+html.stars .text-white,
+html[data-theme="stars"] .text-white {
+  color: #e2e8f0 !important;
+}
+
+html.stars .text-slate-100,
+html[data-theme="stars"] .text-slate-100 {
+  color: #cbd5e1 !important;
+}
+
+html.stars .text-slate-200,
+html[data-theme="stars"] .text-slate-200 {
+  color: #b8c4d9 !important;
+}
+
+html.stars .text-slate-300,
+html[data-theme="stars"] .text-slate-300 {
+  color: #94a3b8 !important;
+}
+
+html.stars .text-slate-400,
+html[data-theme="stars"] .text-slate-400 {
+  color: #72819d !important;
+}
+
+html.stars .text-slate-500,
+html[data-theme="stars"] .text-slate-500 {
+  color: #596782 !important;
+}
+
+/* Inputs, textareas, selects in Stars Mode */
+html.stars input[type="text"],
+html.stars input[type="password"],
+html.stars textarea,
+html.stars select,
+html[data-theme="stars"] input[type="text"],
+html[data-theme="stars"] input[type="password"],
+html[data-theme="stars"] textarea,
+html[data-theme="stars"] select {
+  background-color: #0e1322 !important;
+  border-color: #232d45 !important;
+  color: #cbd5e1 !important;
+}
+
+html.stars input::placeholder,
+html.stars textarea::placeholder,
+html[data-theme="stars"] input::placeholder,
+html[data-theme="stars"] textarea::placeholder {
+  color: #56647e !important;
+}
+
+/* Soft muted badge backgrounds in Stars Mode */
+html.stars .bg-indigo-950,
+html[data-theme="stars"] .bg-indigo-950 {
+  background-color: rgba(30, 27, 75, 0.6) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+html.stars .bg-emerald-950,
+html[data-theme="stars"] .bg-emerald-950 {
+  background-color: rgba(6, 78, 59, 0.5) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+html.stars .bg-amber-950,
+html[data-theme="stars"] .bg-amber-950 {
+  background-color: rgba(120, 53, 15, 0.5) !important;
+  color: #fcd34d !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Light Mode Comprehensive Theme Inversion (Sun: Daylight Nashville) */
 html.light,
-html:not(.dark) {
+html.sun,
+html[data-theme="sun"],
+html:not(.dark):not(.stars):not(.moon) {
   color-scheme: light;
 }
 
 html.light body,
-html:not(.dark) body {
+html.sun body,
+html[data-theme="sun"] body,
+html:not(.dark):not(.stars):not(.moon) body {
   background-color: #f8fafc !important;
   color: #0f172a !important;
 }
 
 /* Main workspace backgrounds in Light Mode */
 html.light main,
-html:not(.dark) main {
+html.sun main,
+html[data-theme="sun"] main,
+html:not(.dark):not(.stars):not(.moon) main {
   background-color: #f8fafc !important;
 }
 
 /* Containers and cards */
 html.light .bg-slate-900,
-html:not(.dark) .bg-slate-900 {
+html.sun .bg-slate-900,
+html[data-theme="sun"] .bg-slate-900,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-900 {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
 html.light .bg-slate-950,
-html:not(.dark) .bg-slate-950 {
+html.sun .bg-slate-950,
+html[data-theme="sun"] .bg-slate-950,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-950 {
   background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
 html.light .bg-slate-800,
-html:not(.dark) .bg-slate-800 {
+html.sun .bg-slate-800,
+html[data-theme="sun"] .bg-slate-800,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-800 {
   background-color: #e2e8f0 !important;
   color: #1e293b !important;
 }
 
 html.light .bg-slate-900\/90,
 html.light .bg-slate-900\/95,
-html:not(.dark) .bg-slate-900\/90,
-html:not(.dark) .bg-slate-900\/95 {
+html.sun .bg-slate-900\/90,
+html.sun .bg-slate-900\/95,
+html[data-theme="sun"] .bg-slate-900\/90,
+html[data-theme="sun"] .bg-slate-900\/95,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-900\/90,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-900\/95 {
   background-color: rgba(255, 255, 255, 0.95) !important;
 }
 
 html.light .bg-slate-950\/80,
 html.light .bg-slate-950\/90,
-html:not(.dark) .bg-slate-950\/80,
-html:not(.dark) .bg-slate-950\/90 {
+html.sun .bg-slate-950\/80,
+html.sun .bg-slate-950\/90,
+html[data-theme="sun"] .bg-slate-950\/80,
+html[data-theme="sun"] .bg-slate-950\/90,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-950\/80,
+html:not(.dark):not(.stars):not(.moon) .bg-slate-950\/90 {
   background-color: rgba(241, 245, 249, 0.9) !important;
 }
 
@@ -84,30 +252,48 @@ html.light .border-slate-800,
 html.light .border-slate-700,
 html.light .border-slate-800\/80,
 html.light .border-slate-800\/60,
-html:not(.dark) .border-slate-800,
-html:not(.dark) .border-slate-700,
-html:not(.dark) .border-slate-800\/80,
-html:not(.dark) .border-slate-800\/60 {
+html.sun .border-slate-800,
+html.sun .border-slate-700,
+html.sun .border-slate-800\/80,
+html.sun .border-slate-800\/60,
+html[data-theme="sun"] .border-slate-800,
+html[data-theme="sun"] .border-slate-700,
+html[data-theme="sun"] .border-slate-800\/80,
+html[data-theme="sun"] .border-slate-800\/60,
+html:not(.dark):not(.stars):not(.moon) .border-slate-800,
+html:not(.dark):not(.stars):not(.moon) .border-slate-700,
+html:not(.dark):not(.stars):not(.moon) .border-slate-800\/80,
+html:not(.dark):not(.stars):not(.moon) .border-slate-800\/60 {
   border-color: #e2e8f0 !important;
 }
 
 /* Text color overrides in Light Mode */
 html.light .text-white,
-html:not(.dark) .text-white {
+html.sun .text-white,
+html[data-theme="sun"] .text-white,
+html:not(.dark):not(.stars):not(.moon) .text-white {
   color: #0f172a !important;
 }
 
 html.light .text-slate-200,
 html.light .text-slate-300,
-html:not(.dark) .text-slate-200,
-html:not(.dark) .text-slate-300 {
+html.sun .text-slate-200,
+html.sun .text-slate-300,
+html[data-theme="sun"] .text-slate-200,
+html[data-theme="sun"] .text-slate-300,
+html:not(.dark):not(.stars):not(.moon) .text-slate-200,
+html:not(.dark):not(.stars):not(.moon) .text-slate-300 {
   color: #1e293b !important;
 }
 
 html.light .text-slate-400,
 html.light .text-slate-500,
-html:not(.dark) .text-slate-400,
-html:not(.dark) .text-slate-500 {
+html.sun .text-slate-400,
+html.sun .text-slate-500,
+html[data-theme="sun"] .text-slate-400,
+html[data-theme="sun"] .text-slate-500,
+html:not(.dark):not(.stars):not(.moon) .text-slate-400,
+html:not(.dark):not(.stars):not(.moon) .text-slate-500 {
   color: #64748b !important;
 }
 
@@ -116,10 +302,18 @@ html.light input[type="text"],
 html.light input[type="password"],
 html.light textarea,
 html.light select,
-html:not(.dark) input[type="text"],
-html:not(.dark) input[type="password"],
-html:not(.dark) textarea,
-html:not(.dark) select {
+html.sun input[type="text"],
+html.sun input[type="password"],
+html.sun textarea,
+html.sun select,
+html[data-theme="sun"] input[type="text"],
+html[data-theme="sun"] input[type="password"],
+html[data-theme="sun"] textarea,
+html[data-theme="sun"] select,
+html:not(.dark):not(.stars):not(.moon) input[type="text"],
+html:not(.dark):not(.stars):not(.moon) input[type="password"],
+html:not(.dark):not(.stars):not(.moon) textarea,
+html:not(.dark):not(.stars):not(.moon) select {
   background-color: #ffffff !important;
   border-color: #cbd5e1 !important;
   color: #0f172a !important;
@@ -127,8 +321,12 @@ html:not(.dark) select {
 
 html.light input::placeholder,
 html.light textarea::placeholder,
-html:not(.dark) input::placeholder,
-html:not(.dark) textarea::placeholder {
+html.sun input::placeholder,
+html.sun textarea::placeholder,
+html[data-theme="sun"] input::placeholder,
+html[data-theme="sun"] textarea::placeholder,
+html:not(.dark):not(.stars):not(.moon) input::placeholder,
+html:not(.dark):not(.stars):not(.moon) textarea::placeholder {
   color: #94a3b8 !important;
 }
 

@@ -86,7 +86,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditResult, setAuditResult] = useState<string | null>(null);
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
-  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.5-flash'>('gemini-3.1-pro-preview');
+  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.8-flash'>('gemini-3.8-flash');
   const [copiedBlock, setCopiedBlock] = useState<number | null>(null);
   const [isFeedbackCopied, setIsFeedbackCopied] = useState(false);
 
@@ -414,7 +414,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
           ', ' +
           new Date().toLocaleDateString(),
-        model: auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.5 Flash',
+        model: auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash',
         feedback: feedbackText,
         status: 'pending'
       };
@@ -512,7 +512,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
       onUpdateTrack('version_commit', {
         version: postVersionLabel,
         reason: `Applied Gemini audit revisions (${
-          auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.5 Flash'
+          auditModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash'
         })`,
         lyrics: rewrittenLyrics,
         timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -930,8 +930,8 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
               onChange={(e) => setAuditModel(e.target.value as any)}
               className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
             >
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash (Fast & Efficient)</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Theological)</option>
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fast)</option>
             </select>
 
             <button
