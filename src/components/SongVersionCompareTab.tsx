@@ -23,10 +23,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Layers,
-  Trophy
+  Trophy,
+  Headphones
 } from 'lucide-react';
 import { VisionBoardCanvas } from './VisionBoardCanvas';
 import { SectionCriticalComparator } from './SectionCriticalComparator';
+import { AudioComparisonABC } from './AudioComparisonABC';
 import { songVersionsCatalog } from '../data/songVersionsCatalog';
 import { Track } from '../types';
 
@@ -86,7 +88,7 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   // Baseline state initialized from canonical catalog or activeTrack
   const initialSongId = activeTrack?.id || 'TRK-27';
   const [selectedSongId, setSelectedSongId] = useState<string>(initialSongId);
-  const [viewMode, setViewMode] = useState<'sections' | 'edit' | 'cards' | 'diff' | 'board'>('sections');
+  const [viewMode, setViewMode] = useState<'audio' | 'sections' | 'edit' | 'cards' | 'diff' | 'board'>('audio');
   const [syncScroll, setSyncScroll] = useState<boolean>(true);
   const [copiedCol, setCopiedCol] = useState<number | null>(null);
 
@@ -341,12 +343,22 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
             <span>Sync Scroll</span>
           </button>
 
-          {/* Mode Selector (Sections, Edit, Cards, Diff, Board) */}
+          {/* Mode Selector (Audio ABC, Sections, Edit, Cards, Diff, Board) */}
           <div className="flex bg-slate-950 border border-slate-800 rounded p-0.5">
+            <button
+              onClick={() => setViewMode('audio')}
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-bold transition ${
+                viewMode === 'audio' ? 'bg-gradient-to-r from-amber-600 via-indigo-600 to-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="A/B/C Audio Version Comparison: 3 side-by-side tracks with dedicated waveforms, upload support, and independent playback controls"
+            >
+              <Headphones className="w-3.5 h-3.5 text-amber-300" />
+              <span>A/B/C Audio Shootout</span>
+            </button>
             <button
               onClick={() => setViewMode('sections')}
               className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-bold transition ${
-                viewMode === 'sections' ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                viewMode === 'sections' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
               title="Industry-standard section-by-section A/B/X critical listening engine (Chorus vs Chorus, Verse vs Verse)"
             >
@@ -442,8 +454,17 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
         </div>
       )}
 
-      {/* Mode Viewport: Section Shootout vs Vision Board vs 3-Column Markdown Viewports */}
-      {viewMode === 'sections' ? (
+      {/* Mode Viewport: Audio ABC Shootout vs Section Shootout vs Vision Board vs 3-Column Markdown Viewports */}
+      {viewMode === 'audio' ? (
+        <div className="flex-1 min-h-[660px] overflow-hidden">
+          <AudioComparisonABC
+            activeTrack={activeTrack}
+            onNavigateToTab={onNavigateToTab}
+            showToast={showToast}
+            isDarkMode={isDarkMode}
+          />
+        </div>
+      ) : viewMode === 'sections' ? (
         <div className="flex-1 min-h-[620px] overflow-hidden">
           <SectionCriticalComparator
             activeTrack={activeTrack || (songVersionsCatalog[selectedSongId] ? {
