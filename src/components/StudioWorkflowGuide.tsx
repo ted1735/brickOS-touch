@@ -15,6 +15,7 @@ import {
   Info
 } from 'lucide-react';
 import { StudioTheme } from '../types';
+import { StudioThemeSelector } from './StudioThemeSelector';
 
 export interface WorkflowStage {
   step: number;
@@ -90,6 +91,7 @@ interface StudioWorkflowGuideProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
   theme?: StudioTheme;
+  onSelectTheme?: (theme: StudioTheme) => void;
   isDarkMode?: boolean;
   focusMode: boolean;
   onToggleFocusMode: () => void;
@@ -99,6 +101,7 @@ export const StudioWorkflowGuide: React.FC<StudioWorkflowGuideProps> = ({
   activeTab,
   onSelectTab,
   theme = 'moon',
+  onSelectTheme,
   isDarkMode = true,
   focusMode,
   onToggleFocusMode
@@ -163,8 +166,18 @@ export const StudioWorkflowGuide: React.FC<StudioWorkflowGuideProps> = ({
           </div>
         </div>
 
-        {/* Right Actions: Next Step recommendation, Focus Mode, & Expand/Collapse */}
-        <div className="flex items-center gap-2 ml-auto">
+        {/* Right Actions: Theme Selector, Next Step recommendation, Focus Mode, & Expand/Collapse */}
+        <div className="flex items-center gap-2 ml-auto flex-wrap">
+          {/* Universal 3-Theme Selector */}
+          {onSelectTheme && (
+            <StudioThemeSelector
+              currentTheme={theme}
+              onSelectTheme={onSelectTheme}
+              variant="workflow"
+              showLabels={true}
+            />
+          )}
+
           {/* Quick "Next Recommended Step" Button */}
           {currentStage.step < 5 && (
             <button

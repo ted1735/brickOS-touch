@@ -16,8 +16,9 @@ import {
   Moon,
   HelpCircle
 } from 'lucide-react';
-import { Track } from '../types';
+import { Track, StudioTheme } from '../types';
 import { CURRENT_STUDIO_VERSION } from '../utils/versioning';
+import { StudioThemeSelector } from './StudioThemeSelector';
 
 interface NavigationHeaderProps {
   selectedTrack: Track;
@@ -31,6 +32,8 @@ interface NavigationHeaderProps {
   setActiveTab: (tab: string) => void;
   selectedEpFilter?: string;
   isDarkMode?: boolean;
+  studioTheme?: StudioTheme;
+  onSelectTheme?: (theme: StudioTheme) => void;
   onToggleTheme?: () => void;
 }
 
@@ -46,6 +49,8 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   setActiveTab,
   selectedEpFilter = 'ALL',
   isDarkMode = true,
+  studioTheme = 'moon',
+  onSelectTheme,
   onToggleTheme
 }) => {
   return (
@@ -218,8 +223,15 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           </button>
         )}
 
-        {/* LIGHT / DARK MODE TOGGLE SWITCH */}
-        {onToggleTheme && (
+        {/* UNIVERSAL 3-THEME SELECTOR: SUN / MOON / STARS */}
+        {onSelectTheme ? (
+          <StudioThemeSelector
+            currentTheme={studioTheme}
+            onSelectTheme={onSelectTheme}
+            variant="header"
+            showLabels={true}
+          />
+        ) : onToggleTheme ? (
           <button
             onClick={onToggleTheme}
             className={`p-2 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
@@ -227,15 +239,15 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
                 ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
             }`}
-            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            aria-label="Toggle Light and Dark Mode"
+            title="Cycle Studio Theme"
+            aria-label="Cycle Studio Theme"
           >
             {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
             <span className="text-xs font-bold hidden xl:inline">
-              {isDarkMode ? 'Light' : 'Dark'}
+              {studioTheme.toUpperCase()}
             </span>
           </button>
-        )}
+        ) : null}
       </div>
     </header>
   );

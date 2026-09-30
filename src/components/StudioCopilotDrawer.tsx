@@ -12,9 +12,11 @@ import {
   RefreshCw,
   Clock,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Palette
 } from 'lucide-react';
-import { Track, ChatMessage } from '../types';
+import { Track, ChatMessage, StudioTheme } from '../types';
+import { StudioThemeSelector } from './StudioThemeSelector';
 
 interface SearchSource {
   title?: string;
@@ -45,6 +47,9 @@ interface StudioCopilotDrawerProps {
   isSearching: boolean;
   searchResult: SearchGroundingResult | null;
   isDarkMode?: boolean;
+  studioTheme?: StudioTheme;
+  onSelectTheme?: (theme: StudioTheme) => void;
+  onOpenThemeModal?: () => void;
 }
 
 export const StudioCopilotDrawer: React.FC<StudioCopilotDrawerProps> = ({
@@ -65,7 +70,10 @@ export const StudioCopilotDrawer: React.FC<StudioCopilotDrawerProps> = ({
   onSearchGrounding,
   isSearching,
   searchResult,
-  isDarkMode = true
+  isDarkMode = true,
+  studioTheme = 'moon',
+  onSelectTheme,
+  onOpenThemeModal
 }) => {
   const [drawerTab, setDrawerTab] = useState<'copilot' | 'search' | 'telemetry'>('copilot');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -106,6 +114,26 @@ export const StudioCopilotDrawer: React.FC<StudioCopilotDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {onSelectTheme && (
+              <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <StudioThemeSelector
+                  currentTheme={studioTheme}
+                  onSelectTheme={onSelectTheme}
+                  variant="header"
+                  showLabels={false}
+                />
+                {onOpenThemeModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenThemeModal}
+                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                    title="Studio Theme Customizer"
+                  >
+                    <Palette className="w-3 h-3 text-indigo-400" />
+                  </button>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setIsExpanded(prev => !prev)}

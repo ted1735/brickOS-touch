@@ -422,38 +422,58 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
     setAssets(prev => prev.map(a => (a.id === assetId ? { ...a, category } : a)));
   };
 
-  // 6. Audition stem audio
+  // 6. Audition stem audio with physical modeling synthesis & authentic timbres
   const handleToggleAudition = (asset: NextcloudFolderAsset) => {
     if (playingAssetId === asset.id) {
       audioMiniDaw.stopPlayback();
       setPlayingAssetId(null);
     } else {
       audioMiniDaw.stopPlayback();
-      const bpm = asset.bpm || 80;
-      const type =
-        asset.category === 'UVR5_VOCAL_STEM'
-          ? 'vocal'
-          : asset.category === 'INSTRUMENTAL_STEM'
-          ? 'instrumental'
-          : 'master';
+      const bpm = asset.bpm || selectedTrack.bpm || 80;
+      const key = asset.key || selectedTrack.key || 'G Major';
+
+      // Accurately determine stemType from category, filename, and stem metadata
+      const fn = (asset.filename || '').toLowerCase();
+      let stemType = asset.stemType || 'master';
+      if (asset.category === 'UVR5_DRUMS_STEM' || fn.includes('drum') || fn.includes('percussion') || fn.includes('snare') || fn.includes('kick') || fn.includes('mpc') || fn.includes('anvil') || fn.includes('foley')) {
+        stemType = 'drums';
+      } else if (asset.category === 'UVR5_BASS_STEM' || fn.includes('bass') || fn.includes('sub') || fn.includes('808')) {
+        stemType = 'bass';
+      } else if (fn.includes('organ') || fn.includes('b3') || fn.includes('leslie') || fn.includes('pad')) {
+        stemType = 'organ';
+      } else if (fn.includes('guitar') || fn.includes('acoustic') || fn.includes('martin')) {
+        stemType = 'guitar';
+      } else if (fn.includes('piano') || fn.includes('rhodes') || fn.includes('wurlitzer') || fn.includes('keys')) {
+        stemType = 'piano';
+      } else if (asset.category === 'UVR5_HARMONY_STEM' || fn.includes('choir') || fn.includes('harmony') || fn.includes('harmonies')) {
+        stemType = 'choir';
+      } else if (asset.category === 'UVR5_VOCAL_STEM' || fn.includes('vocal') || fn.includes('lead') || fn.includes('acapella') || fn.includes('spoken')) {
+        stemType = 'vocal';
+      } else if (asset.category === 'MASTER_AUDIO' || fn.includes('master')) {
+        stemType = 'master';
+      }
 
       audioMiniDaw.startPlayback(
         [
           {
             id: 1,
-            name: asset.filename,
-            vol: 90,
+            name: asset.name || asset.filename,
+            vol: 92,
             pan: 0,
             muted: false,
             solo: true,
             trimIn: 0,
             trimOut: 120,
-            freq: type === 'vocal' ? 220 : 110,
-            waveType: type === 'vocal' ? 'triangle' : 'sine',
-            color: '#6366f1'
+            freq: asset.freq || (stemType === 'drums' ? 120 : stemType === 'bass' ? 65 : stemType === 'vocal' ? 220 : 196),
+            waveType: asset.waveType || (stemType === 'drums' ? 'square' : stemType === 'vocal' ? 'sawtooth' : 'triangle'),
+            stemType,
+            color: asset.color || '#06b6d4',
+            audioUrl: asset.audioUrl,
+            webdavPath: asset.webdavPath
           }
         ],
-        bpm
+        bpm,
+        key
       );
       setPlayingAssetId(asset.id);
     }

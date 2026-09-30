@@ -391,6 +391,9 @@ export interface SOPRulesPackage {
 export type NextcloudAssetCategory =
   | 'MASTER_AUDIO'
   | 'UVR5_VOCAL_STEM'
+  | 'UVR5_HARMONY_STEM'
+  | 'UVR5_DRUMS_STEM'
+  | 'UVR5_BASS_STEM'
   | 'INSTRUMENTAL_STEM'
   | 'LYRIC_SOP_DOC'
   | 'VISUAL_ARTWORK'
@@ -418,6 +421,11 @@ export interface NextcloudFolderAsset {
   key?: string;
   audioDurationSeconds?: number;
   previewAudioType?: 'vocal' | 'harmony' | 'instrumental' | 'drums' | 'sawtooth';
+  stemType?: string;
+  freq?: number;
+  waveType?: OscillatorType;
+  color?: string;
+  audioUrl?: string;
   previewImageUrl?: string;
   notes?: string;
   name?: string;

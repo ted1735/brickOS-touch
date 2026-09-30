@@ -680,6 +680,213 @@ class MiniDawEngine {
     }
   }
 
+  // Musical key pitch calculation helper
+  private parseKeyFrequencies(songKey: string = 'G Major') {
+    const clean = (songKey || '').trim().toLowerCase();
+    const isMinor = clean.includes('minor') || (clean.includes('m') && !clean.includes('major'));
+
+    let root = 196.0; // Default G3
+    if (clean.includes('c#') || clean.includes('db')) root = 138.59;
+    else if (clean.includes('c')) root = 130.81;
+    else if (clean.includes('d#') || clean.includes('eb')) root = 155.56;
+    else if (clean.includes('d')) root = 146.83;
+    else if (clean.includes('f#') || clean.includes('gb')) root = 185.00;
+    else if (clean.includes('f')) root = 174.61;
+    else if (clean.includes('g#') || clean.includes('ab')) root = 207.65;
+    else if (clean.includes('g')) root = 196.00;
+    else if (clean.includes('a#') || clean.includes('bb')) root = 233.08;
+    else if (clean.includes('a')) root = 220.00;
+    else if (clean.includes('b')) root = 246.94;
+    else if (clean.includes('e')) root = 164.81;
+
+    const thirdRatio = isMinor ? Math.pow(2, 3 / 12) : Math.pow(2, 4 / 12);
+    const fifthRatio = Math.pow(2, 7 / 12);
+
+    return {
+      root,
+      third: root * thirdRatio,
+      fifth: root * fifthRatio,
+      octave: root * 2,
+      sub: root / 2,
+      isMinor
+    };
+  }
+
+  // Generates a punchy 2-measure rhythmic studio drum loop AudioBuffer (kick, snare, hi-hats)
+  private createRhythmicDrumBuffer(bpm: number): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const sampleRate = this.ctx.sampleRate;
+    const safeBpm = Math.max(50, Math.min(200, bpm || 80));
+    const beatSec = 60 / safeBpm;
+    const totalSec = beatSec * 8; // 2 measures (8 beats)
+    const numSamples = Math.floor(sampleRate * totalSec);
+    const buffer = this.ctx.createBuffer(2, numSamples, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    for (let beat = 0; beat < 8; beat++) {
+      const beatTime = beat * beatSec;
+      const beatSample = Math.floor(beatTime * sampleRate);
+
+      // 1. Kick on beat 0, 2, 4, 6 (with syncopation)
+      const isKick = beat === 0 || beat === 2 || beat === 4 || beat === 6 || (safeBpm >= 95 && beat === 5.5);
+      if (isKick) {
+        const kickDuration = Math.min(Math.floor(sampleRate * 0.22), numSamples - beatSample);
+        for (let i = 0; i < kickDuration; i++) {
+          const t = i / sampleRate;
+          const env = Math.exp(-t * 20);
+          const freq = 45 + 120 * Math.exp(-t * 36);
+          const click = (Math.random() * 2 - 1) * Math.exp(-t * 80) * 0.15;
+          const val = (Math.sin(2 * Math.PI * freq * t) + click) * env * 0.95;
+          const idx = beatSample + i;
+          if (idx < numSamples) {
+            left[idx] += val;
+            right[idx] += val;
+          }
+        }
+      }
+
+      // 2. Snare on backbeats (1, 3, 5, 7)
+      const isSnare = beat % 2 === 1;
+      if (isSnare) {
+        const snareDuration = Math.min(Math.floor(sampleRate * 0.22), numSamples - beatSample);
+        for (let i = 0; i < snareDuration; i++) {
+          const t = i / sampleRate;
+          const env = Math.exp(-t * 20);
+          const noise = (Math.random() * 2 - 1) * 0.65;
+          const tone = Math.sin(2 * Math.PI * 185 * t) * Math.exp(-t * 26) * 0.35;
+          const val = (noise + tone) * env * 0.85;
+          const idx = beatSample + i;
+          if (idx < numSamples) {
+            left[idx] += val * 0.95;
+            right[idx] += val * 1.05;
+          }
+        }
+      }
+
+      // 3. Hi-hats on 8th notes (beats 0, 0.5, 1, 1.5, etc.)
+      for (let sub = 0; sub < 2; sub++) {
+        const hatTime = beatTime + sub * (beatSec / 2);
+        const hatSample = Math.floor(hatTime * sampleRate);
+        const hatDuration = Math.min(Math.floor(sampleRate * 0.05), numSamples - hatSample);
+        const hatAmp = sub === 0 ? 0.35 : 0.22;
+        for (let i = 0; i < hatDuration; i++) {
+          const t = i / sampleRate;
+          const env = Math.exp(-t * 75);
+          const noise = (Math.random() * 2 - 1) * hatAmp;
+          const idx = hatSample + i;
+          if (idx < numSamples) {
+            left[idx] += noise * env * 0.85;
+            right[idx] += noise * env * 1.15;
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < numSamples; i++) {
+      left[i] = Math.tanh(left[i]);
+      right[i] = Math.tanh(right[i]);
+    }
+
+    return buffer;
+  }
+
+  // Generates a warm, punchy bass groove AudioBuffer in key
+  private createBasslineBuffer(bpm: number, rootFreq: number, isMinor: boolean): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const sampleRate = this.ctx.sampleRate;
+    const safeBpm = Math.max(50, Math.min(200, bpm || 80));
+    const beatSec = 60 / safeBpm;
+    const totalSec = beatSec * 8; // 2 measures
+    const numSamples = Math.floor(sampleRate * totalSec);
+    const buffer = this.ctx.createBuffer(2, numSamples, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    const fRoot = rootFreq > 130 ? rootFreq / 2 : rootFreq;
+    const fFifth = fRoot * 1.4983;
+    const fOctave = fRoot * 2;
+    const fThird = fRoot * (isMinor ? 1.1892 : 1.2599);
+    const pattern = [fRoot, fRoot, fFifth, fRoot, fThird, fFifth, fOctave, fFifth];
+
+    for (let beat = 0; beat < 8; beat++) {
+      const freq = pattern[beat];
+      const beatTime = beat * beatSec;
+      const beatSample = Math.floor(beatTime * sampleRate);
+      const noteDuration = Math.min(Math.floor(sampleRate * beatSec * 0.88), numSamples - beatSample);
+
+      for (let i = 0; i < noteDuration; i++) {
+        const t = i / sampleRate;
+        const env = Math.exp(-t * 4.0);
+        const sub = Math.sin(2 * Math.PI * (freq / 2) * t) * 0.65;
+        const fund = Math.sin(2 * Math.PI * freq * t) * 0.70;
+        const harm = Math.sin(2 * Math.PI * (freq * 2) * t) * 0.25;
+        const attackClick = (Math.random() * 2 - 1) * Math.exp(-t * 70) * 0.18;
+        const val = Math.tanh((sub + fund + harm + attackClick) * env * 0.85);
+
+        const idx = beatSample + i;
+        if (idx < numSamples) {
+          left[idx] += val;
+          right[idx] += val;
+        }
+      }
+    }
+    return buffer;
+  }
+
+  // Generates an acoustic chord & arpeggio buffer in key
+  private createAcousticChordBuffer(bpm: number, rootFreq: number, isMinor: boolean, instrument: 'guitar' | 'piano' | 'rhodes'): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const sampleRate = this.ctx.sampleRate;
+    const safeBpm = Math.max(50, Math.min(200, bpm || 80));
+    const beatSec = 60 / safeBpm;
+    const totalSec = beatSec * 8;
+    const numSamples = Math.floor(sampleRate * totalSec);
+    const buffer = this.ctx.createBuffer(2, numSamples, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    const fRoot = rootFreq;
+    const fThird = fRoot * (isMinor ? 1.1892 : 1.2599);
+    const fFifth = fRoot * 1.4983;
+    const fOctave = fRoot * 2;
+    const notes = [fRoot, fThird, fFifth, fOctave, fFifth, fThird, fRoot, fFifth];
+
+    for (let beat = 0; beat < 8; beat++) {
+      const freq = notes[beat];
+      const beatTime = beat * beatSec;
+      const beatSample = Math.floor(beatTime * sampleRate);
+      const noteDuration = Math.min(Math.floor(sampleRate * beatSec * 0.95), numSamples - beatSample);
+
+      for (let i = 0; i < noteDuration; i++) {
+        const t = i / sampleRate;
+        const decayRate = instrument === 'guitar' ? 5.2 : 3.6;
+        const env = Math.exp(-t * decayRate);
+        let val = 0;
+        if (instrument === 'guitar') {
+          const fund = Math.sin(2 * Math.PI * freq * t) * 0.65;
+          const body = Math.sin(2 * Math.PI * (freq * 2) * t) * 0.35 * Math.exp(-t * 7);
+          const chime = Math.sin(2 * Math.PI * (freq * 3) * t) * 0.18 * Math.exp(-t * 12);
+          const pluck = (Math.random() * 2 - 1) * Math.exp(-t * 85) * 0.22;
+          val = (fund + body + chime + pluck) * env * 0.75;
+        } else {
+          const tine = Math.sin(2 * Math.PI * freq * t) * 0.72;
+          const bell = Math.sin(2 * Math.PI * (freq * 4) * t) * 0.24 * Math.exp(-t * 10);
+          const warm = Math.sin(2 * Math.PI * (freq / 2) * t) * 0.32;
+          val = (tine + bell + warm) * env * 0.72;
+        }
+        val = Math.tanh(val);
+        const idx = beatSample + i;
+        if (idx < numSamples) {
+          const pan = Math.sin(beat * 1.4) * 0.25;
+          left[idx] += val * (1 - pan);
+          right[idx] += val * (1 + pan);
+        }
+      }
+    }
+    return buffer;
+  }
+
   public startPlayback(tracks: MixerTrack[], bpm: number = 78, songKey: string = 'G Major') {
     this.init();
     if (!this.ctx || !this.masterGain) return;
@@ -691,12 +898,9 @@ class MiniDawEngine {
     this.stopPlayback();
     this.isRunning = true;
 
-    // Musical frequency relationships based on Key (defaults to G Major for ECV)
-    // G2 = 98Hz, G3 = 196Hz, B3 = 246.94Hz, D4 = 293.66Hz, G4 = 392Hz
-    const isGMajor = songKey.toLowerCase().includes('g');
-    const rootNotes = isGMajor 
-      ? [196, 246.94, 293.66, 392] // G3, B3, D4, G4
-      : [110, 220, 330, 440];
+    // Compute key pitch frequencies dynamically for any key (G Major, D Minor, F# Minor, etc.)
+    const keyInfo = this.parseKeyFrequencies(songKey);
+    const rootNotes = [keyInfo.root, keyInfo.third, keyInfo.fifth, keyInfo.octave];
 
     tracks.forEach((t) => {
       if (!this.ctx || !this.masterGain) return;
@@ -707,6 +911,7 @@ class MiniDawEngine {
       const extraOscs: OscillatorNode[] = [];
       let lfoNode: OscillatorNode | undefined;
       let primaryOsc: OscillatorNode | undefined;
+      let sourceNode: AudioBufferSourceNode | undefined;
 
       // Check if track has an audioUrl or webdavPath to stream
       if (t.audioUrl) {
@@ -731,114 +936,184 @@ class MiniDawEngine {
         } catch (_) {}
       }
 
-      // RICH ACOUSTIC & GOSPEL INSTRUMENT MODELING (No raw monotone sine waves)
-      if (t.id === 1) {
-        // Track 1: Lead Vocal / Mrs T & Brandon Melody
-        // Warm dual-harmonic vowel formant modeling with vocal vibrato
-        primaryOsc = this.ctx.createOscillator();
-        primaryOsc.type = 'sawtooth';
-        primaryOsc.frequency.setValueAtTime(rootNotes[0], this.ctx.currentTime);
+      // Determine accurate stem instrument type from stemType, filename, track name, and metadata
+      const stemType = (t.stemType || '').toLowerCase();
+      const name = (t.name || '').toLowerCase();
+      const isDrums = stemType === 'drums' || name.includes('drum') || name.includes('percussion') || name.includes('snare') || name.includes('kick') || name.includes('mpc') || name.includes('boom') || name.includes('anvil') || name.includes('foley') || (t.id === 4 && !stemType && tracks.length === 4);
+      const isBass = stemType === 'bass' || name.includes('bass') || name.includes('sub') || name.includes('808');
+      const isOrgan = stemType === 'organ' || name.includes('organ') || name.includes('hammond') || name.includes('b3') || name.includes('leslie') || name.includes('pad') || (t.id === 3 && !stemType && tracks.length === 4);
+      const isGuitar = stemType === 'guitar' || name.includes('guitar') || name.includes('acoustic') || name.includes('martin') || name.includes('plucked');
+      const isPiano = stemType === 'piano' || name.includes('piano') || name.includes('rhodes') || name.includes('wurlitzer') || name.includes('keys');
+      const isChoir = stemType === 'choir' || stemType === 'harmony' || name.includes('choir') || name.includes('harmony') || name.includes('harmonies') || name.includes('ad-lib') || (t.id === 2 && !stemType && tracks.length === 4);
+      const isVocal = stemType === 'vocal' || name.includes('vocal') || name.includes('lead') || name.includes('voice') || name.includes('vox') || name.includes('spoken') || (t.id === 1 && !stemType && tracks.length === 4);
+      const isMaster = stemType === 'master' || name.includes('master') || name.includes('full') || name.includes('mix') || (!isDrums && !isBass && !isOrgan && !isGuitar && !isPiano && !isChoir && !isVocal && tracks.length === 1);
 
-        const subOsc = this.ctx.createOscillator();
-        subOsc.type = 'triangle';
-        subOsc.frequency.setValueAtTime(rootNotes[0] * 1.003, this.ctx.currentTime); // Slight detune for warmth
-        extraOscs.push(subOsc);
-
-        // Vocal Formant Filter: warm chest resonance peaking at 1050 Hz
-        filter.type = 'peaking';
-        filter.frequency.setValueAtTime(1050, this.ctx.currentTime);
-        filter.Q.setValueAtTime(2.8, this.ctx.currentTime);
-        filter.gain.setValueAtTime(4.0, this.ctx.currentTime);
-
-        // Human Vibrato LFO (5.2 Hz gentle pitch modulation)
-        lfoNode = this.ctx.createOscillator();
-        const lfoGain = this.ctx.createGain();
-        lfoNode.frequency.setValueAtTime(5.2, this.ctx.currentTime);
-        lfoGain.gain.setValueAtTime(2.5, this.ctx.currentTime);
-        lfoNode.connect(lfoGain);
-        lfoGain.connect(primaryOsc.frequency);
-        lfoNode.start();
-
-        primaryOsc.connect(filter);
-        subOsc.connect(filter);
-        primaryOsc.start();
-        subOsc.start();
-      } else if (t.id === 2) {
-        // Track 2: Gospel Choir & Worship Harmonies
-        // Full choir triad chord swell (G3 + B3 + D4)
-        primaryOsc = this.ctx.createOscillator();
-        primaryOsc.type = 'triangle';
-        primaryOsc.frequency.setValueAtTime(rootNotes[1], this.ctx.currentTime); // Third (B3)
-
-        const chordFifth = this.ctx.createOscillator();
-        chordFifth.type = 'sine';
-        chordFifth.frequency.setValueAtTime(rootNotes[2], this.ctx.currentTime); // Fifth (D4)
-        extraOscs.push(chordFifth);
-
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(1250, this.ctx.currentTime);
-        filter.Q.setValueAtTime(1.8, this.ctx.currentTime);
-
-        primaryOsc.connect(filter);
-        chordFifth.connect(filter);
-        primaryOsc.start();
-        chordFifth.start();
-      } else if (t.id === 3) {
-        // Track 3: Hammond B3 Organ with Leslie Rotary Cabinet
-        // Additive drawbar synthesis (88 8000 000 setting: Fundamental 196Hz + 4' Octave 392Hz + 16' Sub 98Hz)
+      if (isDrums) {
+        // DRUMS: Punchy Studio Drum Loop with Kick, Snare & Hi-Hats at Track BPM
+        const drumBuffer = this.createRhythmicDrumBuffer(bpm);
+        if (drumBuffer) {
+          sourceNode = this.ctx.createBufferSource();
+          sourceNode.buffer = drumBuffer;
+          sourceNode.loop = true;
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(14000, this.ctx.currentTime);
+          sourceNode.connect(filter);
+          sourceNode.start();
+        }
+      } else if (isBass) {
+        // BASS: Deep warm saturated analog bass groove in key
+        const bassBuffer = this.createBasslineBuffer(bpm, t.freq || keyInfo.root, keyInfo.isMinor);
+        if (bassBuffer) {
+          sourceNode = this.ctx.createBufferSource();
+          sourceNode.buffer = bassBuffer;
+          sourceNode.loop = true;
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(950, this.ctx.currentTime);
+          sourceNode.connect(filter);
+          sourceNode.start();
+        }
+      } else if (isGuitar || isPiano) {
+        // ACOUSTIC GUITAR / RHODES PIANO: Plucked resonant soundboard in key
+        const instType = isGuitar ? 'guitar' : 'piano';
+        const chordBuffer = this.createAcousticChordBuffer(bpm, t.freq || keyInfo.root, keyInfo.isMinor, instType);
+        if (chordBuffer) {
+          sourceNode = this.ctx.createBufferSource();
+          sourceNode.buffer = chordBuffer;
+          sourceNode.loop = true;
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(isGuitar ? 1200 : 1800, this.ctx.currentTime);
+          filter.Q.setValueAtTime(1.4, this.ctx.currentTime);
+          sourceNode.connect(filter);
+          sourceNode.start();
+        }
+      } else if (isOrgan) {
+        // HAMMOND B3 ORGAN: Drawbar additive synthesis with Leslie Rotary Tremolo & Chorus
+        const organRoot = t.freq || keyInfo.root;
         primaryOsc = this.ctx.createOscillator();
         primaryOsc.type = 'sine';
-        primaryOsc.frequency.setValueAtTime(rootNotes[0], this.ctx.currentTime); // 8' Fundamental
+        primaryOsc.frequency.setValueAtTime(organRoot, this.ctx.currentTime); // 8' Fundamental
 
         const drawbar4 = this.ctx.createOscillator();
-        drawbar4.type = 'sine';
-        drawbar4.frequency.setValueAtTime(rootNotes[3], this.ctx.currentTime); // 4' Octave
+        drawbar4.type = 'triangle';
+        drawbar4.frequency.setValueAtTime(organRoot * 2, this.ctx.currentTime); // 4' Octave
         extraOscs.push(drawbar4);
+
+        const drawbarFifth = this.ctx.createOscillator();
+        drawbarFifth.type = 'sine';
+        drawbarFifth.frequency.setValueAtTime(organRoot * keyInfo.fifth / keyInfo.root, this.ctx.currentTime); // Harmonic 5th
+        extraOscs.push(drawbarFifth);
 
         const drawbar16 = this.ctx.createOscillator();
         drawbar16.type = 'sine';
-        drawbar16.frequency.setValueAtTime(rootNotes[0] / 2, this.ctx.currentTime); // 16' Sub
+        drawbar16.frequency.setValueAtTime(organRoot / 2, this.ctx.currentTime); // 16' Sub
         extraOscs.push(drawbar16);
 
-        // Warm organ tone shaping
         filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(2200, this.ctx.currentTime);
+        filter.frequency.setValueAtTime(2400, this.ctx.currentTime);
 
-        // Leslie Rotary Speaker Chorus/Tremolo (1.2 Hz slow chorale rotation)
+        // Leslie Rotary Speaker Chorus/Tremolo LFO
         lfoNode = this.ctx.createOscillator();
         const tremoloGain = this.ctx.createGain();
-        lfoNode.frequency.setValueAtTime(1.2, this.ctx.currentTime);
-        tremoloGain.gain.setValueAtTime(0.06, this.ctx.currentTime);
+        lfoNode.frequency.setValueAtTime(1.4, this.ctx.currentTime); // Slow Leslie rotation
+        tremoloGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
         lfoNode.connect(tremoloGain);
         tremoloGain.connect(gain.gain);
         lfoNode.start();
 
         primaryOsc.connect(filter);
         drawbar4.connect(filter);
+        drawbarFifth.connect(filter);
         drawbar16.connect(filter);
         primaryOsc.start();
         drawbar4.start();
+        drawbarFifth.start();
         drawbar16.start();
-      } else {
-        // Track 4: Acoustic Martin D-28 Guitar & Rhythm Bed
-        // Warm plucked acoustic harmonics & subtle sub-bass pulse
+      } else if (isChoir) {
+        // GOSPEL CHOIR: Triad chord swell in song key with breath dynamics
+        const choirRoot = t.freq || keyInfo.third;
         primaryOsc = this.ctx.createOscillator();
-        primaryOsc.type = 'sawtooth';
-        primaryOsc.frequency.setValueAtTime(rootNotes[0] / 2, this.ctx.currentTime); // Deep acoustic body
+        primaryOsc.type = 'triangle';
+        primaryOsc.frequency.setValueAtTime(choirRoot, this.ctx.currentTime);
 
-        const guitarJangle = this.ctx.createOscillator();
-        guitarJangle.type = 'triangle';
-        guitarJangle.frequency.setValueAtTime(rootNotes[3] * 1.5, this.ctx.currentTime); // High wood string chime
-        extraOscs.push(guitarJangle);
+        const choirFifth = this.ctx.createOscillator();
+        choirFifth.type = 'sine';
+        choirFifth.frequency.setValueAtTime(keyInfo.fifth, this.ctx.currentTime);
+        extraOscs.push(choirFifth);
 
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(850, this.ctx.currentTime);
-        filter.Q.setValueAtTime(1.2, this.ctx.currentTime);
+        const choirOctave = this.ctx.createOscillator();
+        choirOctave.type = 'triangle';
+        choirOctave.frequency.setValueAtTime(keyInfo.octave, this.ctx.currentTime);
+        extraOscs.push(choirOctave);
+
+        filter.type = 'peaking';
+        filter.frequency.setValueAtTime(1150, this.ctx.currentTime);
+        filter.Q.setValueAtTime(2.2, this.ctx.currentTime);
+        filter.gain.setValueAtTime(5.0, this.ctx.currentTime);
 
         primaryOsc.connect(filter);
-        guitarJangle.connect(filter);
+        choirFifth.connect(filter);
+        choirOctave.connect(filter);
         primaryOsc.start();
-        guitarJangle.start();
+        choirFifth.start();
+        choirOctave.start();
+      } else if (isVocal) {
+        // LEAD VOCAL: Dual vowel formant filters with natural human vibrato
+        const vocalPitch = t.freq || keyInfo.root;
+        primaryOsc = this.ctx.createOscillator();
+        primaryOsc.type = 'sawtooth';
+        primaryOsc.frequency.setValueAtTime(vocalPitch, this.ctx.currentTime);
+
+        const subWarmth = this.ctx.createOscillator();
+        subWarmth.type = 'triangle';
+        subWarmth.frequency.setValueAtTime(vocalPitch * 1.002, this.ctx.currentTime); // Warm unison detune
+        extraOscs.push(subWarmth);
+
+        // Vocal Formant Peaking Filter: Chest and throat resonance
+        filter.type = 'peaking';
+        filter.frequency.setValueAtTime(950, this.ctx.currentTime);
+        filter.Q.setValueAtTime(3.2, this.ctx.currentTime);
+        filter.gain.setValueAtTime(6.0, this.ctx.currentTime);
+
+        // Human Vibrato LFO (5.2 Hz)
+        lfoNode = this.ctx.createOscillator();
+        const lfoGain = this.ctx.createGain();
+        lfoNode.frequency.setValueAtTime(5.2, this.ctx.currentTime);
+        lfoGain.gain.setValueAtTime(2.4, this.ctx.currentTime);
+        lfoNode.connect(lfoGain);
+        lfoGain.connect(primaryOsc.frequency);
+        lfoNode.start();
+
+        primaryOsc.connect(filter);
+        subWarmth.connect(filter);
+        primaryOsc.start();
+        subWarmth.start();
+      } else {
+        // MASTER AUDIO / COMPOSITE: Rich blended acoustic band in key
+        const drumBuffer = this.createRhythmicDrumBuffer(bpm);
+        if (drumBuffer) {
+          sourceNode = this.ctx.createBufferSource();
+          sourceNode.buffer = drumBuffer;
+          sourceNode.loop = true;
+          sourceNode.connect(filter);
+          sourceNode.start();
+        }
+
+        primaryOsc = this.ctx.createOscillator();
+        primaryOsc.type = 'sawtooth';
+        primaryOsc.frequency.setValueAtTime(keyInfo.root, this.ctx.currentTime);
+
+        const chordThird = this.ctx.createOscillator();
+        chordThird.type = 'triangle';
+        chordThird.frequency.setValueAtTime(keyInfo.third, this.ctx.currentTime);
+        extraOscs.push(chordThird);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2600, this.ctx.currentTime);
+
+        primaryOsc.connect(filter);
+        chordThird.connect(filter);
+        primaryOsc.start();
+        chordThird.start();
       }
 
       const initialVol = t.muted ? 0 : (t.vol / 100) * 0.25;
@@ -853,6 +1128,7 @@ class MiniDawEngine {
         osc: primaryOsc,
         extraOscs,
         lfo: lfoNode,
+        source: sourceNode,
         gain,
         panner,
         filter

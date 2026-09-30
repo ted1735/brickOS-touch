@@ -11,129 +11,105 @@
 }
 
 /* ========================================================================= */
-/* BENTO STYLE & COMPREHENSIVE LIGHT / DARK MODE SYSTEM                      */
+/* BENTO STYLE & UNIVERSAL 3-THEME SYSTEM (SUN • MOON • STARS)               */
 /* ========================================================================= */
 
-/* Bento Modular Card Styles */
 .bento-card {
   border-radius: 1.25rem;
   transition: all 0.2s ease-in-out;
 }
 
-/* Dark Mode Defaults: Moon (High-Contrast Obsidian Studio) */
-html.dark,
-:root.dark,
+/* ========================================================================= */
+/* 1. MOON THEME: High-Contrast Obsidian Pro-DAW Dark (Default)             */
+/* ========================================================================= */
 html.moon,
 :root.moon,
-html[data-theme="moon"] {
+html[data-theme="moon"],
+html.dark:not(.stars) {
   color-scheme: dark;
   background-color: #020617;
   color: #f8fafc;
 }
 
+html.moon body,
+html[data-theme="moon"] body {
+  background-color: #020617;
+  color: #f8fafc;
+}
+
 /* ========================================================================= */
-/* STARS THEME: Soft contrast, easy on the eyes, muted twilight aesthetic   */
-/* Designed for late-night critical listening & zero ocular fatigue          */
+/* 2. STARS THEME: Soft-Contrast Muted Twilight (Zero Eye Strain)            */
 /* ========================================================================= */
 html.stars,
 :root.stars,
 html[data-theme="stars"] {
   color-scheme: dark;
-  background-color: #0c101c !important;
+  background-color: #0a0e1a !important;
   color: #cbd5e1 !important;
 }
 
 html.stars body,
-html[data-theme="stars"] body {
-  background-color: #0c101c !important;
-  color: #cbd5e1 !important;
-}
-
-/* Main workspace backgrounds in Stars Mode */
+html[data-theme="stars"] body,
 html.stars main,
 html[data-theme="stars"] main {
-  background-color: #0c101c !important;
+  background-color: #0a0e1a !important;
   color: #cbd5e1 !important;
 }
 
-/* Soft muted containers and cards in Stars Mode */
-html.stars .bg-slate-900,
-html[data-theme="stars"] .bg-slate-900 {
-  background-color: #131929 !important;
-  color: #cbd5e1 !important;
+/* Soft muted card and container backgrounds in twilight aesthetic */
+html.stars [class*="bg-slate-950"],
+html[data-theme="stars"] [class*="bg-slate-950"] {
+  background-color: #0d1222 !important;
+  border-color: #1e263d !important;
 }
 
-html.stars .bg-slate-950,
-html[data-theme="stars"] .bg-slate-950 {
-  background-color: #0a0d17 !important;
-  color: #cbd5e1 !important;
+html.stars [class*="bg-slate-900"],
+html[data-theme="stars"] [class*="bg-slate-900"] {
+  background-color: #141a2e !important;
+  border-color: #252d47 !important;
 }
 
-html.stars .bg-slate-800,
-html[data-theme="stars"] .bg-slate-800 {
-  background-color: #1a2236 !important;
-  color: #cbd5e1 !important;
+html.stars [class*="bg-slate-800"],
+html[data-theme="stars"] [class*="bg-slate-800"] {
+  background-color: #1c233c !important;
+  border-color: #2a3352 !important;
 }
 
-html.stars .bg-slate-900\/90,
-html.stars .bg-slate-900\/95,
-html[data-theme="stars"] .bg-slate-900\/90,
-html[data-theme="stars"] .bg-slate-900\/95 {
-  background-color: rgba(19, 25, 41, 0.95) !important;
+html.stars header,
+html[data-theme="stars"] header {
+  background-color: rgba(14, 18, 34, 0.95) !important;
+  border-color: #242c46 !important;
 }
 
-html.stars .bg-slate-950\/80,
-html.stars .bg-slate-950\/90,
-html[data-theme="stars"] .bg-slate-950\/80,
-html[data-theme="stars"] .bg-slate-950\/90 {
-  background-color: rgba(10, 13, 23, 0.9) !important;
+/* Soft muted borders */
+html.stars [class*="border-slate-800"],
+html.stars [class*="border-slate-700"],
+html[data-theme="stars"] [class*="border-slate-800"],
+html[data-theme="stars"] [class*="border-slate-700"] {
+  border-color: #252d47 !important;
 }
 
-/* Gentle, muted border styles in Stars Mode */
-html.stars .border-slate-800,
-html.stars .border-slate-700,
-html.stars .border-slate-800\/80,
-html.stars .border-slate-800\/60,
-html.stars .border-slate-800\/90,
-html[data-theme="stars"] .border-slate-800,
-html[data-theme="stars"] .border-slate-700,
-html[data-theme="stars"] .border-slate-800\/80,
-html[data-theme="stars"] .border-slate-800\/60 {
-  border-color: #212b42 !important;
-}
-
-/* Soft muted typography in Stars Mode (eliminates stark high-contrast glare) */
-html.stars .text-white,
-html[data-theme="stars"] .text-white {
+/* Soft muted typography: Eliminates stark glare */
+html.stars [class*="text-white"],
+html[data-theme="stars"] [class*="text-white"] {
   color: #e2e8f0 !important;
 }
 
-html.stars .text-slate-100,
-html[data-theme="stars"] .text-slate-100 {
+html.stars [class*="text-slate-100"],
+html[data-theme="stars"] [class*="text-slate-100"],
+html.stars [class*="text-slate-200"],
+html[data-theme="stars"] [class*="text-slate-200"] {
   color: #cbd5e1 !important;
 }
 
-html.stars .text-slate-200,
-html[data-theme="stars"] .text-slate-200 {
-  color: #b8c4d9 !important;
+html.stars [class*="text-slate-300"],
+html[data-theme="stars"] [class*="text-slate-300"],
+html.stars [class*="text-slate-400"],
+html[data-theme="stars"] [class*="text-slate-400"] {
+  color: #8b9bb4 !important;
 }
 
-html.stars .text-slate-300,
-html[data-theme="stars"] .text-slate-300 {
-  color: #94a3b8 !important;
-}
-
-html.stars .text-slate-400,
-html[data-theme="stars"] .text-slate-400 {
-  color: #72819d !important;
-}
-
-html.stars .text-slate-500,
-html[data-theme="stars"] .text-slate-500 {
-  color: #596782 !important;
-}
-
-/* Inputs, textareas, selects in Stars Mode */
+/* Inputs, textareas, selects */
 html.stars input[type="text"],
 html.stars input[type="password"],
 html.stars textarea,
@@ -142,8 +118,8 @@ html[data-theme="stars"] input[type="text"],
 html[data-theme="stars"] input[type="password"],
 html[data-theme="stars"] textarea,
 html[data-theme="stars"] select {
-  background-color: #0e1322 !important;
-  border-color: #232d45 !important;
+  background-color: #0e1424 !important;
+  border-color: #242e47 !important;
   color: #cbd5e1 !important;
 }
 
@@ -154,12 +130,12 @@ html[data-theme="stars"] textarea::placeholder {
   color: #56647e !important;
 }
 
-/* Soft muted badge backgrounds in Stars Mode */
+/* Soft pastel badges in Twilight Mode */
 html.stars .bg-indigo-950,
 html[data-theme="stars"] .bg-indigo-950 {
   background-color: rgba(30, 27, 75, 0.6) !important;
-  color: #a5b4fc !important;
-  border-color: rgba(99, 102, 241, 0.3) !important;
+  color: #c084fc !important;
+  border-color: rgba(147, 51, 234, 0.3) !important;
 }
 
 html.stars .bg-emerald-950,
@@ -176,132 +152,120 @@ html[data-theme="stars"] .bg-amber-950 {
   border-color: rgba(245, 158, 11, 0.3) !important;
 }
 
-/* Light Mode Comprehensive Theme Inversion (Sun: Daylight Nashville) */
-html.light,
+/* ========================================================================= */
+/* 3. SUN THEME: Daylight Nashville High-Clarity Light Mode                  */
+/* ========================================================================= */
 html.sun,
+:root.sun,
 html[data-theme="sun"],
+html.light,
 html:not(.dark):not(.stars):not(.moon) {
   color-scheme: light;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
 }
 
-html.light body,
 html.sun body,
 html[data-theme="sun"] body,
-html:not(.dark):not(.stars):not(.moon) body {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
-}
-
-/* Main workspace backgrounds in Light Mode */
-html.light main,
 html.sun main,
 html[data-theme="sun"] main,
-html:not(.dark):not(.stars):not(.moon) main {
+html.light body,
+html.light main {
   background-color: #f8fafc !important;
-}
-
-/* Containers and cards */
-html.light .bg-slate-900,
-html.sun .bg-slate-900,
-html[data-theme="sun"] .bg-slate-900,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-900 {
-  background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
-html.light .bg-slate-950,
-html.sun .bg-slate-950,
-html[data-theme="sun"] .bg-slate-950,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-950 {
-  background-color: #f1f5f9 !important;
+html.sun header,
+html[data-theme="sun"] header,
+html.light header {
+  background-color: rgba(255, 255, 255, 0.97) !important;
+  border-color: #e2e8f0 !important;
   color: #0f172a !important;
 }
 
-html.light .bg-slate-800,
-html.sun .bg-slate-800,
-html[data-theme="sun"] .bg-slate-800,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-800 {
-  background-color: #e2e8f0 !important;
-  color: #1e293b !important;
-}
-
-html.light .bg-slate-900\/90,
-html.light .bg-slate-900\/95,
-html.sun .bg-slate-900\/90,
-html.sun .bg-slate-900\/95,
-html[data-theme="sun"] .bg-slate-900\/90,
-html[data-theme="sun"] .bg-slate-900\/95,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-900\/90,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-900\/95 {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-}
-
-html.light .bg-slate-950\/80,
-html.light .bg-slate-950\/90,
-html.sun .bg-slate-950\/80,
-html.sun .bg-slate-950\/90,
-html[data-theme="sun"] .bg-slate-950\/80,
-html[data-theme="sun"] .bg-slate-950\/90,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-950\/80,
-html:not(.dark):not(.stars):not(.moon) .bg-slate-950\/90 {
-  background-color: rgba(241, 245, 249, 0.9) !important;
-}
-
-/* Border styles in Light Mode */
-html.light .border-slate-800,
-html.light .border-slate-700,
-html.light .border-slate-800\/80,
-html.light .border-slate-800\/60,
-html.sun .border-slate-800,
-html.sun .border-slate-700,
-html.sun .border-slate-800\/80,
-html.sun .border-slate-800\/60,
-html[data-theme="sun"] .border-slate-800,
-html[data-theme="sun"] .border-slate-700,
-html[data-theme="sun"] .border-slate-800\/80,
-html[data-theme="sun"] .border-slate-800\/60,
-html:not(.dark):not(.stars):not(.moon) .border-slate-800,
-html:not(.dark):not(.stars):not(.moon) .border-slate-700,
-html:not(.dark):not(.stars):not(.moon) .border-slate-800\/80,
-html:not(.dark):not(.stars):not(.moon) .border-slate-800\/60 {
+/* Clean white cards and light slate containers in Daylight Mode */
+html.sun [class*="bg-slate-950"],
+html[data-theme="sun"] [class*="bg-slate-950"],
+html.light [class*="bg-slate-950"] {
+  background-color: #f8fafc !important;
   border-color: #e2e8f0 !important;
 }
 
-/* Text color overrides in Light Mode */
-html.light .text-white,
-html.sun .text-white,
-html[data-theme="sun"] .text-white,
-html:not(.dark):not(.stars):not(.moon) .text-white {
+html.sun [class*="bg-slate-900"],
+html[data-theme="sun"] [class*="bg-slate-900"],
+html.light [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.sun [class*="bg-slate-800"],
+html[data-theme="sun"] [class*="bg-slate-800"],
+html.light [class*="bg-slate-800"] {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Light mode crisp clean borders */
+html.sun [class*="border-slate-800"],
+html.sun [class*="border-slate-700"],
+html[data-theme="sun"] [class*="border-slate-800"],
+html[data-theme="sun"] [class*="border-slate-700"],
+html.light [class*="border-slate-800"],
+html.light [class*="border-slate-700"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Light mode deep readable typography (excluding solid colored action buttons) */
+html.sun h1[class*="text-white"],
+html.sun h2[class*="text-white"],
+html.sun h3[class*="text-white"],
+html.sun h4[class*="text-white"],
+html.sun p[class*="text-white"],
+html.sun span[class*="text-white"]:not(button *),
+html[data-theme="sun"] h1[class*="text-white"],
+html[data-theme="sun"] h2[class*="text-white"],
+html[data-theme="sun"] h3[class*="text-white"],
+html[data-theme="sun"] p[class*="text-white"],
+html[data-theme="sun"] span[class*="text-white"]:not(button *) {
   color: #0f172a !important;
 }
 
-html.light .text-slate-200,
-html.light .text-slate-300,
-html.sun .text-slate-200,
-html.sun .text-slate-300,
-html[data-theme="sun"] .text-slate-200,
-html[data-theme="sun"] .text-slate-300,
-html:not(.dark):not(.stars):not(.moon) .text-slate-200,
-html:not(.dark):not(.stars):not(.moon) .text-slate-300 {
+html.sun [class*="text-slate-100"]:not(button *),
+html.sun [class*="text-slate-200"]:not(button *),
+html[data-theme="sun"] [class*="text-slate-100"]:not(button *),
+html[data-theme="sun"] [class*="text-slate-200"]:not(button *) {
   color: #1e293b !important;
 }
 
-html.light .text-slate-400,
-html.light .text-slate-500,
-html.sun .text-slate-400,
-html.sun .text-slate-500,
-html[data-theme="sun"] .text-slate-400,
-html[data-theme="sun"] .text-slate-500,
-html:not(.dark):not(.stars):not(.moon) .text-slate-400,
-html:not(.dark):not(.stars):not(.moon) .text-slate-500 {
+html.sun [class*="text-slate-300"]:not(button *),
+html.sun [class*="text-slate-400"]:not(button *),
+html[data-theme="sun"] [class*="text-slate-300"]:not(button *),
+html[data-theme="sun"] [class*="text-slate-400"]:not(button *) {
+  color: #475569 !important;
+}
+
+html.sun [class*="text-slate-500"]:not(button *),
+html[data-theme="sun"] [class*="text-slate-500"]:not(button *) {
   color: #64748b !important;
 }
 
-/* Inputs, textareas, selects in Light Mode */
-html.light input[type="text"],
-html.light input[type="password"],
-html.light textarea,
-html.light select,
+/* Ensure vibrant colored action buttons keep crisp white text in Sun mode */
+html.sun button[class*="bg-indigo"],
+html.sun button[class*="bg-indigo"] *,
+html.sun button[class*="bg-emerald"],
+html.sun button[class*="bg-emerald"] *,
+html.sun button[class*="bg-purple"],
+html.sun button[class*="bg-purple"] *,
+html.sun button[class*="bg-rose"],
+html.sun button[class*="bg-rose"] *,
+html.sun button[class*="bg-amber-600"],
+html.sun button[class*="bg-amber-600"] *,
+html.sun [class*="bg-gradient-to"],
+html.sun [class*="bg-gradient-to"] * {
+  color: #ffffff !important;
+}
+
+/* Light mode form inputs */
 html.sun input[type="text"],
 html.sun input[type="password"],
 html.sun textarea,
@@ -309,59 +273,80 @@ html.sun select,
 html[data-theme="sun"] input[type="text"],
 html[data-theme="sun"] input[type="password"],
 html[data-theme="sun"] textarea,
-html[data-theme="sun"] select,
-html:not(.dark):not(.stars):not(.moon) input[type="text"],
-html:not(.dark):not(.stars):not(.moon) input[type="password"],
-html:not(.dark):not(.stars):not(.moon) textarea,
-html:not(.dark):not(.stars):not(.moon) select {
+html[data-theme="sun"] select {
   background-color: #ffffff !important;
   border-color: #cbd5e1 !important;
   color: #0f172a !important;
 }
 
-html.light input::placeholder,
-html.light textarea::placeholder,
 html.sun input::placeholder,
 html.sun textarea::placeholder,
 html[data-theme="sun"] input::placeholder,
-html[data-theme="sun"] textarea::placeholder,
-html:not(.dark):not(.stars):not(.moon) input::placeholder,
-html:not(.dark):not(.stars):not(.moon) textarea::placeholder {
+html[data-theme="sun"] textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-/* Keep accented badges and pills vibrant */
-html.light .bg-indigo-950,
-html:not(.dark) .bg-indigo-950 {
+/* Light mode vibrant badges */
+html.sun .bg-indigo-950,
+html[data-theme="sun"] .bg-indigo-950 {
   background-color: #e0e7ff !important;
   color: #4338ca !important;
   border-color: #c7d2fe !important;
 }
 
-html.light .bg-emerald-950,
-html:not(.dark) .bg-emerald-950 {
+html.sun .bg-emerald-950,
+html[data-theme="sun"] .bg-emerald-950 {
   background-color: #d1fae5 !important;
   color: #065f46 !important;
   border-color: #a7f3d0 !important;
 }
 
-html.light .bg-amber-950,
-html:not(.dark) .bg-amber-950 {
+html.sun .bg-amber-950,
+html[data-theme="sun"] .bg-amber-950 {
   background-color: #fef3c7 !important;
   color: #92400e !important;
   border-color: #fde68a !important;
 }
 
-html.light .bg-purple-950,
-html:not(.dark) .bg-purple-950 {
+html.sun .bg-purple-950,
+html[data-theme="sun"] .bg-purple-950 {
   background-color: #f3e8ff !important;
   color: #6b21a8 !important;
   border-color: #e9d5ff !important;
 }
 
-html.light .bg-cyan-950,
-html:not(.dark) .bg-cyan-950 {
+html.sun .bg-cyan-950,
+html[data-theme="sun"] .bg-cyan-950 {
   background-color: #cffafe !important;
   color: #155e75 !important;
   border-color: #a5f3fc !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html.moon ::-webkit-scrollbar-thumb,
+html.dark:not(.stars) ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+html.stars ::-webkit-scrollbar-thumb,
+html[data-theme="stars"] ::-webkit-scrollbar-thumb {
+  background: #232d44;
+  border-radius: 9999px;
+}
+
+html.sun ::-webkit-scrollbar-thumb,
+html[data-theme="sun"] ::-webkit-scrollbar-thumb,
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
 }

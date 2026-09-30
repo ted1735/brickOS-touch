@@ -133,8 +133,11 @@ export function useGlobalKeyboardShortcuts({
         return;
       }
 
-      // ALT + D or CMD/CTRL + D: Toggle Theme
-      if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+      // SHIFT + T, ALT + T, or ALT + D: Cycle Studio Theme (Sun • Moon • Stars)
+      if (
+        (e.shiftKey && (e.key === 't' || e.key === 'T')) ||
+        (e.altKey && (e.key === 't' || e.key === 'T' || e.key === 'd' || e.key === 'D'))
+      ) {
         e.preventDefault();
         onToggleTheme();
         return;

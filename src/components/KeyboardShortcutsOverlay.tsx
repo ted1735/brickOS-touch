@@ -446,7 +446,7 @@ export const KeyboardShortcutsOverlay: React.FC<KeyboardShortcutsOverlayProps> =
         categoryLabel: 'Interface & Workflow Toggles',
         title: 'Cycle Theme (Sun • Moon • Stars)',
         description: 'Switch between Day (Sun), Dark Studio (Moon), and Soft Muted Twilight (Stars) themes',
-        keys: ['Alt', 'D'],
+        keys: ['Shift', 'T'],
         action: onToggleTheme,
         icon: isDarkMode ? Sun : Moon,
         accentColor: isDarkMode ? 'text-amber-400' : 'text-indigo-400'

@@ -291,6 +291,30 @@ All major milestones, song creations, and revision checkpoints in the studio inc
   - **Fixed Silent Failure in Chat Interface**:
     - Fixed response status handling in `handleSendMessage`: non-OK HTTP responses now throw and render informative assistant notices rather than silently swallowing errors and leaving the user in an infinite thinking state.
 
+---
+
+## [v2.6] — Universal 3-Theme Architecture Enhancements, Direct Workbench Controls, & Theme Showcase
+- **Date**: 2026-09-29
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.6`**.
+  - **Direct In-Workbench Theme Controls**:
+    - Embedded `StudioThemeSelector` directly inside the **Studio Co-Producer AI workbench** header (`StudioCopilotTab.tsx`) with an inline active mode indicator and 1-click theme switcher.
+    - Embedded `StudioThemeSelector` directly inside the **Lyrics Master Vault top toolbar** (`LyricsAndSunoTab.tsx`), so users never have to hunt for theme options while editing or auditing lyrics.
+    - Embedded `StudioThemeSelector` in the slide-over **Studio Copilot Drawer** (`StudioCopilotDrawer.tsx`).
+  - **Dedicated Studio Theme Showcase & Customizer Modal (`StudioThemeModal.tsx`)**:
+    - Built interactive modal displaying live swatch comparisons, contrast metrics, and intended creative use cases for all 3 themes:
+      - **☀️ Sun (Daylight Nashville)**: High-clarity light theme with crisp white cards, clean borders, deep slate typography, and warm amber accents.
+      - **🌙 Moon (Pro-DAW Obsidian Dark)**: Control-room pitch-black OLED obsidian theme with glowing neon meters and high contrast.
+      - **✨ Stars (Low-Fatigue Twilight Studio)**: Midnight celestial indigo (`#0a0e1a`) base, twilight slate surfaces (`#141a2e`), soft starlight lavender accents (`#c084fc`), and zero eye strain.
+    - Quick trigger button with Palette icon (`🎨`) integrated across top header, workbench bars, and drawer.
+  - **Universal CSS & Contrast Refinements in `index.css`**:
+    - Fixed CSS cascade bug where solid primary buttons (`bg-indigo-600`, `bg-emerald-600`, `bg-purple-600`, `bg-amber-600`, `bg-gradient-to-r`) had their text turned dark in Sun mode. Solid action buttons now preserve crisp white text across all modes.
+    - Differentiated Stars (Twilight) theme from Moon with distinct midnight indigo-violet hues (`#0a0e1a`, `#141a2e`, `#252d47`) and lavender badge tones.
+  - **Global Theme Cycle Hotkey (`Shift+T` / `Alt+T` / `Alt+D`)**:
+    - Instantly cycles between Sun ➔ Moon ➔ Stars anywhere in the studio with live toast notification confirmation (`☀️ Switched to Sun`, `🌙 Switched to Moon`, `✨ Switched to Stars`).
+    - Documented shortcut in the interactive `KeyboardShortcutsOverlay.tsx` cheat sheet.
+
 
 
 

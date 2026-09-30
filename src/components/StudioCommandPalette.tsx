@@ -21,7 +21,7 @@ import {
   Columns,
   MessageSquare
 } from 'lucide-react';
-import { Track } from '../types';
+import { Track, StudioTheme } from '../types';
 import { ALL_STUDIO_NAV_ITEMS } from '../data/studioNavigationData';
 
 interface StudioCommandPaletteProps {
@@ -34,6 +34,8 @@ interface StudioCommandPaletteProps {
   onNavigateToTab: (tab: string) => void;
   onToggleTheme: () => void;
   isDarkMode: boolean;
+  studioTheme?: StudioTheme;
+  onSelectTheme?: (theme: StudioTheme) => void;
   onToggleZenMode?: () => void;
   onOpenCopilotDrawer?: () => void;
   onOpenSectionGuide?: (sectionId: string) => void;
@@ -60,6 +62,8 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
   onNavigateToTab,
   onToggleTheme,
   isDarkMode,
+  studioTheme = 'moon',
+  onSelectTheme,
   onToggleZenMode,
   onOpenCopilotDrawer,
   onOpenSectionGuide
@@ -146,12 +150,55 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
       }
     },
     {
-      id: 'action-theme',
-      title: `Switch to ${isDarkMode ? 'Light' : 'Dark'} Studio Aesthetic`,
+      id: 'action-theme-sun',
+      title: 'Theme: Sun (Daylight Nashville Mode)',
       category: 'SOP & Quick Actions',
-      subtitle: 'Toggle high-contrast OLED dark vs Nashville day-mode theme',
-      icon: isDarkMode ? Sun : Moon,
+      subtitle: 'Crisp, high-contrast light theme engineered for daytime writing and chord review',
+      icon: Sun,
       accentColor: 'text-amber-400',
+      badge: studioTheme === 'sun' ? 'ACTIVE' : undefined,
+      onSelect: () => {
+        if (onSelectTheme) onSelectTheme('sun');
+        else onToggleTheme();
+        onClose();
+      }
+    },
+    {
+      id: 'action-theme-moon',
+      title: 'Theme: Moon (Pro-DAW Dark Studio Mode)',
+      category: 'SOP & Quick Actions',
+      subtitle: 'Obsidian jet-black studio aesthetic with high-contrast neon VU meters',
+      icon: Moon,
+      accentColor: 'text-indigo-400',
+      badge: studioTheme === 'moon' ? 'ACTIVE' : undefined,
+      onSelect: () => {
+        if (onSelectTheme) onSelectTheme('moon');
+        else onToggleTheme();
+        onClose();
+      }
+    },
+    {
+      id: 'action-theme-stars',
+      title: 'Theme: Stars (Soft Twilight Muted Mode)',
+      category: 'SOP & Quick Actions',
+      subtitle: 'Soft-contrast muted midnight palette for marathon late-night mixing with zero ocular fatigue',
+      icon: Sparkles,
+      accentColor: 'text-purple-300',
+      badge: studioTheme === 'stars' ? 'ACTIVE' : undefined,
+      onSelect: () => {
+        if (onSelectTheme) onSelectTheme('stars');
+        else onToggleTheme();
+        onClose();
+      }
+    },
+    {
+      id: 'action-theme-cycle',
+      title: `Cycle Theme (Sun ➔ Moon ➔ Stars)`,
+      category: 'SOP & Quick Actions',
+      subtitle: `Current theme: ${studioTheme.toUpperCase()} • Press Alt+D to toggle`,
+      icon: studioTheme === 'sun' ? Sun : studioTheme === 'stars' ? Sparkles : Moon,
+      accentColor: 'text-amber-400',
+      badge: 'Alt+D',
       onSelect: () => {
         onToggleTheme();
         onClose();

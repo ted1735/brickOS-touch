@@ -665,15 +665,19 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
 
   // 1. Masters for all versions/styles
   def.versions.forEach((ver, idx) => {
+    const webdavPath = `${folderPath}/${def.folderName}_Master_${ver.tag}_24bit48k.wav`;
+    const audioUrl = `/api/nextcloud/stream?path=${encodeURIComponent(webdavPath)}`;
     assets.push({
       id: `NC-${def.trackId}-M${idx + 1}`,
+      name: `${def.title} - ${ver.tag} (${ver.styleName})`,
       filename: `${def.folderName}_Master_${ver.tag}_${ver.styleName.replace(/\s+/g, '_')}_24bit48k.wav`,
       folderId: def.folderName,
       category: 'MASTER_AUDIO',
       fileSizeBytes: 52428800 + idx * 2000000,
       fileSizeFormatted: `${(50 + idx * 2.5).toFixed(1)} MB`,
       mimeType: 'audio/wav',
-      webdavPath: `${folderPath}/${def.folderName}_Master_${ver.tag}_24bit48k.wav`,
+      webdavPath,
+      audioUrl,
       shareUrl,
       matchedTrackId: def.trackId,
       matchedTrackTitle: def.title,
@@ -684,7 +688,10 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
       bpm: def.bpm,
       key: def.key,
       audioDurationSeconds: 220,
+      stemType: 'master',
       previewAudioType: 'instrumental',
+      freq: def.stems[0]?.freq || 196,
+      waveType: 'sawtooth',
       notes: `${ver.tag} (${ver.styleName}): ${ver.notes} 24-bit/48kHz Master Print. Nashville LUFS -14.1 compliant.`,
       lastSyncedAt: new Date().toISOString(),
       tags: [def.folderName, def.title, def.trackId, ver.tag, 'Master WAV', 'Fiber Synced']
@@ -693,25 +700,44 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
 
   // 2. Stems
   def.stems.forEach((stem) => {
+    const webdavPath = `${folderPath}/stems/${stem.stemFilename}`;
+    const audioUrl = `/api/nextcloud/stream?path=${encodeURIComponent(webdavPath)}`;
+    const category: NextcloudAssetCategory =
+      stem.stemType === 'drums'
+        ? 'UVR5_DRUMS_STEM'
+        : stem.stemType === 'bass'
+        ? 'UVR5_BASS_STEM'
+        : stem.stemType === 'vocal'
+        ? 'UVR5_VOCAL_STEM'
+        : stem.stemType === 'choir'
+        ? 'UVR5_HARMONY_STEM'
+        : 'INSTRUMENTAL_STEM';
+
     assets.push({
       id: `NC-${def.trackId}-S${stem.id}`,
+      name: stem.name,
       filename: stem.stemFilename,
       folderId: def.folderName,
-      category: stem.stemType === 'vocal' ? 'UVR5_VOCAL_STEM' : stem.stemType === 'choir' ? 'UVR5_VOCAL_STEM' : 'INSTRUMENTAL_STEM',
+      category,
       fileSizeBytes: 28000000 + stem.id * 1500000,
       fileSizeFormatted: `${(26.5 + stem.id * 1.5).toFixed(1)} MB`,
       mimeType: 'audio/wav',
-      webdavPath: `${folderPath}/stems/${stem.stemFilename}`,
+      webdavPath,
+      audioUrl,
       shareUrl,
       matchedTrackId: def.trackId,
       matchedTrackTitle: def.title,
       matchConfidence: 100,
       suggestedTrackId: def.trackId,
-      suggestedCategory: stem.stemType === 'vocal' ? 'UVR5_VOCAL_STEM' : 'INSTRUMENTAL_STEM',
+      suggestedCategory: category,
       isMatched: true,
       bpm: def.bpm,
       key: def.key,
       audioDurationSeconds: 220,
+      stemType: stem.stemType,
+      freq: stem.freq,
+      waveType: stem.waveType,
+      color: stem.color,
       previewAudioType: stem.stemType === 'drums' ? 'drums' : stem.stemType === 'vocal' ? 'vocal' : 'harmony',
       notes: `${stem.name}. High dynamic range, zero cross-bleed stem isolation.`,
       lastSyncedAt: new Date().toISOString(),

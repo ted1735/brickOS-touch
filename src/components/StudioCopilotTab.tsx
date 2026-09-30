@@ -1,7 +1,8 @@
 import React from 'react';
-import { MessageSquare, RefreshCw, Send, HelpCircle, Bot, User, Sparkles } from 'lucide-react';
-import { Track, ChatMessage } from '../types';
+import { MessageSquare, RefreshCw, Send, HelpCircle, Bot, User, Sparkles, Palette } from 'lucide-react';
+import { Track, ChatMessage, StudioTheme } from '../types';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
+import { StudioThemeSelector } from './StudioThemeSelector';
 
 interface StudioCopilotTabProps {
   selectedTrack: Track;
@@ -16,6 +17,9 @@ interface StudioCopilotTabProps {
   setChatModel: (model: string) => void;
   onOpenSectionGuide?: (sectionId: string) => void;
   isDarkMode?: boolean;
+  studioTheme?: StudioTheme;
+  onSelectTheme?: (theme: StudioTheme) => void;
+  onOpenThemeModal?: () => void;
 }
 
 export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
@@ -30,7 +34,10 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
   chatModel,
   setChatModel,
   onOpenSectionGuide,
-  isDarkMode = true
+  isDarkMode = true,
+  studioTheme = 'moon',
+  onSelectTheme,
+  onOpenThemeModal
 }) => {
   return (
     <div className="space-y-4">
@@ -49,20 +56,47 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
               <MessageSquare className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>Studio Co-Producer AI (Gemini Multi-Turn Copilot)</span>
-                <span className="px-2 py-0.5 rounded bg-teal-950 text-teal-300 font-mono text-[10px] font-bold border border-teal-800/50">
-                  {selectedTrack.id}
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>Studio Co-Producer AI (Gemini Multi-Turn Copilot)</span>
+                  <span className="px-2 py-0.5 rounded bg-teal-950 text-teal-300 font-mono text-[10px] font-bold border border-teal-800/50">
+                    {selectedTrack.id}
+                  </span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/50 font-bold hidden sm:inline">
+                  {studioTheme.toUpperCase()} MODE
                 </span>
-              </h3>
+              </div>
               <p className="text-[11px] text-slate-400">
                 Contextually aware of <strong className="text-white">{selectedTrack.title}</strong> ({selectedTrack.genre} • {selectedTrack.key} • {selectedTrack.bpm} BPM)
               </p>
             </div>
           </div>
 
-          {/* Role, Model Selectors and Guide button */}
+          {/* Role, Model Selectors, Theme Switcher, and Guide button */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Inline Theme Switcher inside Co-Producer */}
+            {onSelectTheme && (
+              <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
+                <StudioThemeSelector
+                  currentTheme={studioTheme}
+                  onSelectTheme={onSelectTheme}
+                  variant="header"
+                  showLabels={false}
+                />
+                {onOpenThemeModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenThemeModal}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                    title="Open Studio Theme Architecture Details & Swatches"
+                  >
+                    <Palette className="w-3.5 h-3.5 text-indigo-400" />
+                  </button>
+                )}
+              </div>
+            )}
+
             {onOpenSectionGuide && (
               <button
                 type="button"

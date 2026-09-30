@@ -53,6 +53,7 @@ import {
   RefreshCcw,
   Sun,
   Moon,
+  Palette,
   HelpCircle,
   Keyboard,
   Edit3,
@@ -60,6 +61,8 @@ import {
 } from 'lucide-react';
 import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem, UniversalAssetItem, StudioTheme } from './types';
 import { StudioWorkflowGuide } from './components/StudioWorkflowGuide';
+import { StudioThemeSelector } from './components/StudioThemeSelector';
+import { StudioThemeModal } from './components/StudioThemeModal';
 import { UniversalAssetEditorModal } from './components/UniversalAssetEditorModal';
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
@@ -153,40 +156,9 @@ export default function BrickOSMusicStudioWorkspace() {
   // Unified Command Palette & Studio Copilot Drawer State
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCopilotDrawerOpen, setIsCopilotDrawerOpen] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
   const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
-
-  // Global Keyboard Shortcuts for Command Palette (Ctrl+K), Copilot Drawer (Ctrl+J), and Zen Mode (Z)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      const isInput = activeEl instanceof HTMLInputElement || activeEl instanceof HTMLTextAreaElement || (activeEl as HTMLElement)?.isContentEditable;
-
-      // Ctrl+K or Cmd+K: Open Command Palette
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault();
-        setIsCommandPaletteOpen(prev => !prev);
-      }
-      // Ctrl+J or Cmd+J: Toggle Copilot Drawer
-      else if ((e.ctrlKey || e.metaKey) && (e.key === 'j' || e.key === 'J')) {
-        e.preventDefault();
-        setIsCopilotDrawerOpen(prev => !prev);
-      }
-      // Z / z (only when not typing in input/textarea): Toggle Zen Mode
-      else if (!isInput && (e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        setIsZenMode(prev => !prev);
-      }
-      // ESC: Close overlays if open
-      else if (e.key === 'Escape') {
-        if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
-        if (isCopilotDrawerOpen) setIsCopilotDrawerOpen(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCommandPaletteOpen, isCopilotDrawerOpen]);
 
   const [studioTheme, setStudioTheme] = useState<StudioTheme>(() => {
     if (typeof window !== 'undefined') {
@@ -225,13 +197,59 @@ export default function BrickOSMusicStudioWorkspace() {
     }
   }, [studioTheme]);
 
-  const handleToggleTheme = () => {
-    setStudioTheme(prev => {
-      if (prev === 'moon') return 'stars';
-      if (prev === 'stars') return 'sun';
-      return 'moon';
-    });
+  const handleSelectTheme = (theme: StudioTheme) => {
+    setStudioTheme(theme);
+    if (theme === 'sun') {
+      showToast('☀️ Switched to Sun (Daylight Nashville) Mode — High Clarity', 'info');
+    } else if (theme === 'stars') {
+      showToast('✨ Switched to Stars (Muted Twilight) Mode — Low Fatigue', 'info');
+    } else {
+      showToast('🌙 Switched to Moon (Pro-DAW Obsidian Dark) Mode', 'info');
+    }
   };
+
+  const handleToggleTheme = () => {
+    const next: StudioTheme = studioTheme === 'moon' ? 'stars' : studioTheme === 'stars' ? 'sun' : 'moon';
+    handleSelectTheme(next);
+  };
+
+  // Global Keyboard Shortcuts for Command Palette (Ctrl+K), Copilot Drawer (Ctrl+J), Theme (Shift+T), and Zen Mode (Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl instanceof HTMLInputElement || activeEl instanceof HTMLTextAreaElement || (activeEl as HTMLElement)?.isContentEditable;
+
+      // Ctrl+K or Cmd+K: Open Command Palette
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      // Ctrl+J or Cmd+J: Toggle Copilot Drawer
+      else if ((e.ctrlKey || e.metaKey) && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        setIsCopilotDrawerOpen(prev => !prev);
+      }
+      // Shift+T or Alt+T: Cycle Themes (Sun -> Moon -> Stars)
+      else if (!isInput && ((e.shiftKey && (e.key === 'T' || e.key === 't')) || (e.altKey && (e.key === 't' || e.key === 'T')))) {
+        e.preventDefault();
+        handleToggleTheme();
+      }
+      // Z / z (only when not typing in input/textarea): Toggle Zen Mode
+      else if (!isInput && (e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsZenMode(prev => !prev);
+      }
+      // ESC: Close overlays if open
+      else if (e.key === 'Escape') {
+        if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
+        if (isCopilotDrawerOpen) setIsCopilotDrawerOpen(false);
+        if (isThemeModalOpen) setIsThemeModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCommandPaletteOpen, isCopilotDrawerOpen, isThemeModalOpen, studioTheme]);
 
   // Firestore persistent cloud database synchronization state
   const [isDbConnected, setIsDbConnected] = useState<boolean>(isFirebaseConfigured());
@@ -1879,45 +1897,21 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           </button>
 
           {/* 3-THEME SELECTOR: SUN / MOON / STARS */}
-          <div className="flex items-center bg-slate-950/80 p-0.5 rounded-xl border border-slate-800" role="group" aria-label="Studio Theme Selector">
+          <div className="flex items-center gap-1 bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-xs flex-shrink-0">
+            <StudioThemeSelector
+              currentTheme={studioTheme}
+              onSelectTheme={handleSelectTheme}
+              variant="header"
+              showLabels={true}
+            />
             <button
               type="button"
-              onClick={() => setStudioTheme('sun')}
-              className={`px-2 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
-                studioTheme === 'sun'
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-amber-300'
-              }`}
-              title="Sun: Daylight Nashville Light Theme (Crisp, High Contrast)"
+              onClick={() => setIsThemeModalOpen(true)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer"
+              title="Studio Theme Architecture: Compare Sun, Moon, and Stars (Shift+T)"
+              aria-label="Studio Theme Customizer"
             >
-              <Sun className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden xl:inline">Sun</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setStudioTheme('moon')}
-              className={`px-2 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
-                studioTheme === 'moon'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-indigo-300'
-              }`}
-              title="Moon: Obsidian Dark Studio (OLED Pro-DAW High Contrast)"
-            >
-              <Moon className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden xl:inline">Moon</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setStudioTheme('stars')}
-              className={`px-2 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
-                studioTheme === 'stars'
-                  ? 'bg-purple-900/80 text-purple-200 border border-purple-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-purple-300'
-              }`}
-              title="Stars: Muted Twilight Theme (Soft Contrast, Easy on the Eyes, Zero Fatigue)"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-              <span className="hidden xl:inline">Stars</span>
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
             </button>
           </div>
 
@@ -1995,6 +1989,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 onToggleCollapse={() => setIsSideNavCollapsed(!isSideNavCollapsed)}
                 onClose={() => setIsSideNavOpen(false)}
                 isDarkMode={isDarkMode}
+                studioTheme={studioTheme}
+                onSelectTheme={handleSelectTheme}
               />
             </div>
           </>
@@ -2009,6 +2005,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               activeTab={activeTab}
               onSelectTab={(tabKey) => setActiveTab(tabKey as any)}
               theme={studioTheme}
+              onSelectTheme={handleSelectTheme}
               isDarkMode={isDarkMode}
               focusMode={focusMode}
               onToggleFocusMode={() => {
@@ -2279,6 +2276,24 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Studio Theme Selector (Sun • Moon • Stars) */}
+              <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+                <StudioThemeSelector
+                  currentTheme={studioTheme}
+                  onSelectTheme={handleSelectTheme}
+                  variant="inline"
+                  showLabels={true}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsThemeModalOpen(true)}
+                  className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer"
+                  title="Studio Theme Architecture & Swatches"
+                >
+                  <Palette className="w-3 h-3 text-amber-400" />
+                </button>
+              </div>
+
               {/* Command Palette Button */}
               <button
                 type="button"
@@ -2371,6 +2386,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onOpenSectionGuide={handleOpenSectionGuide}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               isDarkMode={isDarkMode}
+              studioTheme={studioTheme}
+              onSelectTheme={handleSelectTheme}
+              onOpenThemeModal={() => setIsThemeModalOpen(true)}
             />
           )}
 
@@ -2536,6 +2554,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               setChatModel={setChatModel}
               onOpenSectionGuide={handleOpenSectionGuide}
               isDarkMode={isDarkMode}
+              studioTheme={studioTheme}
+              onSelectTheme={handleSelectTheme}
+              onOpenThemeModal={() => setIsThemeModalOpen(true)}
             />
           )}
 
@@ -2988,6 +3009,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         }}
         activeTab={activeTab}
         onToggleTheme={handleToggleTheme}
+        studioTheme={studioTheme}
+        onSelectTheme={handleSelectTheme}
         onToggleZenMode={() => setIsZenMode(prev => !prev)}
         onOpenSectionGuide={(sec) => sec && handleOpenSectionGuide(sec as any)}
         onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}
@@ -3014,6 +3037,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         isSearching={isSearching}
         searchResult={searchResult}
         isDarkMode={isDarkMode}
+        studioTheme={studioTheme}
+        onSelectTheme={handleSelectTheme}
+        onOpenThemeModal={() => setIsThemeModalOpen(true)}
       />
 
       {/* 24-HOUR SELAH PRAYER GATE MODAL (NASHVILLE SOP RULE 1) */}
@@ -3027,6 +3053,14 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           showToast(`Selah Prayer Gate Unlocked for ${selectedTrack.title}!`, 'success');
         }}
         isDarkMode={isDarkMode}
+      />
+
+      {/* UNIVERSAL STUDIO THEME SHOWCASE & CUSTOMIZER MODAL */}
+      <StudioThemeModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        currentTheme={studioTheme}
+        onSelectTheme={handleSelectTheme}
       />
 
     </div>
