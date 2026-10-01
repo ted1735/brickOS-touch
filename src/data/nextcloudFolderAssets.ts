@@ -1,18 +1,26 @@
 import { NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig, Track } from '../types';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, ECV_CANONICAL_ASSETS, getTrackNextcloudAssets, matchNextcloudFilenameToTrack } from './nextcloudAssetIndex';
+import {
+  DEFAULT_NEXTCLOUD_CONFIG,
+  LOCAL_STORAGE_NC_CONFIG_KEY,
+  getSavedNextcloudConfig,
+  saveNextcloudConfig,
+  buildNextcloudStreamUrl,
+} from '../utils/nextcloudStream';
 
-export { ALL_CANONICAL_NEXTCLOUD_ASSETS, ECV_CANONICAL_ASSETS, getTrackNextcloudAssets, matchNextcloudFilenameToTrack };
-
-export const DEFAULT_NEXTCLOUD_CONFIG: NextcloudSyncConfig = {
-  serverUrl: 'https://nextcloud.moyercloud.com',
-  username: 'ncted',
-  webdavRoot: 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production',
-  folderIdOrShareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
-  lastConnectionStatus: 'idle',
+export {
+  ALL_CANONICAL_NEXTCLOUD_ASSETS,
+  ECV_CANONICAL_ASSETS,
+  getTrackNextcloudAssets,
+  matchNextcloudFilenameToTrack,
+  DEFAULT_NEXTCLOUD_CONFIG,
+  getSavedNextcloudConfig,
+  saveNextcloudConfig,
+  buildNextcloudStreamUrl,
 };
 
 export const INITIAL_FOLDER_207332_ASSETS: NextcloudFolderAsset[] = [
-  ...ALL_CANONICAL_NEXTCLOUD_ASSETS,
+  ...(ALL_CANONICAL_NEXTCLOUD_ASSETS || []),
   {
     id: 'NC-207332-SOP-GLOBAL',
     filename: 'Nashville_SOP_Rules_v1_9_Production_Rulebook.md',
@@ -34,7 +42,6 @@ export const INITIAL_FOLDER_207332_ASSETS: NextcloudFolderAsset[] = [
 ];
 
 const LOCAL_STORAGE_NC_ASSETS_KEY = 'brickos_nextcloud_folder_207332_assets';
-const LOCAL_STORAGE_NC_CONFIG_KEY = 'brickos_nextcloud_sync_config';
 
 /**
  * Smart Auto-Match Algorithm
@@ -187,30 +194,4 @@ export function saveNextcloudAssets(assets: NextcloudFolderAsset[]): void {
   }
 }
 
-/**
- * Load Nextcloud Config from storage
- */
-export function getSavedNextcloudConfig(): NextcloudSyncConfig {
-  if (typeof window === 'undefined') return DEFAULT_NEXTCLOUD_CONFIG;
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_NC_CONFIG_KEY);
-    if (raw) {
-      return { ...DEFAULT_NEXTCLOUD_CONFIG, ...JSON.parse(raw) };
-    }
-  } catch {
-    // fallback
-  }
-  return DEFAULT_NEXTCLOUD_CONFIG;
-}
 
-/**
- * Save Nextcloud Config to storage
- */
-export function saveNextcloudConfig(cfg: NextcloudSyncConfig): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(LOCAL_STORAGE_NC_CONFIG_KEY, JSON.stringify(cfg));
-  } catch {
-    // ignore
-  }
-}

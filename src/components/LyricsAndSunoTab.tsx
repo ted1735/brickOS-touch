@@ -40,9 +40,16 @@ import {
   Grid,
   Trophy,
   Code,
-  Palette
+  Palette,
+  Edit3,
+  FolderEdit,
+  Disc,
+  Tag,
+  Undo2,
+  Music
 } from 'lucide-react';
-import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset, StudioTheme } from '../types';
+import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset, StudioTheme, TrackTitleChangeHistoryRecord } from '../types';
+import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
 import { SOPRulesEditorModal } from './SOPRulesEditorModal';
 import { SoundPresetLibraryModal } from './SoundPresetLibraryModal';
@@ -135,6 +142,79 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   // Nashville SOP Rules Manager State (Direct Markdown & Text Editing)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [sopRules, setSopRules] = useState<SOPRulesPackage>(() => getLocalCachedSOPRules());
+
+  // Song & Project Title Versioning & Renaming System
+  const [isEditingIdentity, setIsEditingIdentity] = useState(false);
+  const [editTitleInput, setEditTitleInput] = useState(track.title);
+  const [editEpInput, setEditEpInput] = useState(track.ep);
+  const [editReasonInput, setEditReasonInput] = useState('');
+  const [isTitleHistoryModalOpen, setIsTitleHistoryModalOpen] = useState(false);
+  const [titleUpdateSuccess, setTitleUpdateSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditTitleInput(track.title);
+    setEditEpInput(track.ep);
+  }, [track.id, track.title, track.ep]);
+
+  const handleSaveIdentity = () => {
+    const cleanTitle = editTitleInput.trim();
+    const cleanEp = editEpInput.trim();
+    if (!cleanTitle) return;
+
+    if (cleanTitle === track.title && cleanEp === track.ep) {
+      setIsEditingIdentity(false);
+      return;
+    }
+
+    const newRecord: TrackTitleChangeHistoryRecord = {
+      id: `title-hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      trackId: track.id,
+      previousTitle: track.title,
+      newTitle: cleanTitle,
+      previousEp: track.ep,
+      newEp: cleanEp,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      author: 'Studio Producer',
+      reason: editReasonInput.trim() || 'Renamed in Lyric Master Vault'
+    };
+
+    const updatedHistory = [newRecord, ...(track.titleHistory || [])];
+    onUpdateTrack('batch_update', {
+      title: cleanTitle,
+      ep: cleanEp,
+      titleHistory: updatedHistory
+    });
+
+    setTitleUpdateSuccess(`Song updated to "${cleanTitle}" [${cleanEp}] with revision history saved.`);
+    setIsEditingIdentity(false);
+    setEditReasonInput('');
+    setTimeout(() => setTitleUpdateSuccess(null), 5000);
+  };
+
+  const handleRevertIdentity = (item: TrackTitleChangeHistoryRecord) => {
+    const revertRecord: TrackTitleChangeHistoryRecord = {
+      id: `title-hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      trackId: track.id,
+      previousTitle: track.title,
+      newTitle: item.previousTitle,
+      previousEp: track.ep,
+      newEp: item.previousEp,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      author: 'Studio Producer',
+      reason: `Reverted to "${item.previousTitle}" (${item.previousEp}) from checkpoint on ${item.timestamp}`
+    };
+
+    const updatedHistory = [revertRecord, ...(track.titleHistory || [])];
+    onUpdateTrack('batch_update', {
+      title: item.previousTitle,
+      ep: item.previousEp,
+      titleHistory: updatedHistory
+    });
+
+    setTitleUpdateSuccess(`Reverted song title to "${item.previousTitle}" and project to "${item.previousEp}".`);
+    setIsTitleHistoryModalOpen(false);
+    setTimeout(() => setTitleUpdateSuccess(null), 5000);
+  };
 
   // Lyric Word & Tag Search State
   const [searchWord, setSearchWord] = useState('');
@@ -819,6 +899,336 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* SONG & PROJECT TITLE IDENTITY & VERSIONING SYSTEM */}
+      <div className={`p-4 rounded-2xl border transition shadow-lg ${
+        isDarkMode 
+          ? 'bg-slate-900/90 border-slate-800 ring-1 ring-slate-800' 
+          : 'bg-white border-slate-200 shadow-md'
+      }`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Identity Info */}
+          <div className="space-y-1 min-w-[240px]">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/40">
+                {track.id}
+              </span>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                isDarkMode 
+                  ? 'bg-cyan-950/60 border-cyan-700/40 text-cyan-300' 
+                  : 'bg-cyan-50 border-cyan-200 text-cyan-800'
+              }`}>
+                <FolderEdit className="w-3 h-3 text-cyan-400" />
+                <span>Project: {track.ep}</span>
+              </span>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                isDarkMode 
+                  ? 'bg-slate-950 border-slate-800 text-slate-400' 
+                  : 'bg-slate-100 border-slate-200 text-slate-600'
+              }`}>
+                {track.bpm} BPM • {track.key} • {track.genre}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-0.5">
+              <Disc className="w-4 h-4 text-indigo-400 animate-spin-slow" />
+              <h2 className={`text-lg font-black tracking-tight ${
+                isDarkMode ? 'text-white' : 'text-slate-900'
+              }`}>
+                {track.title}
+              </h2>
+            </div>
+          </div>
+
+          {/* Action Buttons: Rename & Title History */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditingIdentity(!isEditingIdentity)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                isEditingIdentity
+                  ? 'bg-indigo-600 text-white shadow-indigo-900/50'
+                  : isDarkMode
+                  ? 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+              }`}
+              title="Change the song title or reassign EP project collection"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{isEditingIdentity ? 'Close Title Editor' : 'Edit Song / Project Name'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsTitleHistoryModalOpen(true)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                isDarkMode
+                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+              }`}
+              title="Inspect change history for song & project names, and revert to previous titles"
+            >
+              <History className="w-3.5 h-3.5 text-amber-400" />
+              <span>Title History ({track.titleHistory?.length || 0})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* INLINE SONG & PROJECT TITLE EDITOR */}
+        {isEditingIdentity && (
+          <div className={`mt-3 pt-3 border-t space-y-3 animate-fadeIn ${
+            isDarkMode ? 'border-slate-800' : 'border-slate-200'
+          }`}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  Song Title (Nashville Sovereign Standard)
+                </label>
+                <input
+                  type="text"
+                  value={editTitleInput}
+                  onChange={(e) => setEditTitleInput(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                    isDarkMode
+                      ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                  placeholder="e.g. Crown of Thorns (Sovereign Mix)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  Project / EP Collection
+                </label>
+                <input
+                  type="text"
+                  value={editEpInput}
+                  onChange={(e) => setEditEpInput(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                    isDarkMode
+                      ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                  placeholder="e.g. EP 1: Restoration"
+                />
+                {/* Quick EP suggestions */}
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-mono">Quick Pick:</span>
+                  {EP_COLLECTIONS.map((ep) => (
+                    <button
+                      key={ep.id}
+                      type="button"
+                      onClick={() => setEditEpInput(ep.id)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium border transition cursor-pointer ${
+                        editEpInput === ep.id
+                          ? 'bg-indigo-600 text-white border-indigo-500 font-bold'
+                          : isDarkMode
+                          ? 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {ep.id}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                Reason for Title / Project Change (Tracked in Audit Versioning)
+              </label>
+              <input
+                type="text"
+                value={editReasonInput}
+                onChange={(e) => setEditReasonInput(e.target.value)}
+                className={`w-full px-3 py-1.5 rounded-xl text-xs border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                  isDarkMode
+                    ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
+                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}
+                placeholder="e.g. Nashville SOP compliance, radio edit renaming, or Suno v5.5 title refinement"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditTitleInput(track.title);
+                  setEditEpInput(track.ep);
+                  setIsEditingIdentity(false);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveIdentity}
+                disabled={!editTitleInput.trim()}
+                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save New Title & Project</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TITLE & PROJECT UPDATE SUCCESS NOTIFICATION */}
+      {titleUpdateSuccess && (
+        <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-2xl p-3 shadow-xl flex items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+              <CheckCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-300">{titleUpdateSuccess}</p>
+              <p className="text-[10px] font-mono text-emerald-400/80">Persistent to Firestore & Nextcloud WebDAV metadata</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTitleUpdateSuccess(null)}
+            className="p-1 rounded text-emerald-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* TITLE & PROJECT VERSION HISTORY MODAL */}
+      {isTitleHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col max-h-[85vh] animate-scaleUp overflow-hidden ${
+            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+          }`}>
+            <div className={`p-4 border-b flex items-center justify-between ${
+              isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-100 bg-slate-50'
+            }`}>
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    Song & Project Title Version History
+                  </h3>
+                  <p className="text-[11px] font-mono text-slate-400">
+                    Track ID: {track.id} • Active: "{track.title}" ({track.ep})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTitleHistoryModalOpen(false)}
+                className={`p-1.5 rounded-lg text-slate-400 hover:text-white transition cursor-pointer ${
+                  isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 custom-scrollbar flex-1">
+              {(!track.titleHistory || track.titleHistory.length === 0) ? (
+                <div className={`p-8 text-center rounded-xl border ${
+                  isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    No Previous Title Changes Recorded
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
+                    The current title "{track.title}" and project "{track.ep}" are the canonical initial values. Every time you rename this song or change its project collection, an immutable snapshot will be recorded here allowing one-click revert.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-[11px] font-mono text-slate-400">
+                    Found {track.titleHistory.length} recorded title / project revision(s):
+                  </div>
+
+                  {track.titleHistory.map((item, idx) => (
+                    <div
+                      key={item.id || idx}
+                      className={`p-3.5 rounded-xl border transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/40">
+                            Snapshot #{track.titleHistory!.length - idx}
+                          </span>
+                          <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {item.timestamp}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRevertIdentity(item)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
+                          title={`Revert title back to "${item.previousTitle}" and project back to "${item.previousEp}"`}
+                        >
+                          <Undo2 className="w-3 h-3" />
+                          <span>Revert to Previous</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500 font-mono text-[10px] w-14">Title:</span>
+                          <span className="line-through text-rose-400/90 font-mono text-[11px]">{item.previousTitle}</span>
+                          <ArrowRight className="w-3 h-3 text-slate-500" />
+                          <span className="text-emerald-400 font-bold">{item.newTitle}</span>
+                        </div>
+
+                        {item.previousEp !== item.newEp && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500 font-mono text-[10px] w-14">Project:</span>
+                            <span className="line-through text-rose-400/90 font-mono text-[11px]">{item.previousEp}</span>
+                            <ArrowRight className="w-3 h-3 text-slate-500" />
+                            <span className="text-cyan-400 font-bold">{item.newEp}</span>
+                          </div>
+                        )}
+
+                        {item.reason && (
+                          <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 flex items-start gap-1.5">
+                            <span className="text-indigo-400 font-bold">Reason:</span>
+                            <span>{item.reason}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={`p-3 border-t flex items-center justify-between ${
+              isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-100 bg-slate-50'
+            }`}>
+              <span className="text-[10px] font-mono text-slate-500">
+                Audit trail synced across local storage & cloud database
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsTitleHistoryModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Close History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SUCCESS NOTIFICATION BANNER */}
       {successCommitNotification && (

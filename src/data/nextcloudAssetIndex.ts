@@ -1,4 +1,5 @@
 import { NextcloudFolderAsset, NextcloudAssetCategory, MixerTrack, Track } from '../types';
+import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
 
 export const NEXTCLOUD_BASE_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
 export const NEXTCLOUD_SHARE_ROOT = 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production';
@@ -666,7 +667,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
   // 1. Masters for all versions/styles
   def.versions.forEach((ver, idx) => {
     const webdavPath = `${folderPath}/${def.folderName}_Master_${ver.tag}_24bit48k.wav`;
-    const audioUrl = `/api/nextcloud/stream?path=${encodeURIComponent(webdavPath)}`;
+    const audioUrl = buildNextcloudStreamUrl(webdavPath);
     assets.push({
       id: `NC-${def.trackId}-M${idx + 1}`,
       name: `${def.title} - ${ver.tag} (${ver.styleName})`,
@@ -701,7 +702,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
   // 2. Stems
   def.stems.forEach((stem) => {
     const webdavPath = `${folderPath}/stems/${stem.stemFilename}`;
-    const audioUrl = `/api/nextcloud/stream?path=${encodeURIComponent(webdavPath)}`;
+    const audioUrl = buildNextcloudStreamUrl(webdavPath);
     const category: NextcloudAssetCategory =
       stem.stemType === 'drums'
         ? 'UVR5_DRUMS_STEM'
@@ -971,7 +972,7 @@ export function getTrackStems(track: Track): MixerTrack[] {
 
   return def.stems.map((s, index) => {
     const webdavPath = `${folderPath}/stems/${s.stemFilename}`;
-    const audioUrl = `/api/nextcloud/stream?path=${encodeURIComponent(webdavPath)}`;
+    const audioUrl = buildNextcloudStreamUrl(webdavPath);
 
     return {
       id: s.id,

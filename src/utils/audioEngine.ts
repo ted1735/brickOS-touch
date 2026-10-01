@@ -1,9 +1,12 @@
 import { MixerTrack, DawEffectsState, LufsMeasurementData } from '../types';
 import { DEFAULT_DAW_EFFECTS } from '../data/dawEffectsPresets';
+import { buildNextcloudStreamUrl } from './nextcloudStream';
 
 class MiniDawEngine {
   private ctx: AudioContext | null = null;
   private isRunning: boolean = false;
+  private isLoadingAudio: boolean = false;
+  private loadingListeners: Set<(loading: boolean) => void> = new Set();
   private masterGain: GainNode | null = null;
   private eqLowNode: BiquadFilterNode | null = null;
   private eqMidNode: BiquadFilterNode | null = null;
@@ -59,6 +62,22 @@ class MiniDawEngine {
   private isMono: boolean = false;
   private currentBus: string = 'master';
   private currentEffects: DawEffectsState = { ...DEFAULT_DAW_EFFECTS };
+
+  public getIsLoadingAudio(): boolean {
+    return this.isLoadingAudio;
+  }
+
+  public addLoadingListener(cb: (loading: boolean) => void): () => void {
+    this.loadingListeners.add(cb);
+    return () => this.loadingListeners.delete(cb);
+  }
+
+  private setIsLoadingAudio(loading: boolean) {
+    this.isLoadingAudio = loading;
+    this.loadingListeners.forEach(cb => {
+      try { cb(loading); } catch (_) {}
+    });
+  }
 
   public init() {
     if (this.ctx) return;
@@ -887,6 +906,130 @@ class MiniDawEngine {
     return buffer;
   }
 
+  // Generates an authentic vocal melody buffer with expressive musical notes, vibrato, and formant filtering
+  private createVocalMelodyBuffer(bpm: number, rootFreq: number, isMinor: boolean): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const sampleRate = this.ctx.sampleRate;
+    const safeBpm = Math.max(50, Math.min(200, bpm || 80));
+    const beatSec = 60 / safeBpm;
+    const totalSec = beatSec * 8; // 2 measures
+    const numSamples = Math.floor(sampleRate * totalSec);
+    const buffer = this.ctx.createBuffer(2, numSamples, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    const fRoot = rootFreq > 350 ? rootFreq / 2 : rootFreq < 140 ? rootFreq * 2 : rootFreq;
+    const fSecond = fRoot * 1.1224;
+    const fThird = fRoot * (isMinor ? 1.1892 : 1.2599);
+    const fFourth = fRoot * 1.3348;
+    const fFifth = fRoot * 1.4983;
+    const fOctave = fRoot * 2;
+
+    // Nashville vocal phrasing: dynamic melodic contour across 8 beats with pauses
+    const melody = [
+      { freq: fRoot, dur: 1.0, rest: 0.1 },
+      { freq: fSecond, dur: 0.8, rest: 0.2 },
+      { freq: fThird, dur: 1.8, rest: 0.2 },
+      { freq: fFifth, dur: 1.0, rest: 0.1 },
+      { freq: fFourth, dur: 0.9, rest: 0.1 },
+      { freq: fThird, dur: 1.0, rest: 0.1 },
+      { freq: fRoot, dur: 1.7, rest: 0.3 }
+    ];
+
+    let currentSec = 0;
+    for (const phrase of melody) {
+      if (currentSec >= totalSec) break;
+      const noteSamples = Math.floor(phrase.dur * beatSec * sampleRate);
+      const startSample = Math.floor(currentSec * sampleRate);
+      const actualSamples = Math.min(noteSamples, numSamples - startSample);
+
+      for (let i = 0; i < actualSamples; i++) {
+        const t = i / sampleRate;
+        // Pitch vibrato (5.5 Hz) developing naturally after note attack
+        const vibratoDepth = t > 0.25 ? Math.min(0.025, (t - 0.25) * 0.04) : 0;
+        const vib = Math.sin(2 * Math.PI * 5.5 * t) * (phrase.freq * vibratoDepth);
+        const pitch = phrase.freq + vib;
+
+        // Vowel formant synthesis (A/O/E formant spectrum)
+        const harm1 = Math.sin(2 * Math.PI * pitch * t) * 0.70;
+        const harm2 = Math.sin(2 * Math.PI * (pitch * 2) * t) * 0.35;
+        const harm3 = Math.sin(2 * Math.PI * (pitch * 3) * t) * 0.22;
+        const subWarmth = Math.sin(2 * Math.PI * (pitch / 2) * t) * 0.15;
+
+        // Expressive envelope with gentle attack, vocal breathiness, and release
+        const attack = Math.min(1, t / 0.08);
+        const release = Math.max(0, 1 - (i / actualSamples));
+        const env = attack * Math.pow(release, 0.4);
+        const breath = (Math.random() * 2 - 1) * 0.04 * env;
+
+        const val = Math.tanh((harm1 + harm2 + harm3 + subWarmth + breath) * env * 0.78);
+        const idx = startSample + i;
+        if (idx < numSamples) {
+          left[idx] += val * 0.95;
+          right[idx] += val * 0.95;
+        }
+      }
+      currentSec += (phrase.dur + phrase.rest) * beatSec;
+    }
+
+    return buffer;
+  }
+
+  // Generates 3-part backing gospel choir harmonic swells in key
+  private createChoirBuffer(bpm: number, rootFreq: number, isMinor: boolean): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const sampleRate = this.ctx.sampleRate;
+    const safeBpm = Math.max(50, Math.min(200, bpm || 80));
+    const beatSec = 60 / safeBpm;
+    const totalSec = beatSec * 8; // 2 measures
+    const numSamples = Math.floor(sampleRate * totalSec);
+    const buffer = this.ctx.createBuffer(2, numSamples, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+
+    const fRoot = rootFreq > 300 ? rootFreq / 2 : rootFreq;
+    const fThird = fRoot * (isMinor ? 1.1892 : 1.2599);
+    const fFifth = fRoot * 1.4983;
+    const fOctave = fRoot * 2;
+
+    // Two 4-beat harmonic chord swells
+    const chords = [
+      [fRoot, fThird, fFifth],
+      [fThird, fFifth, fOctave]
+    ];
+
+    for (let c = 0; c < 2; c++) {
+      const chord = chords[c];
+      const startSample = Math.floor(c * 4 * beatSec * sampleRate);
+      const chordSamples = Math.min(Math.floor(3.8 * beatSec * sampleRate), numSamples - startSample);
+
+      for (let i = 0; i < chordSamples; i++) {
+        const t = i / sampleRate;
+        const swell = Math.sin((i / chordSamples) * Math.PI); // Smooth breath arc
+        let chordValL = 0;
+        let chordValR = 0;
+
+        chord.forEach((freq, idx) => {
+          const detune = idx === 0 ? 1.0 : idx === 1 ? 1.003 : 0.997;
+          const osc1 = Math.sin(2 * Math.PI * freq * detune * t);
+          const osc2 = Math.sin(2 * Math.PI * (freq * 2) * detune * t) * 0.28;
+          const voiceVal = (osc1 + osc2) * swell * 0.26;
+          const pan = idx === 0 ? 0 : idx === 1 ? -0.35 : 0.35;
+          chordValL += voiceVal * (1 - pan);
+          chordValR += voiceVal * (1 + pan);
+        });
+
+        const idx = startSample + i;
+        if (idx < numSamples) {
+          left[idx] += Math.tanh(chordValL);
+          right[idx] += Math.tanh(chordValR);
+        }
+      }
+    }
+
+    return buffer;
+  }
+
   public startPlayback(tracks: MixerTrack[], bpm: number = 78, songKey: string = 'G Major') {
     this.init();
     if (!this.ctx || !this.masterGain) return;
@@ -913,27 +1056,86 @@ class MiniDawEngine {
       let primaryOsc: OscillatorNode | undefined;
       let sourceNode: AudioBufferSourceNode | undefined;
 
-      // Check if track has an audioUrl or webdavPath to stream
-      if (t.audioUrl) {
-        try {
-          const audioEl = new Audio(t.audioUrl);
-          audioEl.crossOrigin = 'anonymous';
-          audioEl.loop = true;
-          const mediaSource = this.ctx.createMediaElementSource(audioEl);
-          mediaSource.connect(filter);
-          audioEl.play().catch(() => {});
-          
-          filter.connect(panner);
-          panner.connect(gain);
-          gain.connect(this.masterGain);
+      // Check if track has an audioUrl or webdavPath to stream real audio from Nextcloud
+      let streamUrl = '';
+      if (t.webdavPath) {
+        streamUrl = buildNextcloudStreamUrl(t.webdavPath);
+      } else if (t.audioUrl) {
+        if (t.audioUrl.includes('path=')) {
+          try {
+            const rawPath = decodeURIComponent(t.audioUrl.split('path=')[1].split('&')[0]);
+            streamUrl = buildNextcloudStreamUrl(rawPath);
+          } catch {
+            streamUrl = t.audioUrl;
+          }
+        } else {
+          streamUrl = t.audioUrl;
+        }
+      }
 
-          const initialVol = t.muted ? 0 : (t.vol / 100) * 0.28;
-          gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
-          panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
+      if (streamUrl) {
+        try {
+          const audioEl = new Audio();
+          audioEl.crossOrigin = 'anonymous';
+          audioEl.src = streamUrl;
+          audioEl.loop = true;
+          audioEl.preload = 'auto';
+
+          this.setIsLoadingAudio(true);
+          let loaded = false;
+          const handleReady = () => {
+            if (!loaded) {
+              loaded = true;
+              this.setIsLoadingAudio(false);
+            }
+          };
+
+          audioEl.addEventListener('canplay', handleReady, { once: true });
+          audioEl.addEventListener('playing', handleReady, { once: true });
+          audioEl.addEventListener('waiting', () => {
+            if (this.isRunning) this.setIsLoadingAudio(true);
+          });
+          audioEl.addEventListener('error', (err) => {
+            console.warn(`[AudioEngine] Stream loading warning for track ${t.id} (${t.name}):`, err);
+            this.setIsLoadingAudio(false);
+          }, { once: true });
+
+          const initialVol = t.muted ? 0 : (t.vol / 100) * 0.95;
+
+          try {
+            const mediaSource = this.ctx.createMediaElementSource(audioEl);
+            mediaSource.connect(filter);
+            filter.connect(panner);
+            panner.connect(gain);
+            gain.connect(this.masterGain);
+            gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
+            panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
+          } catch (corsErr) {
+            console.warn('WebAudio createMediaElementSource bypassed (direct audio element output):', corsErr);
+            audioEl.volume = initialVol;
+          }
+
+          // Trigger explicit preload & play
+          audioEl.load();
+          const playPromise = audioEl.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              handleReady();
+            }).catch((playErr) => {
+              console.warn('[AudioEngine] Play promise waiting for buffer/data:', playErr.message);
+              audioEl.addEventListener('canplay', () => {
+                if (this.isRunning) {
+                  audioEl.play().catch(() => {});
+                }
+              }, { once: true });
+            });
+          }
 
           this.trackNodes.set(t.id, { audioEl, gain, panner, filter });
           return;
-        } catch (_) {}
+        } catch (streamErr) {
+          console.warn('[AudioEngine] Failed to stream audio directly:', streamErr);
+        }
       }
 
       // Determine accurate stem instrument type from stemType, filename, track name, and metadata
@@ -1030,63 +1232,46 @@ class MiniDawEngine {
         drawbar16.start();
       } else if (isChoir) {
         // GOSPEL CHOIR: Triad chord swell in song key with breath dynamics
-        const choirRoot = t.freq || keyInfo.third;
-        primaryOsc = this.ctx.createOscillator();
-        primaryOsc.type = 'triangle';
-        primaryOsc.frequency.setValueAtTime(choirRoot, this.ctx.currentTime);
-
-        const choirFifth = this.ctx.createOscillator();
-        choirFifth.type = 'sine';
-        choirFifth.frequency.setValueAtTime(keyInfo.fifth, this.ctx.currentTime);
-        extraOscs.push(choirFifth);
-
-        const choirOctave = this.ctx.createOscillator();
-        choirOctave.type = 'triangle';
-        choirOctave.frequency.setValueAtTime(keyInfo.octave, this.ctx.currentTime);
-        extraOscs.push(choirOctave);
-
-        filter.type = 'peaking';
-        filter.frequency.setValueAtTime(1150, this.ctx.currentTime);
-        filter.Q.setValueAtTime(2.2, this.ctx.currentTime);
-        filter.gain.setValueAtTime(5.0, this.ctx.currentTime);
-
-        primaryOsc.connect(filter);
-        choirFifth.connect(filter);
-        choirOctave.connect(filter);
-        primaryOsc.start();
-        choirFifth.start();
-        choirOctave.start();
+        const choirBuffer = this.createChoirBuffer(bpm, t.freq || keyInfo.third, keyInfo.isMinor);
+        if (choirBuffer) {
+          sourceNode = this.ctx.createBufferSource();
+          sourceNode.buffer = choirBuffer;
+          sourceNode.loop = true;
+          filter.type = 'peaking';
+          filter.frequency.setValueAtTime(1150, this.ctx.currentTime);
+          filter.Q.setValueAtTime(2.2, this.ctx.currentTime);
+          filter.gain.setValueAtTime(5.0, this.ctx.currentTime);
+          sourceNode.connect(filter);
+          sourceNode.start();
+        } else {
+          const choirRoot = t.freq || keyInfo.third;
+          primaryOsc = this.ctx.createOscillator();
+          primaryOsc.type = 'triangle';
+          primaryOsc.frequency.setValueAtTime(choirRoot, this.ctx.currentTime);
+          primaryOsc.connect(filter);
+          primaryOsc.start();
+        }
       } else if (isVocal) {
-        // LEAD VOCAL: Dual vowel formant filters with natural human vibrato
-        const vocalPitch = t.freq || keyInfo.root;
-        primaryOsc = this.ctx.createOscillator();
-        primaryOsc.type = 'sawtooth';
-        primaryOsc.frequency.setValueAtTime(vocalPitch, this.ctx.currentTime);
-
-        const subWarmth = this.ctx.createOscillator();
-        subWarmth.type = 'triangle';
-        subWarmth.frequency.setValueAtTime(vocalPitch * 1.002, this.ctx.currentTime); // Warm unison detune
-        extraOscs.push(subWarmth);
-
-        // Vocal Formant Peaking Filter: Chest and throat resonance
-        filter.type = 'peaking';
-        filter.frequency.setValueAtTime(950, this.ctx.currentTime);
-        filter.Q.setValueAtTime(3.2, this.ctx.currentTime);
-        filter.gain.setValueAtTime(6.0, this.ctx.currentTime);
-
-        // Human Vibrato LFO (5.2 Hz)
-        lfoNode = this.ctx.createOscillator();
-        const lfoGain = this.ctx.createGain();
-        lfoNode.frequency.setValueAtTime(5.2, this.ctx.currentTime);
-        lfoGain.gain.setValueAtTime(2.4, this.ctx.currentTime);
-        lfoNode.connect(lfoGain);
-        lfoGain.connect(primaryOsc.frequency);
-        lfoNode.start();
-
-        primaryOsc.connect(filter);
-        subWarmth.connect(filter);
-        primaryOsc.start();
-        subWarmth.start();
+        // LEAD VOCAL: Expressive musical phrasing with formant filtering and natural human vibrato
+        const vocalBuffer = this.createVocalMelodyBuffer(bpm, t.freq || keyInfo.root, keyInfo.isMinor);
+        if (vocalBuffer) {
+          sourceNode = this.ctx.createBufferSource();
+          sourceNode.buffer = vocalBuffer;
+          sourceNode.loop = true;
+          filter.type = 'peaking';
+          filter.frequency.setValueAtTime(1250, this.ctx.currentTime);
+          filter.Q.setValueAtTime(2.8, this.ctx.currentTime);
+          filter.gain.setValueAtTime(4.0, this.ctx.currentTime);
+          sourceNode.connect(filter);
+          sourceNode.start();
+        } else {
+          const vocalPitch = t.freq || keyInfo.root;
+          primaryOsc = this.ctx.createOscillator();
+          primaryOsc.type = 'sawtooth';
+          primaryOsc.frequency.setValueAtTime(vocalPitch, this.ctx.currentTime);
+          primaryOsc.connect(filter);
+          primaryOsc.start();
+        }
       } else {
         // MASTER AUDIO / COMPOSITE: Rich blended acoustic band in key
         const drumBuffer = this.createRhythmicDrumBuffer(bpm);
@@ -1149,6 +1334,13 @@ class MiniDawEngine {
 
     node.gain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
     node.panner.pan.setTargetAtTime(this.isMono ? 0 : pan / 100, this.ctx.currentTime, 0.05);
+
+    // Also update direct HTML audio element volume if bypassed
+    if (node.audioEl) {
+      const directVol = Math.max(0, Math.min(1, (vol / 100) * (muted ? 0 : (hasSolo && !isSolo ? 0 : 1))));
+      node.audioEl.volume = directVol;
+      node.audioEl.muted = muted || (hasSolo && !isSolo);
+    }
   }
 
   public setMasterVolume(vol: number) {
@@ -1206,6 +1398,7 @@ class MiniDawEngine {
       } catch (_) {}
     });
     this.trackNodes.clear();
+    this.setIsLoadingAudio(false);
     this.isRunning = false;
   }
 
@@ -1295,47 +1488,79 @@ class MiniDawEngine {
     limiterNode.connect(limiterGain);
     limiterGain.connect(offlineCtx.destination);
 
-    const rootNotes = [110, 220, 330, 440];
+    const keyInfo = this.parseKeyFrequencies('G Major');
     tracks.forEach((t) => {
       if (t.muted) return;
-      const osc = offlineCtx.createOscillator();
       const gain = offlineCtx.createGain();
       const panner = offlineCtx.createStereoPanner();
       const filter = offlineCtx.createBiquadFilter();
 
-      if (t.id === 1) {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(rootNotes[0], 0);
+      const name = (t.name || '').toLowerCase();
+      const stemType = (t.stemType || '').toLowerCase();
+      const isDrums = stemType === 'drums' || name.includes('drum') || name.includes('percussion') || t.id === 4;
+      const isBass = stemType === 'bass' || name.includes('bass') || name.includes('sub');
+      const isHarm = stemType === 'harmony' || stemType === 'choir' || name.includes('harmony') || t.id === 2;
+      const isOrganOrAcoustic = stemType === 'organ' || stemType === 'guitar' || stemType === 'instrumental' || name.includes('acoustic') || t.id === 3;
+
+      if (isDrums) {
+        // Kick & Snare synth in offline renderer
+        const osc = offlineCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(140, 0);
+        osc.frequency.exponentialRampToValueAtTime(45, durationSec);
         filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(650, 0);
-      } else if (t.id === 2) {
+        filter.frequency.setValueAtTime(3500, 0);
+        osc.connect(filter);
+        osc.start(0);
+        osc.stop(durationSec);
+      } else if (isBass) {
+        const osc = offlineCtx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(keyInfo.root / 2, 0);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, 0);
+        osc.connect(filter);
+        osc.start(0);
+        osc.stop(durationSec);
+      } else if (isHarm) {
+        const osc = offlineCtx.createOscillator();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(rootNotes[1], 0);
+        osc.frequency.setValueAtTime(keyInfo.third, 0);
+        filter.type = 'peaking';
+        filter.frequency.setValueAtTime(1150, 0);
+        filter.gain.setValueAtTime(4, 0);
+        osc.connect(filter);
+        osc.start(0);
+        osc.stop(durationSec);
+      } else if (isOrganOrAcoustic) {
+        const osc = offlineCtx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(keyInfo.fifth, 0);
         filter.type = 'bandpass';
         filter.frequency.setValueAtTime(1400, 0);
-      } else if (t.id === 3) {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(rootNotes[2], 0);
-        filter.type = 'highpass';
-        filter.frequency.setValueAtTime(400, 0);
+        osc.connect(filter);
+        osc.start(0);
+        osc.stop(durationSec);
       } else {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(rootNotes[3], 0);
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1200, 0);
+        // Lead Vocal
+        const osc = offlineCtx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(keyInfo.root, 0);
+        filter.type = 'peaking';
+        filter.frequency.setValueAtTime(1250, 0);
+        filter.gain.setValueAtTime(5, 0);
+        osc.connect(filter);
+        osc.start(0);
+        osc.stop(durationSec);
       }
 
       const panVal = activeEffects.stereo.isMonoCollapse ? 0 : t.pan / 100;
       panner.pan.setValueAtTime(panVal, 0);
       gain.gain.setValueAtTime((t.vol / 100) * 0.22, 0);
 
-      osc.connect(filter);
       filter.connect(panner);
       panner.connect(gain);
       gain.connect(masterGain);
-
-      osc.start(0);
-      osc.stop(durationSec);
     });
 
     const renderedBuffer = await offlineCtx.startRendering();

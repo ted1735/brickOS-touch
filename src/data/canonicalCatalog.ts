@@ -581,7 +581,7 @@ He is alive, He is ALIVE!`,
   },
   {
     id: "TRK-16",
-    ep: "EP 2: Conflict Suite",
+    ep: "EP 4: Surrender Sessions",
     title: "Meet Me Here",
     status: "Audio Master",
     genre: "Blue-Collar Gothic CHH / Psalm",
@@ -967,7 +967,7 @@ Just meet me here…
   },
   {
     id: "TRK-27",
-    ep: "Frontline Healthcare & Ministry",
+    ep: "EP 1: Restoration",
     title: "The Work Ain't Done",
     status: "Audio Master",
     genre: "Folk-Hop / Boom-Bap CHH / K-Pop Ministry Hybrid",

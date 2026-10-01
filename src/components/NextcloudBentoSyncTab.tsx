@@ -48,7 +48,8 @@ import {
   autoMatchAssetToCatalog,
   INITIAL_FOLDER_207332_ASSETS,
   DEFAULT_NEXTCLOUD_CONFIG,
-  ALL_CANONICAL_NEXTCLOUD_ASSETS
+  ALL_CANONICAL_NEXTCLOUD_ASSETS,
+  buildNextcloudStreamUrl
 } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { HelpCircle } from 'lucide-react';
@@ -298,6 +299,18 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   const handleSyncFolder = async () => {
     setIsSyncingFolder(true);
     try {
+      if (appPasswordInput) {
+        await fetch('/api/nextcloud/save-credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serverUrl: config.serverUrl,
+            username: config.username,
+            password: appPasswordInput
+          })
+        }).catch(() => {});
+      }
+
       const res = await fetch('/api/nextcloud/sync-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -317,10 +330,15 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         // Merge live WebDAV files with current asset catalog
         const syncedAssets: NextcloudFolderAsset[] = returnedFiles.map((file: any, idx: number) => {
           const existing = assets.find(a => a.filename.toLowerCase() === file.name.toLowerCase());
+          const webdavPath = file.href || `/remote.php/dav/files/ncted/Music-Production/${file.name}`;
+          const audioUrl = buildNextcloudStreamUrl(webdavPath);
+
           if (existing) {
             return {
               ...existing,
               fileSizeBytes: file.size || existing.fileSizeBytes,
+              webdavPath,
+              audioUrl: existing.audioUrl || audioUrl,
               lastSyncedAt: new Date().toISOString()
             };
           }
@@ -341,6 +359,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
 
           const match = autoMatchAssetToCatalog(file.name, tracks);
           const matchedTrack = match.matchedTrackId ? tracks.find(t => t.id === match.matchedTrackId) : null;
+          const isAudio = guessedCat.includes('AUDIO') || guessedCat.includes('STEM');
 
           return {
             id: `NC-LIVE-${Date.now()}-${idx}`,
@@ -350,7 +369,8 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
             fileSizeBytes: file.size || 0,
             fileSizeFormatted: `${Math.round((file.size || 0) / 1024 / 1024)} MB`,
             mimeType: file.mimeType || 'application/octet-stream',
-            webdavPath: file.href || `/remote.php/dav/files/ncted/Music-Production/${file.name}`,
+            webdavPath,
+            audioUrl: isAudio ? audioUrl : undefined,
             shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
             matchedTrackId: match.matchedTrackId || undefined,
             matchedTrackTitle: matchedTrack?.title,
@@ -453,6 +473,9 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         stemType = 'master';
       }
 
+      const webdavPath = asset.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename}`;
+      const audioUrl = buildNextcloudStreamUrl(webdavPath);
+
       audioMiniDaw.startPlayback(
         [
           {
@@ -466,10 +489,11 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
             trimOut: 120,
             freq: asset.freq || (stemType === 'drums' ? 120 : stemType === 'bass' ? 65 : stemType === 'vocal' ? 220 : 196),
             waveType: asset.waveType || (stemType === 'drums' ? 'square' : stemType === 'vocal' ? 'sawtooth' : 'triangle'),
-            stemType,
+            stemType: stemType as any,
             color: asset.color || '#06b6d4',
-            audioUrl: asset.audioUrl,
-            webdavPath: asset.webdavPath
+            audioUrl,
+            webdavPath,
+            isRealAudio: true
           }
         ],
         bpm,

@@ -2432,6 +2432,8 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               track={selectedTrack}
               onOpenSectionGuide={handleOpenSectionGuide}
               isDarkMode={isDarkMode}
+              onSelectTrack={(t) => setSelectedTrack(t)}
+              allTracks={tracks}
             />
           )}
 

@@ -71,6 +71,28 @@ export interface CompositionSession {
   snapshot: CompositionSessionSnapshot;
 }
 
+export interface TrackTitleChangeHistoryRecord {
+  id: string;
+  trackId: string;
+  previousTitle: string;
+  newTitle: string;
+  previousEp: string;
+  newEp: string;
+  timestamp: string;
+  author?: string;
+  reason?: string;
+}
+
+export interface NextcloudLogEntry {
+  id: string;
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'success';
+  stage: string;
+  action: string;
+  message: string;
+  details?: Record<string, any>;
+}
+
 export interface Track {
   id: string;
   ep: string;
@@ -87,6 +109,7 @@ export interface Track {
   engineSliders: EngineSliders;
   lyrics: string;
   versions: TrackVersion[];
+  titleHistory?: TrackTitleChangeHistoryRecord[];
   auditHistory?: AuditFeedbackRecord[];
   selahPrayed?: boolean;
   epCollection?: string;

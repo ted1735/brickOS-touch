@@ -22,7 +22,9 @@ import {
   Eye,
   BarChart3,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  GripVertical,
+  FolderKanban
 } from 'lucide-react';
 import { Track, MixerTrack, DawEffectsState, LufsMeasurementData } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
@@ -30,99 +32,30 @@ import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { MiniDawRealtimeChart } from './MiniDawRealtimeChart';
 import { MiniDawSpectrumVisualizer } from './MiniDawSpectrumVisualizer';
 import { MasteringRack } from './MasteringRack';
+import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
+import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
+import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
+import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
 
 interface MiniDawMixerTabProps {
   track: Track;
   onOpenSectionGuide?: (sectionId?: any) => void;
   isDarkMode?: boolean;
+  onSelectTrack?: (track: Track) => void;
+  allTracks?: Track[];
 }
 
 export const getTrackStems = (track: Track): MixerTrack[] => {
-  const isEcv = track.id === 'TRK-03' || track.title.toLowerCase().includes('candle') || track.title.toLowerCase().includes('ecv');
-  if (isEcv) {
-    return [
-      {
-        id: 1,
-        name: "Track 1: Lead Vocal (Mrs T & Brandon)",
-        vol: 92,
-        pan: 0,
-        muted: false,
-        solo: false,
-        trimIn: 0,
-        trimOut: 100,
-        freq: 196,
-        waveType: 'sawtooth',
-        color: '#6366f1',
-        audioUrl: '/api/nextcloud/stream?path=/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Lead_Vocal_MrsT_Clean_BS-Roformer.wav',
-        webdavPath: '/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Lead_Vocal_MrsT_Clean_BS-Roformer.wav',
-        stemType: 'vocal',
-        isRealAudio: true,
-        assetId: 'NC-ECV-03'
-      },
-      {
-        id: 2,
-        name: "Track 2: Gospel Choir & Worship Harmonies",
-        vol: 88,
-        pan: -15,
-        muted: false,
-        solo: false,
-        trimIn: 0,
-        trimOut: 100,
-        freq: 246.94,
-        waveType: 'triangle',
-        color: '#10b981',
-        audioUrl: '/api/nextcloud/stream?path=/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Gospel_Choir_Harmonies_UVR5.wav',
-        webdavPath: '/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Gospel_Choir_Harmonies_UVR5.wav',
-        stemType: 'choir',
-        isRealAudio: true,
-        assetId: 'NC-ECV-04'
-      },
-      {
-        id: 3,
-        name: "Track 3: Hammond B3 Organ (Leslie Rotary)",
-        vol: 85,
-        pan: 20,
-        muted: false,
-        solo: false,
-        trimIn: 0,
-        trimOut: 100,
-        freq: 293.66,
-        waveType: 'sine',
-        color: '#f59e0b',
-        audioUrl: '/api/nextcloud/stream?path=/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Hammond_B3_Organ_Worship_Bed_G_Major.wav',
-        webdavPath: '/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Hammond_B3_Organ_Worship_Bed_G_Major.wav',
-        stemType: 'organ',
-        isRealAudio: true,
-        assetId: 'NC-ECV-05'
-      },
-      {
-        id: 4,
-        name: "Track 4: Grand Piano & Martin Guitar Bed",
-        vol: 80,
-        pan: 0,
-        muted: false,
-        solo: false,
-        trimIn: 0,
-        trimOut: 100,
-        freq: 392,
-        waveType: 'sawtooth',
-        color: '#ec4899',
-        audioUrl: '/api/nextcloud/stream?path=/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Acoustic_Piano_Martin_Guitar_Bed.wav',
-        webdavPath: '/remote.php/dav/files/ncted/Music-Production/ECV/stems/ECV_Acoustic_Piano_Martin_Guitar_Bed.wav',
-        stemType: 'guitar',
-        isRealAudio: true,
-        assetId: 'NC-ECV-06'
-      }
-    ];
-  }
-  return INITIAL_DAW_STEMS;
+  return getUniversalTrackStems(track);
 };
 
 export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   track,
   onOpenSectionGuide,
-  isDarkMode = true
+  isDarkMode = true,
+  onSelectTrack,
+  allTracks = CANONICAL_TRACKS
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [masterVolume, setMasterVolume] = useState(85);
@@ -130,15 +63,93 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [isMasterDimmed, setIsMasterDimmed] = useState(false);
   const [isMonoCollapsed, setIsMonoCollapsed] = useState(false);
   const [masterLevels, setMasterLevels] = useState<{ l: number; r: number }>({ l: 0, r: 0 });
-  const [tracks, setTracks] = useState<MixerTrack[]>(() => getTrackStems(track));
+  const [tracks, setTracks] = useState<MixerTrack[]>(() => getUniversalTrackStems(track));
   const [isExportingWav, setIsExportingWav] = useState(false);
   const [cropPreset, setCropPreset] = useState<'30s' | '60s' | 'full'>('60s');
   const [isNextcloudSyncing, setIsNextcloudSyncing] = useState<boolean>(false);
   const [nextcloudSyncNotice, setNextcloudSyncNotice] = useState<string>('');
+  const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState<boolean>(true);
+  const [dragOverChannelId, setDragOverChannelId] = useState<number | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState<boolean>(false);
 
   useEffect(() => {
-    setTracks(getTrackStems(track));
+    return audioMiniDaw.addLoadingListener(setIsLoadingAudio);
+  }, []);
+
+  useEffect(() => {
+    setTracks(getUniversalTrackStems(track));
   }, [track.id]);
+
+  // Assign any asset from Project Browser to a specific channel
+  const handleAssignAssetToTrack = (channelId: number, asset: any) => {
+    const webdavPath = asset.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename || asset.name}`;
+    const audioUrl = buildNextcloudStreamUrl(webdavPath);
+    const cleanName = (asset.filename || asset.name || `Stem ${channelId}`).replace(/\.[^/.]+$/, '');
+
+    setTracks(prev => prev.map(t => {
+      if (t.id === channelId) {
+        return {
+          ...t,
+          name: `Track ${channelId}: ${cleanName}`,
+          webdavPath,
+          audioUrl,
+          isRealAudio: true,
+          stemType: asset.stemType || (asset.category?.includes('VOCAL') ? 'vocal' : asset.category?.includes('DRUM') ? 'drums' : asset.category?.includes('BASS') ? 'bass' : 'organ'),
+          color: asset.color || t.color
+        };
+      }
+      return t;
+    }));
+
+    setNextcloudSyncNotice(`✓ Routed "${cleanName}" to Channel ${channelId}`);
+    setTimeout(() => setNextcloudSyncNotice(''), 4000);
+
+    if (isPlaying) {
+      audioMiniDaw.stopPlayback();
+      setTimeout(() => {
+        audioMiniDaw.startPlayback(
+          tracks.map(t => t.id === channelId ? { ...t, webdavPath, audioUrl, isRealAudio: true } : t),
+          track.bpm,
+          track.key
+        );
+      }, 80);
+    }
+  };
+
+  // Load all 4 stems of any track into Mixer
+  const handleLoadAllStems = (trackToLoad: Track) => {
+    const stems = getUniversalTrackStems(trackToLoad);
+    setTracks(stems);
+    setNextcloudSyncNotice(`✓ Loaded all 4 stems for ${trackToLoad.title}`);
+    setTimeout(() => setNextcloudSyncNotice(''), 4000);
+
+    if (isPlaying) {
+      audioMiniDaw.stopPlayback();
+      setTimeout(() => {
+        audioMiniDaw.startPlayback(stems, trackToLoad.bpm, trackToLoad.key);
+      }, 80);
+    }
+  };
+
+  // HTML5 Drag-and-Drop handler on channel strip
+  const handleDropOnChannel = (channelId: number, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverChannelId(null);
+    try {
+      const rawData = e.dataTransfer.getData('application/json');
+      if (rawData) {
+        const asset = JSON.parse(rawData);
+        handleAssignAssetToTrack(channelId, asset);
+        return;
+      }
+      const plainText = e.dataTransfer.getData('text/plain');
+      if (plainText) {
+        handleAssignAssetToTrack(channelId, { filename: plainText });
+      }
+    } catch (err) {
+      console.warn('Failed to parse dropped asset data:', err);
+    }
+  };
 
   // Master Bus FX Rack states
   const [effects, setEffects] = useState<DawEffectsState>({ ...DEFAULT_DAW_EFFECTS });
@@ -421,38 +432,69 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         isDarkMode={isDarkMode}
       />
 
-      {/* Main Transport & Master Control Console */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <span>4-Track Lossless Waveform Mixer & Trimmer (Mini-DAW)</span>
-              </h3>
-              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
-                24-Bit / 48kHz PCM Lossless
-              </span>
-              <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-700/40">
-                Live Web Audio Analyser
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Precision stem balancing for {track.title} ({track.bpm} BPM • {track.key}) with real-time 3-band EQ, compressor, and tape saturation.
-            </p>
-          </div>
+      {/* Responsive Horizontal Layout: Project Browser Sidebar + Mini-DAW Console */}
+      <div className="flex flex-col xl:flex-row gap-5 items-start w-full">
+        {/* WEBDAV PROJECT BROWSER SIDEBAR */}
+        <MiniDawProjectBrowserSidebar
+          selectedTrack={track}
+          onSelectTrack={onSelectTrack}
+          allTracks={allTracks || CANONICAL_TRACKS}
+          onAssignAssetToTrack={handleAssignAssetToTrack}
+          onLoadAllStems={handleLoadAllStems}
+          isDarkMode={isDarkMode}
+          isOpen={isProjectBrowserOpen}
+          onToggleOpen={() => setIsProjectBrowserOpen(prev => !prev)}
+        />
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {onOpenSectionGuide && (
-              <button
-                type="button"
-                onClick={() => onOpenSectionGuide('mixer')}
-                className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                title="Open Mini-DAW Mixer Operating Guide & SOP Rules"
-              >
-                <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                <span>How To Use Mixer</span>
-              </button>
-            )}
+        {/* MAIN CONSOLE & CHANNELS */}
+        <div className="flex-1 min-w-0 space-y-5 w-full">
+          {/* Main Transport & Master Control Console */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <span>4-Track Lossless Waveform Mixer & Trimmer (Mini-DAW)</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-700/40">
+                    24-Bit / 48kHz PCM Lossless
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-700/40">
+                    Live Web Audio Analyser
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Precision stem balancing for {track.title} ({track.bpm} BPM • {track.key}) with real-time 3-band EQ, compressor, and tape saturation. Drag & drop assets from the sidebar directly onto any track!
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Toggle Project Browser */}
+                <button
+                  type="button"
+                  onClick={() => setIsProjectBrowserOpen(!isProjectBrowserOpen)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
+                    isProjectBrowserOpen
+                      ? 'bg-cyan-950 text-cyan-300 border-cyan-700/60 shadow-cyan-950/40'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  }`}
+                  title="Toggle Nextcloud WebDAV Project Browser Sidebar"
+                >
+                  <FolderKanban className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{isProjectBrowserOpen ? 'Hide Browser' : 'Project Browser'}</span>
+                </button>
+
+                {onOpenSectionGuide && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenSectionGuide('mixer')}
+                    className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 text-xs font-bold border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    title="Open Mini-DAW Mixer Operating Guide & SOP Rules"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>How To Use Mixer</span>
+                  </button>
+                )}
 
             {/* Crop Preset Selector */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
@@ -505,8 +547,22 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-950'
               }`}
             >
-              {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-              <span>{isPlaying ? 'Stop Playback' : 'Play 4-Track'}</span>
+              {isPlaying ? (
+                isLoadingAudio ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
+                ) : (
+                  <Square className="w-4 h-4 fill-current" />
+                )
+              ) : (
+                <Play className="w-4 h-4 fill-current" />
+              )}
+              <span>
+                {isPlaying
+                  ? isLoadingAudio
+                    ? 'Loading Audio...'
+                    : 'Stop Playback'
+                  : 'Play 4-Track'}
+              </span>
             </button>
           </div>
         </div>
@@ -948,35 +1004,56 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
           <span>Sample Rate: 48,000 Hz • Bit-Depth: 24-Bit Linear PCM</span>
         </div>
 
-        {tracks.map((trk, i) => (
-          <div
-            key={trk.id}
-            className="bg-slate-950 border border-slate-800/90 rounded-xl p-4 flex items-center justify-between flex-wrap gap-4 hover:border-slate-700 transition"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-white text-xs shadow-md"
-                style={{ backgroundColor: trk.color }}
-              >
-                {i + 1}
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-white flex items-center gap-2">
-                  <span>{trk.name}</span>
-                </h4>
-                <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
-                  <span className="text-sky-400 font-bold">WebDAV:</span>
-                  <span className="truncate max-w-[280px]">
-                    {trk.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/${trk.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.wav`}
-                  </span>
-                  {trk.isRealAudio && (
-                    <span className="px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/40 text-[9px] font-bold">
-                      REAL STEM
+        {tracks.map((trk, i) => {
+          const isDragTarget = dragOverChannelId === trk.id;
+          return (
+            <div
+              key={trk.id}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                if (dragOverChannelId !== trk.id) setDragOverChannelId(trk.id);
+              }}
+              onDragLeave={() => {
+                if (dragOverChannelId === trk.id) setDragOverChannelId(null);
+              }}
+              onDrop={(e) => handleDropOnChannel(trk.id, e)}
+              className={`relative rounded-xl p-4 flex items-center justify-between flex-wrap gap-4 transition border ${
+                isDragTarget
+                  ? 'bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-500/60 shadow-xl shadow-cyan-950/60 scale-[1.01]'
+                  : 'bg-slate-950 border-slate-800/90 hover:border-slate-700'
+              }`}
+            >
+              {isDragTarget && (
+                <div className="absolute inset-0 bg-cyan-950/95 rounded-xl border-2 border-dashed border-cyan-400 flex items-center justify-center gap-2 z-20 animate-pulse text-cyan-200 font-mono text-xs font-bold pointer-events-none">
+                  <GripVertical className="w-5 h-5 text-cyan-400" />
+                  <span>DROP WEBDAV ASSET HERE TO ROUTE TO CHANNEL {trk.id}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-white text-xs shadow-md"
+                  style={{ backgroundColor: trk.color }}
+                >
+                  {i + 1}
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>{trk.name}</span>
+                  </h4>
+                  <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
+                    <span className="text-sky-400 font-bold">WebDAV:</span>
+                    <span className="truncate max-w-[280px]">
+                      {trk.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/${trk.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.wav`}
                     </span>
-                  )}
-                </span>
+                    {trk.isRealAudio && (
+                      <span className="px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/40 text-[9px] font-bold">
+                        REAL STEM
+                      </span>
+                    )}
+                  </span>
+                </div>
               </div>
-            </div>
 
             {/* Faders & Knobs */}
             <div className="flex items-center gap-5 flex-wrap">
@@ -1078,7 +1155,8 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {/* GLOBAL MASTER OUTPUT BUS CHANNEL STRIP (Controls Combined Output Gain of all tracks) */}
         <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-2 border-indigo-500/50 rounded-xl p-4 shadow-xl flex items-center justify-between flex-wrap gap-4 mt-3 ring-1 ring-indigo-500/20">
@@ -1245,6 +1323,8 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
           />
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 };
