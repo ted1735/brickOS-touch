@@ -109,10 +109,10 @@ OUTRO:
       title: track.title,
       tempoBpm: track.bpm,
       performanceKey: `${targetKey}m`,
-      clickTrack: `https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track4_click.wav`,
-      guideVocal: `https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track2_vocal.wav`,
-      instrumentalPad: `https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track1_instrumental.wav`,
-      harmonies: `https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track3_harmonies.wav`,
+      clickTrack: `https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track4_click.wav`,
+      guideVocal: `https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track2_vocal.wav`,
+      instrumentalPad: `https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track1_instrumental.wav`,
+      harmonies: `https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/track3_harmonies.wav`,
       ccliLicense: "BRICK Records Ministry Non-Profit Exemption"
     };
     const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });

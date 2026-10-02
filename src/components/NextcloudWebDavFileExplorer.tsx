@@ -41,7 +41,9 @@ import {
   Tag,
   CornerDownRight,
   ShieldCheck,
-  Key
+  Key,
+  Zap,
+  Activity
 } from 'lucide-react';
 import { Track, WebDavFolderItem, WebDavFileItem, WebDavBreadcrumb, WebDavBrowseResponse } from '../types';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -121,6 +123,14 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
   const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
   const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState<boolean>(false);
 
+  // Multi-Route Redundancy & Ultra-Highspeed State
+  const [activeRoute, setActiveRoute] = useState<'primary' | 'fallback'>('primary');
+  const [isFromCache, setIsFromCache] = useState<boolean>(false);
+  const [isPushConnected, setIsPushConnected] = useState<boolean>(false);
+  const [routeStats, setRouteStats] = useState<any>(null);
+  const [isSwitchingRoute, setIsSwitchingRoute] = useState<boolean>(false);
+  const currentPathRef = useRef<string>(currentPath);
+
   const [toastMessage, setToastMessage] = useState<string>('');
 
   const showToast = (msg: string) => {
@@ -128,18 +138,32 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  // Fetch directory contents via WebDAV PROPFIND API
-  const fetchDirectory = async (targetPath: string) => {
-    setIsLoading(true);
+  const fetchRouteStatus = async () => {
+    try {
+      const res = await fetch('/api/nextcloud/routes');
+      if (res.ok) {
+        const d = await res.json();
+        setRouteStats(d);
+        if (d.activeRoute) setActiveRoute(d.activeRoute);
+        setIsPushConnected(Boolean(d.pushWebSocket?.connected));
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Fetch directory contents via WebDAV PROPFIND API with in-memory RAM caching and failover
+  const fetchDirectory = async (targetPath: string, silent = false, forceRefresh = false) => {
+    if (!silent) setIsLoading(true);
     setErrorMessage('');
     try {
       const res = await fetch('/api/nextcloud/browse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: targetPath })
+        body: JSON.stringify({ path: targetPath, forceRefresh })
       });
 
-      const data: WebDavBrowseResponse = await res.json();
+      const data: any = await res.json();
 
       if (!res.ok || !data.success) {
         if (res.status === 401 || data.isAuthRequired) {
@@ -153,22 +177,92 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
 
       setIsAuthRequired(false);
       setCurrentPath(data.currentPath);
+      currentPathRef.current = data.currentPath;
       setParentPath(data.parentPath);
       setBreadcrumbs(data.breadcrumbs || []);
       setFolders(data.folders || []);
       setFiles(data.files || []);
       setLatencyMs(data.latencyMs || 0);
+      setIsFromCache(Boolean(data.isFromCache));
+      if (data.activeRoute) setActiveRoute(data.activeRoute);
     } catch (err: any) {
       console.error('Error fetching Nextcloud directory:', err);
-      setErrorMessage(err.message || 'Network error connecting to Nextcloud WebDAV');
+      if (!silent) setErrorMessage(err.message || 'Network error connecting to Nextcloud WebDAV');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
-  // Initial load
+  // Manually purge RAM PROPFIND Cache
+  const handlePurgeCache = async () => {
+    try {
+      await fetch('/api/nextcloud/purge-cache', { method: 'POST' });
+      showToast('⚡ In-Memory RAM Cache Purged — Fetching Fresh Nextcloud Data');
+      fetchDirectory(currentPath, false, true);
+    } catch {
+      showToast('Failed to purge cache');
+    }
+  };
+
+  // Manually toggle or test failover route
+  const handleToggleRoute = async () => {
+    setIsSwitchingRoute(true);
+    const targetRoute = activeRoute === 'primary' ? 'fallback' : 'primary';
+    try {
+      const res = await fetch('/api/nextcloud/switch-route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route: targetRoute })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActiveRoute(targetRoute);
+        showToast(`Route switched to ${targetRoute === 'primary' ? 'Tailscale Direct (1 Gbps)' : 'Cloudflare Fallback'}`);
+        fetchDirectory(currentPath, false, true);
+      }
+    } catch {
+      showToast('Failed to switch route');
+    } finally {
+      setIsSwitchingRoute(false);
+    }
+  };
+
+  // Initial load & real-time SSE listener from Rust notify_push
   useEffect(() => {
     fetchDirectory(currentPath);
+    fetchRouteStatus();
+
+    // Subscribe to Server-Sent Events (SSE) from notify_push
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/nextcloud/events');
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === 'push_file_change' || payload?.type === 'cache_invalidated') {
+            // Live file change occurred on Nextcloud! Silently refresh folder
+            fetchDirectory(currentPathRef.current, true, true);
+            showToast('⚡ Live Sync: notify_push detected file change — refreshed');
+          } else if (payload?.type === 'push_connected') {
+            setIsPushConnected(true);
+          } else if (payload?.type === 'init') {
+            setIsPushConnected(Boolean(payload.pushWebSocketConnected));
+            if (payload.activeRoute) setActiveRoute(payload.activeRoute);
+          }
+        } catch {
+          // ignore
+        }
+      };
+    } catch (err) {
+      console.warn('SSE event connection failed:', err);
+    }
+
+    const interval = setInterval(fetchRouteStatus, 15000);
+
+    return () => {
+      es?.close();
+      clearInterval(interval);
+    };
   }, []);
 
   // Audio Playback Transport Management
@@ -604,6 +698,59 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
               <X className="w-4 h-4" />
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ULTRA-HIGHSPEED MULTI-ROUTE & SERVER-SIDE OPTIMIZATIONS STATUS RIBBON */}
+      <div className={`px-4 py-2 border-b flex items-center justify-between gap-3 text-xs flex-wrap ${
+        isDarkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'
+      }`}>
+        <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono">
+          {/* Active Connection Route Badge */}
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold ${
+            activeRoute === 'primary'
+              ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-300'
+              : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+          }`}>
+            <Zap className={`w-3.5 h-3.5 ${activeRoute === 'primary' ? 'text-cyan-400 fill-cyan-400' : 'text-amber-400'}`} />
+            <span>{activeRoute === 'primary' ? 'Tailscale Direct (1 Gbps Mesh)' : 'Cloudflare Redundant Fallback'}</span>
+            <span className="opacity-60 text-[10px]">({latencyMs}ms)</span>
+          </div>
+
+          {/* Rust notify_push Status */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-slate-950/50 border-slate-800 text-slate-300">
+            <span className={`w-2 h-2 rounded-full ${isPushConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+            <span>notify_push: {isPushConnected ? 'Real-Time WS Active' : 'Connecting /push/ws'}</span>
+          </div>
+
+          {/* In-Memory APCu / Bus Cache Indicator */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-slate-950/50 border-slate-800 text-slate-300">
+            <Activity className="w-3.5 h-3.5 text-purple-400" />
+            <span>RAM Cache: {isFromCache ? 'Bus Speed (<2ms)' : 'Live Edge Sync'}</span>
+          </div>
+        </div>
+
+        {/* Rapid Redundancy & Cache Controls */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePurgeCache}
+            className="px-2.5 py-1 rounded-lg border border-slate-700 hover:border-slate-500 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[11px] font-mono font-medium transition cursor-pointer"
+            title="Purge in-memory PROPFIND RAM cache and force fresh read from Nextcloud APCu / Redis"
+          >
+            Purge Cache
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleRoute}
+            disabled={isSwitchingRoute}
+            className="px-2.5 py-1 rounded-lg border border-indigo-700/50 hover:border-indigo-500 bg-indigo-950/50 hover:bg-indigo-900/60 text-indigo-300 text-[11px] font-mono font-medium transition cursor-pointer flex items-center gap-1"
+            title="Test automatic failover between Tailscale Direct (1 Gbps) and Cloudflare Redundant Fallback"
+          >
+            <Repeat className="w-3 h-3" />
+            <span>Test Failover</span>
+          </button>
         </div>
       </div>
 

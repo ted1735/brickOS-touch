@@ -628,7 +628,12 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-          <span>Server: <strong className="text-cyan-400">https://nextcloud.moyercloud.com</strong></span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-emerald-400 font-bold">Tailscale Direct Mesh</span>
+          </span>
+          <span>·</span>
+          <span>Server: <strong className="text-cyan-400">{config.serverUrl || 'https://nextcloud.mermaid-symmetric.ts.net'}</strong></span>
           <span>·</span>
           <span>User: <strong className="text-indigo-400">{config.username}</strong></span>
         </div>
@@ -737,7 +742,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
             </button>
 
             <a
-              href="https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production"
+              href={`${config.serverUrl || 'https://nextcloud.mermaid-symmetric.ts.net'}/index.php/apps/files/files/207332?dir=/Music-Production`}
               target="_blank"
               rel="noreferrer"
               className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer ${
@@ -1590,7 +1595,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                   </button>
 
                   <a
-                    href="https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production"
+                    href={`${config.serverUrl || 'https://nextcloud.mermaid-symmetric.ts.net'}/index.php/apps/files/files/207332?dir=/Music-Production`}
                     target="_blank"
                     rel="noreferrer"
                     className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${

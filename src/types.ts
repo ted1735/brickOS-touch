@@ -459,6 +459,8 @@ export interface NextcloudFolderAsset {
 
 export interface NextcloudSyncConfig {
   serverUrl: string;
+  fallbackServerUrl?: string;
+  activeRoute?: 'primary' | 'fallback';
   username: string;
   appPassword?: string;
   webdavRoot: string;
@@ -466,6 +468,7 @@ export interface NextcloudSyncConfig {
   lastConnectionStatus: 'connected' | 'unauthorized' | 'error' | 'idle';
   lastPingMs?: number;
   lastSyncTimestamp?: string;
+  isPushConnected?: boolean;
 }
 
 export interface WebDavFolderItem {

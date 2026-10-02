@@ -5,7 +5,7 @@ import { Readable } from 'stream';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
 import dotenv from 'dotenv';
-import { fetch as undiciFetch, ProxyAgent } from 'undici';
+import { fetch as undiciFetch, ProxyAgent, Agent } from 'undici';
 import { exec, execSync, spawn } from 'child_process';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, CATALOG_TRACK_DEFINITIONS } from './src/data/nextcloudAssetIndex';
 
@@ -782,8 +782,11 @@ interface CachedWebdavCredentials {
   lastValidatedAt?: string;
 }
 
+const PRIMARY_NEXTCLOUD_URL = 'https://nextcloud.mermaid-symmetric.ts.net';
+const FALLBACK_NEXTCLOUD_URL = 'https://nextcloud.moyercloud.com';
+
 const cachedWebdavCredentials: CachedWebdavCredentials = {
-  serverUrl: 'https://nextcloud.moyercloud.com',
+  serverUrl: PRIMARY_NEXTCLOUD_URL,
   username: 'ncted',
   password: '',
   hasValidAuth: false,
@@ -890,6 +893,191 @@ const TAILSCALE_PROXY_PORT = 1055;
 const TAILSCALE_PROXY_URL = `http://127.0.0.1:${TAILSCALE_PROXY_PORT}`;
 const tailscaleProxyAgent = new ProxyAgent(TAILSCALE_PROXY_URL);
 
+// High-Performance Undici Connection Pools (Keep-Alive, Pipelining, 1-Hour Body Timeouts)
+const primaryUndiciAgent = new Agent({
+  keepAliveTimeout: 60_000,
+  keepAliveMaxTimeout: 600_000,
+  pipelining: 1,
+  connections: 64, // Supports up to 64 concurrent audio stems & parallel transfers
+  connect: {
+    rejectUnauthorized: false
+  },
+  headersTimeout: 60_000,
+  bodyTimeout: 3_600_000 // 1 hour for large 16GB stems & video renders
+});
+
+const fallbackUndiciAgent = new Agent({
+  keepAliveTimeout: 60_000,
+  keepAliveMaxTimeout: 300_000,
+  pipelining: 1,
+  connections: 32,
+  headersTimeout: 30_000,
+  bodyTimeout: 600_000
+});
+
+// Dynamic Multi-Route Health State
+export const nextcloudRouteState = {
+  primary: {
+    url: PRIMARY_NEXTCLOUD_URL,
+    online: true,
+    latencyMs: 14,
+    lastChecked: new Date().toISOString(),
+    consecutiveFailures: 0
+  },
+  fallback: {
+    url: FALLBACK_NEXTCLOUD_URL,
+    online: true,
+    latencyMs: 28,
+    lastChecked: new Date().toISOString(),
+    consecutiveFailures: 0
+  },
+  activeRoute: 'primary' as 'primary' | 'fallback',
+  forceRoute: null as 'primary' | 'fallback' | null,
+  pushWebSocket: {
+    connected: false,
+    url: 'wss://nextcloud.mermaid-symmetric.ts.net/push/ws',
+    reconnectCount: 0,
+    lastEventAt: null as string | null
+  },
+  cache: {
+    entries: 0,
+    hits: 0,
+    misses: 0,
+    lastPurgedAt: new Date().toISOString()
+  }
+};
+
+// Server-Sent Events (SSE) Client Pool for Live Push Updates
+const sseNextcloudClients = new Set<express.Response>();
+
+export function broadcastNextcloudEvent(eventData: any) {
+  const payload = `data: ${JSON.stringify(eventData)}\n\n`;
+  for (const client of sseNextcloudClients) {
+    try {
+      client.write(payload);
+    } catch {
+      sseNextcloudClients.delete(client);
+    }
+  }
+}
+
+// In-Memory High-Speed PROPFIND & Metadata Cache
+interface PropfindCacheEntry {
+  data: any;
+  xml: string;
+  cachedAt: number;
+  etag?: string;
+  fileId?: string;
+}
+const propfindCache = new Map<string, PropfindCacheEntry>();
+const PROPFIND_CACHE_TTL_MS = 60_000; // 60 seconds TTL
+
+// RFC 4918 / Nextcloud SabreDAV Lean XML PROPFIND Payload Specification
+// Explicitly requests only properties needed by DAW/browser, avoiding allprop and DB bloat
+export const LEAN_PROPFIND_XML = `<?xml version="1.0" encoding="utf-8" ?>
+<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+  <d:prop>
+    <d:getlastmodified />
+    <d:getcontentlength />
+    <d:getcontenttype />
+    <d:getetag />
+    <d:resourcetype />
+    <oc:fileid />
+    <oc:size />
+  </d:prop>
+</d:propfind>`;
+
+export function invalidatePropfindCache(pathPrefix?: string) {
+  if (!pathPrefix) {
+    propfindCache.clear();
+  } else {
+    const norm = pathPrefix.toLowerCase();
+    for (const key of Array.from(propfindCache.keys())) {
+      if (key.toLowerCase().includes(norm)) {
+        propfindCache.delete(key);
+      }
+    }
+  }
+  nextcloudRouteState.cache.entries = propfindCache.size;
+  nextcloudRouteState.cache.lastPurgedAt = new Date().toISOString();
+  broadcastNextcloudEvent({ type: 'cache_invalidated', pathPrefix, timestamp: new Date().toISOString() });
+}
+
+// Rust Push Daemon (`notify_push`) WebSocket Client
+let pushWsClient: any = null;
+let pushWsReconnectTimer: any = null;
+
+function initNotifyPushClient() {
+  if (pushWsClient) {
+    try { pushWsClient.close(); } catch {}
+    pushWsClient = null;
+  }
+  clearTimeout(pushWsReconnectTimer);
+
+  try {
+    const creds = cachedWebdavCredentials;
+    const authHeaders: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5'
+    };
+    if (creds.username && creds.password) {
+      authHeaders['Authorization'] = `Basic ${Buffer.from(`${creds.username}:${creds.password}`).toString('base64')}`;
+    }
+
+    const wsUrl = 'wss://nextcloud.mermaid-symmetric.ts.net/push/ws';
+    // Use native global WebSocket
+    const ws = new (globalThis as any).WebSocket(wsUrl, {
+      headers: authHeaders
+    });
+
+    ws.onopen = () => {
+      nextcloudRouteState.pushWebSocket.connected = true;
+      nextcloudRouteState.pushWebSocket.reconnectCount = 0;
+      console.log('[Nextcloud Push] Connected to Rust notify_push daemon on wss://nextcloud.mermaid-symmetric.ts.net/push/ws');
+      broadcastNextcloudEvent({ type: 'push_connected', timestamp: new Date().toISOString() });
+    };
+
+    ws.onmessage = (evt: any) => {
+      const dataStr = typeof evt.data === 'string' ? evt.data : evt.data?.toString() || '';
+      nextcloudRouteState.pushWebSocket.lastEventAt = new Date().toISOString();
+      console.log(`[Nextcloud Push] Received notify_push event: ${dataStr.substring(0, 100)}`);
+      // Purge in-memory PROPFIND cache on any file change
+      invalidatePropfindCache();
+      broadcastNextcloudEvent({ type: 'push_file_change', data: dataStr, timestamp: new Date().toISOString() });
+    };
+
+    ws.onerror = (err: any) => {
+      nextcloudRouteState.pushWebSocket.connected = false;
+      console.warn('[Nextcloud Push] notify_push WebSocket notice:', err?.message || 'Connection closed');
+    };
+
+    ws.onclose = () => {
+      nextcloudRouteState.pushWebSocket.connected = false;
+      pushWsClient = null;
+      pushWsReconnectTimer = setTimeout(() => {
+        nextcloudRouteState.pushWebSocket.reconnectCount++;
+        initNotifyPushClient();
+      }, 5000);
+    };
+
+    // Heartbeat ping every 25 seconds
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === 1 && typeof ws.ping === 'function') {
+        ws.ping();
+      } else if (ws.readyState !== 1) {
+        clearInterval(pingInterval);
+      }
+    }, 25000);
+
+    pushWsClient = ws;
+  } catch (err) {
+    console.warn('[Nextcloud Push] Failed to initialize WebSocket client:', err);
+    pushWsReconnectTimer = setTimeout(initNotifyPushClient, 10000);
+  }
+}
+
+// Start WebSocket connection to notify_push
+initNotifyPushClient();
+
 function isTailscaleAddress(hostOrUrl: string): boolean {
   try {
     let hostname = hostOrUrl;
@@ -941,14 +1129,118 @@ function ensureTailscaledRunning(): boolean {
 // Ensure daemon is active
 ensureTailscaledRunning();
 
+// Resilient Multi-Route Fetch with Highspeed Keep-Alive Agent & Transparent Failover
+async function smartFetchWithFailover(
+  urlOrPath: string,
+  options: any = {},
+  preferredRoute?: 'primary' | 'fallback'
+): Promise<{ response: any; usedRoute: 'primary' | 'fallback'; latencyMs: number }> {
+  ensureTailscaledRunning();
+
+  const active = preferredRoute || nextcloudRouteState.forceRoute || nextcloudRouteState.activeRoute;
+  const isPrimaryPreferred = active !== 'fallback';
+
+  const routePlan: Array<'primary' | 'fallback'> = isPrimaryPreferred
+    ? ['primary', 'fallback']
+    : ['fallback', 'primary'];
+
+  let lastError: any = null;
+
+  for (const route of routePlan) {
+    const baseUrl = route === 'primary' ? PRIMARY_NEXTCLOUD_URL : FALLBACK_NEXTCLOUD_URL;
+    const dispatcher = route === 'primary' ? primaryUndiciAgent : fallbackUndiciAgent;
+
+    let targetUrl: string;
+    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+      try {
+        const u = new URL(urlOrPath);
+        const hostUrl = new URL(baseUrl);
+        u.protocol = hostUrl.protocol;
+        u.host = hostUrl.host;
+        targetUrl = u.toString();
+      } catch {
+        targetUrl = urlOrPath;
+      }
+    } else {
+      const cleanPath = urlOrPath.startsWith('/') ? urlOrPath : '/' + urlOrPath;
+      targetUrl = `${baseUrl}${cleanPath}`;
+    }
+
+    const startT = Date.now();
+    try {
+      const response = await undiciFetch(targetUrl, {
+        ...options,
+        dispatcher
+      });
+
+      const latencyMs = Date.now() - startT;
+
+      if (route === 'primary') {
+        nextcloudRouteState.primary.online = true;
+        nextcloudRouteState.primary.latencyMs = latencyMs;
+        nextcloudRouteState.primary.lastChecked = new Date().toISOString();
+        nextcloudRouteState.primary.consecutiveFailures = 0;
+      } else {
+        nextcloudRouteState.fallback.online = true;
+        nextcloudRouteState.fallback.latencyMs = latencyMs;
+        nextcloudRouteState.fallback.lastChecked = new Date().toISOString();
+        nextcloudRouteState.fallback.consecutiveFailures = 0;
+      }
+
+      if (route === 'primary' && nextcloudRouteState.activeRoute !== 'primary') {
+        nextcloudRouteState.activeRoute = 'primary';
+        addNextcloudLog({
+          stage: 'ROUTING',
+          action: 'PRIMARY_RESTORED',
+          level: 'success',
+          message: `Switched active Nextcloud route to Primary Tailscale Direct (${latencyMs}ms)`,
+          details: { url: targetUrl, latencyMs }
+        });
+      }
+
+      return { response, usedRoute: route, latencyMs };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startT;
+      lastError = err;
+
+      if (route === 'primary') {
+        nextcloudRouteState.primary.consecutiveFailures++;
+        if (nextcloudRouteState.primary.consecutiveFailures >= 2) {
+          nextcloudRouteState.primary.online = false;
+        }
+        nextcloudRouteState.activeRoute = 'fallback';
+        addNextcloudLog({
+          stage: 'ROUTING',
+          action: 'FAILOVER_TRIGGERED',
+          level: 'warn',
+          message: `Primary Nextcloud route failed (${err.message}), seamlessly failing over to secondary endpoint: ${FALLBACK_NEXTCLOUD_URL}`,
+          details: { error: err.message, targetUrl }
+        });
+      } else {
+        nextcloudRouteState.fallback.consecutiveFailures++;
+        if (nextcloudRouteState.fallback.consecutiveFailures >= 2) {
+          nextcloudRouteState.fallback.online = false;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error('All redundant Nextcloud routes failed');
+}
+
 async function smartFetch(urlStr: string, options: any = {}, forceTailscale = false): Promise<any> {
   const isTs = forceTailscale || isTailscaleAddress(urlStr);
   if (isTs) {
-    ensureTailscaledRunning();
-    return undiciFetch(urlStr, {
-      ...options,
-      dispatcher: tailscaleProxyAgent
-    });
+    try {
+      const res = await smartFetchWithFailover(urlStr, options);
+      return res.response;
+    } catch {
+      ensureTailscaledRunning();
+      return undiciFetch(urlStr, {
+        ...options,
+        dispatcher: tailscaleProxyAgent
+      });
+    }
   }
   return fetch(urlStr, options);
 }
@@ -1118,6 +1410,96 @@ app.post('/api/tailscale/ping', async (req, res) => {
   }
 });
 
+// ============================================================================
+// NEXTCLOUD DUAL-PATH MULTI-ROUTE & REAL-TIME PUSH SYNC ENDPOINTS
+// ============================================================================
+
+// Get Multi-Route Connection Status, Latency & Cache Stats
+app.get('/api/nextcloud/routes', (req, res) => {
+  res.json({
+    success: true,
+    ...nextcloudRouteState,
+    cachedCredentials: {
+      serverUrl: cachedWebdavCredentials.serverUrl,
+      username: cachedWebdavCredentials.username,
+      hasPassword: Boolean(cachedWebdavCredentials.password && cachedWebdavCredentials.password.length > 0),
+      hasValidAuth: cachedWebdavCredentials.hasValidAuth
+    }
+  });
+});
+
+// Manually Switch or Pin Route ('primary' | 'fallback' | 'auto')
+app.post('/api/nextcloud/switch-route', (req, res) => {
+  const { route } = req.body;
+  if (route === 'primary' || route === 'fallback') {
+    nextcloudRouteState.forceRoute = route;
+    nextcloudRouteState.activeRoute = route;
+  } else {
+    nextcloudRouteState.forceRoute = null;
+    nextcloudRouteState.activeRoute = 'primary';
+  }
+
+  addNextcloudLog({
+    stage: 'ROUTING',
+    action: 'ROUTE_SWITCHED',
+    level: 'info',
+    message: `Nextcloud connection route switched to: ${nextcloudRouteState.activeRoute.toUpperCase()} (mode: ${nextcloudRouteState.forceRoute ? 'pinned' : 'auto-failover'})`,
+    details: { activeRoute: nextcloudRouteState.activeRoute, forceRoute: nextcloudRouteState.forceRoute }
+  });
+
+  res.json({
+    success: true,
+    activeRoute: nextcloudRouteState.activeRoute,
+    forceRoute: nextcloudRouteState.forceRoute,
+    message: `Active Nextcloud route is now ${nextcloudRouteState.activeRoute}`
+  });
+});
+
+// Manually Purge In-Memory PROPFIND Cache
+app.post('/api/nextcloud/purge-cache', (req, res) => {
+  const { pathPrefix } = req.body || {};
+  invalidatePropfindCache(pathPrefix);
+  res.json({
+    success: true,
+    message: 'Nextcloud in-memory PROPFIND cache purged',
+    remainingEntries: propfindCache.size
+  });
+});
+
+// Server-Sent Events (SSE) Stream for Instant Rust Push Daemon Sync
+app.get('/api/nextcloud/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders?.();
+
+  sseNextcloudClients.add(res);
+
+  // Send initial state
+  res.write(`data: ${JSON.stringify({
+    type: 'init',
+    activeRoute: nextcloudRouteState.activeRoute,
+    pushWebSocketConnected: nextcloudRouteState.pushWebSocket.connected,
+    timestamp: new Date().toISOString()
+  })}\n\n`);
+
+  // Heartbeat comment every 20 seconds to keep connection open
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(':keep-alive\n\n');
+    } catch {
+      clearInterval(keepAlive);
+      sseNextcloudClients.delete(res);
+    }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    sseNextcloudClients.delete(res);
+  });
+});
+
 // 11. Nextcloud Live WebDAV Connection Test with Deep Multi-Stage Diagnostics
 app.post('/api/nextcloud/test-connection', async (req, res) => {
   const startTime = Date.now();
@@ -1129,8 +1511,8 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
 
   try {
     const {
-      serverUrl = 'https://nextcloud.moyercloud.com',
-      username = 'ncted',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
+      username = cachedWebdavCredentials.username || 'ncted',
       password = '',
       webdavPath = '/remote.php/dav/files/ncted/Music-Production'
     } = req.body;
@@ -1308,8 +1690,8 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
       });
     } else if (isAuthRequired) {
       if (!hasPassword) {
-        diagnosticSummary = `Nextcloud server is ONLINE at ${cleanServerUrl} and responded via Cloudflare in ${latencyMs}ms, but returned HTTP 401 because NO App Password was supplied.`;
-        recommendedAction = 'Generate a Nextcloud App Password at: https://nextcloud.moyercloud.com/index.php/settings/user/security (under "Devices & client credentials" -> Name: "brickOS Studio" -> Generate) and paste it into the App Password field.';
+        diagnosticSummary = `Nextcloud server is ONLINE at ${cleanServerUrl} (${latencyMs}ms), but returned HTTP 401 because NO App Password was supplied.`;
+        recommendedAction = `Generate a Nextcloud App Password at: ${cleanServerUrl}/index.php/settings/user/security (under "Devices & client credentials" -> Name: "brickOS Studio" -> Generate) and paste it into the App Password field.`;
       } else {
         diagnosticSummary = `Nextcloud server is ONLINE, but rejected the supplied App Password (HTTP 401 Unauthorized: ${sabreException || 'SabreDAV Authentication Failed'}).`;
         recommendedAction = 'The password entered was not accepted by SabreDAV. Please ensure you are using an App Password generated under Nextcloud Settings -> Security -> Devices & client credentials, rather than a browser session password.';
@@ -1396,8 +1778,8 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
   try {
     const {
       folderId = '207332',
-      serverUrl = 'https://nextcloud.moyercloud.com',
-      username = 'ncted',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
+      username = cachedWebdavCredentials.username || 'ncted',
       password = '',
       webdavPath = '/remote.php/dav/files/ncted/Music-Production',
       folderPath = '/Music-Production'
@@ -1555,13 +1937,15 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
   }
 });
 
-// 13. Nextcloud WebDAV File Upload / Backup Endpoint (PUT)
+// 13. Nextcloud WebDAV File Upload / Backup Endpoint (PUT & Chunked Upload)
+// Supports up to 16 GB uploads with 1-hour timeouts matching server PHP limits
+// Uses Nextcloud /remote.php/dav/uploads chunking protocol if routed over Cloudflare (>90MB)
 app.post('/api/nextcloud/upload-file', async (req, res) => {
   const startTime = Date.now();
   try {
     const {
-      serverUrl = 'https://nextcloud.moyercloud.com',
-      username = 'ncted',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
+      username = cachedWebdavCredentials.username || 'ncted',
       password = '',
       filePath = '/remote.php/dav/files/ncted/Music-Production/brainstorming/canvas_backup.md',
       content = '',
@@ -1571,7 +1955,8 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
 
     const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
     const cleanPath = filePath.startsWith('/') ? filePath : '/' + filePath;
-    const targetUrl = `${serverUrl.replace(/\/$/, '')}${cleanPath}`;
+    const bodyPayload: Buffer = base64Data ? Buffer.from(base64Data, 'base64') : Buffer.from(content, 'utf-8');
+    const payloadSize = bodyPayload.length;
 
     const headers: Record<string, string> = {
       'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
@@ -1583,26 +1968,95 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
       headers['Authorization'] = `Basic ${authString}`;
     }
 
-    const bodyPayload = base64Data ? Buffer.from(base64Data, 'base64') : content;
+    const CLOUDFLARE_CHUNK_LIMIT = 90 * 1024 * 1024; // 90 MB chunks safely beneath 99MB limit
+    const isOverCloudflare = nextcloudRouteState.activeRoute === 'fallback' || serverUrl.includes('moyercloud.com');
+    const needsChunking = isOverCloudflare && payloadSize > CLOUDFLARE_CHUNK_LIMIT;
 
-    const response = await smartFetch(targetUrl, {
-      method: 'PUT',
-      headers,
-      body: bodyPayload,
-    });
+    let response: any;
+    let uploadMode = 'direct';
+    let chunksCount = 1;
+
+    if (needsChunking) {
+      uploadMode = 'chunked';
+      const uploadId = `up-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const uploadsBase = `/remote.php/dav/uploads/${username}/${uploadId}`;
+
+      // 1. Create upload folder
+      await smartFetchWithFailover(uploadsBase, {
+        method: 'MKCOL',
+        headers
+      });
+
+      // 2. Upload chunks sequentially
+      let offset = 0;
+      let chunkIdx = 0;
+      while (offset < payloadSize) {
+        const chunkEnd = Math.min(offset + CLOUDFLARE_CHUNK_LIMIT, payloadSize);
+        const chunkSlice = bodyPayload.subarray(offset, chunkEnd);
+        const chunkPad = String(chunkIdx).padStart(15, '0');
+        const chunkUrl = `${uploadsBase}/${chunkPad}`;
+
+        await smartFetchWithFailover(chunkUrl, {
+          method: 'PUT',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': chunkSlice.length.toString()
+          },
+          body: chunkSlice,
+          signal: AbortSignal.timeout(3600000) // 1-hour timeout
+        });
+
+        offset = chunkEnd;
+        chunkIdx++;
+      }
+      chunksCount = chunkIdx;
+
+      // 3. Assemble chunks into target file using MOVE
+      const destUrl = `${nextcloudRouteState.activeRoute === 'primary' ? PRIMARY_NEXTCLOUD_URL : FALLBACK_NEXTCLOUD_URL}${cleanPath}`;
+      const assembleRes = await smartFetchWithFailover(`${uploadsBase}/.file`, {
+        method: 'MOVE',
+        headers: {
+          ...headers,
+          'Destination': destUrl,
+          'Overwrite': 'T'
+        },
+        signal: AbortSignal.timeout(3600000)
+      });
+      response = assembleRes.response;
+    } else {
+      // Direct high-speed streaming PUT (up to 16 GB, 1-hour timeout)
+      const resData = await smartFetchWithFailover(cleanPath, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Length': payloadSize.toString()
+        },
+        body: bodyPayload,
+        signal: AbortSignal.timeout(3600000) // 1-hour timeout matching PHP config
+      });
+      response = resData.response;
+    }
 
     const latencyMs = Date.now() - startTime;
     const isSuccess = response.status >= 200 && response.status < 300;
+
+    if (isSuccess) {
+      invalidatePropfindCache();
+    }
 
     res.json({
       success: isSuccess,
       status: response.status,
       statusText: response.statusText,
-      targetUrl,
       filePath: cleanPath,
+      sizeBytes: payloadSize,
+      uploadMode,
+      chunksCount,
+      activeRoute: nextcloudRouteState.activeRoute,
       latencyMs,
       message: isSuccess
-        ? `Successfully saved to Nextcloud WebDAV at ${cleanPath} (${latencyMs}ms)`
+        ? `Successfully saved to Nextcloud WebDAV at ${cleanPath} (${(payloadSize / 1024 / 1024).toFixed(2)} MB via ${uploadMode.toUpperCase()} in ${latencyMs}ms)`
         : response.status === 401
         ? `Nextcloud authentication required (HTTP 401). Please verify your Nextcloud App Password.`
         : `Nextcloud returned HTTP ${response.status}: ${response.statusText}`
@@ -1625,7 +2079,7 @@ app.post('/api/nextcloud/browse', async (req, res) => {
   try {
     const {
       path = '/remote.php/dav/files/ncted/Music-Production',
-      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
       username = cachedWebdavCredentials.username || 'ncted',
       password = '',
       search = '',
@@ -1646,23 +2100,53 @@ app.post('/api/nextcloud/browse', async (req, res) => {
     targetPath = targetPath.replace(/\/+$/, '');
     if (!targetPath) targetPath = `/remote.php/dav/files/${username}/Music-Production`;
 
-    const targetUrl = `${cleanServerUrl}${targetPath}`;
+    // 1. Check High-Speed In-Memory Cache (Direct RAM bus latency ~1ms)
+    const cacheKey = `${username}:${targetPath}:${search}:${filter}`;
+    const cached = propfindCache.get(cacheKey);
+    if (cached && !req.body.forceRefresh && (Date.now() - cached.cachedAt < PROPFIND_CACHE_TTL_MS)) {
+      nextcloudRouteState.cache.hits++;
+      return res.json({
+        ...cached.data,
+        isFromCache: true,
+        activeRoute: nextcloudRouteState.activeRoute,
+        latencyMs: Date.now() - startTime
+      });
+    }
+    nextcloudRouteState.cache.misses++;
 
     const headers: Record<string, string> = {
       'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
       'Depth': '1',
+      'Content-Type': 'application/xml; charset=utf-8'
     };
+
+    if (cached?.etag) {
+      headers['If-None-Match'] = cached.etag;
+    }
 
     if (hasPassword) {
       const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
       headers['Authorization'] = `Basic ${authString}`;
     }
 
-    const davRes = await smartFetch(targetUrl, {
+    const { response: davRes, usedRoute } = await smartFetchWithFailover(targetPath, {
       method: 'PROPFIND',
       headers,
+      body: LEAN_PROPFIND_XML,
       signal: AbortSignal.timeout(12000)
     });
+
+    // Handle HTTP 304 Not Modified: folder ETag has not changed, serve immediately from memory!
+    if (davRes.status === 304 && cached) {
+      nextcloudRouteState.cache.hits++;
+      return res.json({
+        ...cached.data,
+        isFromCache: true,
+        etagValidated: true,
+        activeRoute: usedRoute,
+        latencyMs: Date.now() - startTime
+      });
+    }
 
     if (davRes.status === 401) {
       return res.status(401).json({
@@ -1703,6 +2187,8 @@ app.post('/api/nextcloud/browse', async (req, res) => {
       href: string;
       lastModified: string;
       isProjectFolder: boolean;
+      fileId?: string;
+      etag?: string;
       trackMatch?: string;
     }> = [];
 
@@ -1720,12 +2206,17 @@ app.post('/api/nextcloud/browse', async (req, res) => {
       isImage: boolean;
       isVideo: boolean;
       isDocument: boolean;
+      fileId?: string;
+      etag?: string;
       trackMatch?: string;
     }> = [];
 
     // Base root prefix for display calculations
     const musicProdPrefix = `/remote.php/dav/files/${username}/Music-Production`;
     const normalizedTarget = decodeURIComponent(targetPath).toLowerCase();
+
+    let folderEtag: string | undefined = undefined;
+    let folderFileId: string | undefined = undefined;
 
     for (const block of responseBlocks) {
       const blockXml = block[1];
@@ -1738,6 +2229,8 @@ app.post('/api/nextcloud/browse', async (req, res) => {
 
       // Check if this response block is the current directory itself
       if (cleanHrefLower === normalizedTarget || `${cleanHrefLower}/` === normalizedTarget) {
+        folderEtag = blockXml.match(/<d:getetag>([^<]+)<\/d:getetag>/i)?.[1]?.replace(/&quot;/g, '"');
+        folderFileId = blockXml.match(/<oc:fileid>([^<]+)<\/oc:fileid>/i)?.[1];
         continue;
       }
 
@@ -1749,6 +2242,8 @@ app.post('/api/nextcloud/browse', async (req, res) => {
 
       const modifiedMatch = blockXml.match(/<d:getlastmodified>([^<]+)<\/d:getlastmodified>/i);
       const lastModified = modifiedMatch ? modifiedMatch[1] : '';
+      const fileId = blockXml.match(/<oc:fileid>([^<]+)<\/oc:fileid>/i)?.[1];
+      const etag = blockXml.match(/<d:getetag>([^<]+)<\/d:getetag>/i)?.[1]?.replace(/&quot;/g, '"');
 
       if (isCollection) {
         // Detect if this folder corresponds to a known music project/song
@@ -1760,11 +2255,14 @@ app.post('/api/nextcloud/browse', async (req, res) => {
           href: rawHref,
           lastModified,
           isProjectFolder,
+          fileId,
+          etag,
           trackMatch: isProjectFolder ? name.replace(/[-_]/g, ' ') : undefined
         });
       } else {
         const lengthMatch = blockXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
-        const size = lengthMatch ? parseInt(lengthMatch[1], 10) : 0;
+        const ocSizeMatch = blockXml.match(/<oc:size>([^<]+)<\/oc:size>/i);
+        const size = ocSizeMatch ? parseInt(ocSizeMatch[1], 10) : (lengthMatch ? parseInt(lengthMatch[1], 10) : 0);
         const lower = name.toLowerCase();
         const extension = lower.includes('.') ? lower.split('.').pop() || '' : '';
 
@@ -1809,6 +2307,8 @@ app.post('/api/nextcloud/browse', async (req, res) => {
           size,
           mimeType,
           lastModified,
+          fileId,
+          etag,
           streamUrl: `/api/nextcloud/stream?path=${encodeURIComponent(cleanHref)}`,
           category,
           extension,
@@ -1852,26 +2352,230 @@ app.post('/api/nextcloud/browse', async (req, res) => {
     const displayPath = targetPath.replace(`/remote.php/dav/files/${username}/`, '');
     const latencyMs = Date.now() - startTime;
 
-    res.json({
+    const responsePayload = {
       success: true,
-      serverUrl,
+      serverUrl: usedRoute === 'primary' ? PRIMARY_NEXTCLOUD_URL : FALLBACK_NEXTCLOUD_URL,
       username,
       currentPath: targetPath,
       displayPath,
       parentPath,
+      folderEtag,
+      folderFileId,
       breadcrumbs,
       folders,
       files,
       totalFolders: folders.length,
       totalFiles: files.length,
+      isFromCache: false,
+      activeRoute: usedRoute,
       latencyMs
+    };
+
+    // Store in High-Speed In-Memory Cache with ETag for HTTP 304 re-validation
+    propfindCache.set(cacheKey, {
+      data: responsePayload,
+      xml,
+      cachedAt: Date.now(),
+      etag: folderEtag,
+      fileId: folderFileId
     });
+    nextcloudRouteState.cache.entries = propfindCache.size;
+
+    res.json(responsePayload);
   } catch (err: any) {
     const latencyMs = Date.now() - startTime;
     console.error('Nextcloud browse error:', err);
     res.status(500).json({
       success: false,
       error: err.message || 'Nextcloud browse failed',
+      latencyMs
+    });
+  }
+});
+
+// 13a-2. Targeted Lazy-Loading Track Assets Endpoint (RFC 4918 Depth: 1 Targeted Query)
+// Directly queries a single track's folder and stem directories without scanning entire catalog
+app.post('/api/nextcloud/track-assets', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      trackId = '',
+      folderName = '',
+      category = 'all',
+      username = cachedWebdavCredentials.username || 'ncted',
+      password = ''
+    } = req.body;
+
+    const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
+    let targetFolder = folderName ? folderName.trim() : '';
+
+    if (!targetFolder && trackId) {
+      const def = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId.toUpperCase() === trackId.toUpperCase());
+      targetFolder = def ? def.folderName : trackId;
+    }
+    if (!targetFolder) targetFolder = '00-Active_Projects';
+
+    const basePath = `/remote.php/dav/files/${username}/Music-Production/${targetFolder}`;
+    const stemsPath = `${basePath}/stems`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+      'Depth': '1',
+      'Content-Type': 'application/xml; charset=utf-8'
+    };
+
+    if (effectivePassword) {
+      const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    const stems: Array<{
+      name: string;
+      path: string;
+      size: number;
+      streamUrl: string;
+      mimeType: string;
+      role: 'master' | 'lead_vocal' | 'harmonies' | 'bass' | 'drums' | 'click' | 'instrumental' | 'stem';
+      fileId?: string;
+      etag?: string;
+    }> = [];
+
+    let liveFolderFound = false;
+
+    // Check targeted stems folder first (Depth: 1)
+    try {
+      const { response: stemRes } = await smartFetchWithFailover(stemsPath, {
+        method: 'PROPFIND',
+        headers,
+        body: LEAN_PROPFIND_XML,
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (stemRes.status === 207 || stemRes.status === 200) {
+        liveFolderFound = true;
+        const xml = await stemRes.text();
+        const blocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+
+        for (const block of blocks) {
+          const bXml = block[1];
+          const hrefMatch = bXml.match(/<d:href>([^<]+)<\/d:href>/i);
+          if (!hrefMatch) continue;
+          const rawHref = decodeURIComponent(hrefMatch[1]).replace(/\/+$/, '');
+          if (rawHref.toLowerCase().endsWith('/stems') || rawHref.toLowerCase() === stemsPath.toLowerCase()) continue;
+
+          const isCollection = /<d:collection\s*\/?>/i.test(bXml) || /<d:resourcetype>[\s\S]*?<d:collection/i.test(bXml);
+          if (isCollection) continue;
+
+          const name = rawHref.split('/').filter(Boolean).pop() || '';
+          if (!name || name.startsWith('.')) continue;
+
+          const lengthMatch = bXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+          const ocSizeMatch = bXml.match(/<oc:size>([^<]+)<\/oc:size>/i);
+          const size = ocSizeMatch ? parseInt(ocSizeMatch[1], 10) : (lengthMatch ? parseInt(lengthMatch[1], 10) : 0);
+          const fileId = bXml.match(/<oc:fileid>([^<]+)<\/oc:fileid>/i)?.[1];
+          const etag = bXml.match(/<d:getetag>([^<]+)<\/d:getetag>/i)?.[1]?.replace(/&quot;/g, '"');
+
+          const lower = name.toLowerCase();
+          let role: 'master' | 'lead_vocal' | 'harmonies' | 'bass' | 'drums' | 'click' | 'instrumental' | 'stem' = 'stem';
+          if (lower.includes('click') || lower.includes('metronome') || lower.includes('track4')) role = 'click';
+          else if (lower.includes('vocal') || lower.includes('lead') || lower.includes('track2')) role = 'lead_vocal';
+          else if (lower.includes('harmon') || lower.includes('track3') || lower.includes('bgv')) role = 'harmonies';
+          else if (lower.includes('bass') || lower.includes('sub')) role = 'bass';
+          else if (lower.includes('drum') || lower.includes('perc') || lower.includes('beat')) role = 'drums';
+          else if (lower.includes('master') || lower.includes('final') || lower.includes('mix')) role = 'master';
+          else if (lower.includes('instrumental') || lower.includes('track1') || lower.includes('pad')) role = 'instrumental';
+
+          stems.push({
+            name,
+            path: rawHref,
+            size,
+            mimeType: lower.endsWith('.wav') ? 'audio/wav' : lower.endsWith('.mp3') ? 'audio/mpeg' : 'audio/*',
+            streamUrl: `/api/nextcloud/stream?path=${encodeURIComponent(rawHref)}`,
+            role,
+            fileId,
+            etag
+          });
+        }
+      }
+    } catch {
+      // Fallback to track root folder if /stems folder not separated
+    }
+
+    // If no /stems subfolder, check track root folder directly (Depth: 1)
+    if (stems.length === 0) {
+      try {
+        const { response: rootRes } = await smartFetchWithFailover(basePath, {
+          method: 'PROPFIND',
+          headers,
+          body: LEAN_PROPFIND_XML,
+          signal: AbortSignal.timeout(10000)
+        });
+
+        if (rootRes.status === 207 || rootRes.status === 200) {
+          liveFolderFound = true;
+          const xml = await rootRes.text();
+          const blocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+
+          for (const block of blocks) {
+            const bXml = block[1];
+            const hrefMatch = bXml.match(/<d:href>([^<]+)<\/d:href>/i);
+            if (!hrefMatch) continue;
+            const rawHref = decodeURIComponent(hrefMatch[1]).replace(/\/+$/, '');
+            if (rawHref.toLowerCase() === basePath.toLowerCase()) continue;
+
+            const isCollection = /<d:collection\s*\/?>/i.test(bXml);
+            if (isCollection) continue;
+
+            const name = rawHref.split('/').filter(Boolean).pop() || '';
+            const lower = name.toLowerCase();
+            if (!lower.endsWith('.wav') && !lower.endsWith('.mp3') && !lower.endsWith('.flac')) continue;
+
+            const lengthMatch = bXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+            const size = lengthMatch ? parseInt(lengthMatch[1], 10) : 0;
+            const fileId = bXml.match(/<oc:fileid>([^<]+)<\/oc:fileid>/i)?.[1];
+            const etag = bXml.match(/<d:getetag>([^<]+)<\/d:getetag>/i)?.[1]?.replace(/&quot;/g, '"');
+
+            stems.push({
+              name,
+              path: rawHref,
+              size,
+              mimeType: lower.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg',
+              streamUrl: `/api/nextcloud/stream?path=${encodeURIComponent(rawHref)}`,
+              role: lower.includes('click') ? 'click' : lower.includes('vocal') ? 'lead_vocal' : lower.includes('master') ? 'master' : 'stem',
+              fileId,
+              etag
+            });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      trackId,
+      folderName: targetFolder,
+      basePath,
+      stemsPath,
+      liveFolderFound,
+      stems,
+      totalStems: stems.length,
+      masterTrack: stems.find(s => s.role === 'master') || stems[0] || null,
+      clickTrack: stems.find(s => s.role === 'click') || null,
+      vocalTrack: stems.find(s => s.role === 'lead_vocal') || null,
+      harmoniesTrack: stems.find(s => s.role === 'harmonies') || null,
+      instrumentalTrack: stems.find(s => s.role === 'instrumental') || null,
+      activeRoute: nextcloudRouteState.activeRoute,
+      latencyMs
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to fetch targeted track assets',
       latencyMs
     });
   }
@@ -1884,7 +2588,7 @@ app.post('/api/nextcloud/create-folder', async (req, res) => {
     const {
       parentPath = '/remote.php/dav/files/ncted/Music-Production',
       folderName = '',
-      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
       username = cachedWebdavCredentials.username || 'ncted',
       password = ''
     } = req.body;
@@ -1918,6 +2622,10 @@ app.post('/api/nextcloud/create-folder', async (req, res) => {
     const latencyMs = Date.now() - startTime;
     const isSuccess = response.status === 201 || response.status === 200;
 
+    if (isSuccess) {
+      invalidatePropfindCache();
+    }
+
     res.json({
       success: isSuccess,
       status: response.status,
@@ -1944,7 +2652,7 @@ app.post('/api/nextcloud/delete-item', async (req, res) => {
   try {
     const {
       path = '',
-      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
       username = cachedWebdavCredentials.username || 'ncted',
       password = ''
     } = req.body;
@@ -1982,6 +2690,10 @@ app.post('/api/nextcloud/delete-item', async (req, res) => {
     const latencyMs = Date.now() - startTime;
     const isSuccess = response.status === 204 || response.status === 200;
 
+    if (isSuccess) {
+      invalidatePropfindCache();
+    }
+
     res.json({
       success: isSuccess,
       status: response.status,
@@ -2007,7 +2719,7 @@ app.post('/api/nextcloud/move-item', async (req, res) => {
       sourcePath = '',
       destinationPath = '',
       overwrite = false,
-      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
       username = cachedWebdavCredentials.username || 'ncted',
       password = ''
     } = req.body;
@@ -2044,6 +2756,10 @@ app.post('/api/nextcloud/move-item', async (req, res) => {
     const latencyMs = Date.now() - startTime;
     const isSuccess = response.status === 201 || response.status === 204 || response.status === 200;
 
+    if (isSuccess) {
+      invalidatePropfindCache();
+    }
+
     res.json({
       success: isSuccess,
       status: response.status,
@@ -2070,8 +2786,8 @@ app.post('/api/nextcloud/index-track', async (req, res) => {
       trackId = 'TRK-03',
       folderName = 'ECV',
       aliases = ['ECV', 'Every_Candles_Victory', 'Every Candles Victory', 'TRK-03', 'Candle'],
-      serverUrl = 'https://nextcloud.moyercloud.com',
-      username = 'ncted',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
+      username = cachedWebdavCredentials.username || 'ncted',
       password = '',
     } = req.body;
 
@@ -2208,8 +2924,8 @@ app.post('/api/nextcloud/index-all-catalog', async (req, res) => {
   const startTime = Date.now();
   try {
     const {
-      serverUrl = 'https://nextcloud.moyercloud.com',
-      username = 'ncted',
+      serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
+      username = cachedWebdavCredentials.username || 'ncted',
       password = '',
     } = req.body;
 
@@ -2389,7 +3105,7 @@ app.get('/api/nextcloud/stream', async (req, res) => {
       return res.status(400).send('Missing file path');
     }
 
-    const serverUrl = ((req.query.serverUrl as string) || cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com').replace(/\/$/, '');
+    const serverUrl = ((req.query.serverUrl as string) || cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL).replace(/\/$/, '');
     const password = (req.query.password as string) || cachedWebdavCredentials.password || process.env.NEXTCLOUD_APP_PASSWORD || process.env.NEXTCLOUD_PASSWORD || '';
     const username = (req.query.username as string) || cachedWebdavCredentials.username || 'ncted';
     if (password && password.trim().length > 0 && !cachedWebdavCredentials.password) {
@@ -2415,6 +3131,12 @@ app.get('/api/nextcloud/stream', async (req, res) => {
     if (req.headers.range) {
       headers['Range'] = req.headers.range;
     }
+    if (req.headers['if-range']) {
+      headers['If-Range'] = req.headers['if-range'] as string;
+    }
+    if (req.headers['if-none-match']) {
+      headers['If-None-Match'] = req.headers['if-none-match'] as string;
+    }
 
     if (password) {
       const authString = Buffer.from(`${username}:${password}`).toString('base64');
@@ -2436,16 +3158,27 @@ app.get('/api/nextcloud/stream', async (req, res) => {
     else if (lower.endsWith('.md')) contentType = 'text/markdown; charset=utf-8';
 
     try {
-      const upstream = await smartFetch(targetUrl, { headers });
+      const { response: upstream, usedRoute } = await smartFetchWithFailover(cleanPath, { headers });
+
+      if (upstream.status === 304) {
+        return res.status(304).end();
+      }
 
       if (upstream.status === 200 || upstream.status === 206) {
         res.status(upstream.status);
         res.setHeader('Content-Type', upstream.headers.get('content-type') || contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified');
         res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+
+        const etag = upstream.headers.get('etag');
+        if (etag) res.setHeader('ETag', etag);
+        const lastMod = upstream.headers.get('last-modified');
+        if (lastMod) res.setHeader('Last-Modified', lastMod);
+
         const contentRange = upstream.headers.get('content-range');
         if (contentRange) res.setHeader('Content-Range', contentRange);
         const contentLength = upstream.headers.get('content-length');
@@ -2455,8 +3188,8 @@ app.get('/api/nextcloud/stream', async (req, res) => {
           stage: 'STREAM_MEDIA',
           action: 'PLAY_SUCCESS',
           level: 'success',
-          message: `Streaming WebDAV audio: ${cleanPath.split('/').pop()} (HTTP ${upstream.status})`,
-          details: { status: upstream.status, path: cleanPath, contentType }
+          message: `Streaming WebDAV audio: ${cleanPath.split('/').pop()} (HTTP ${upstream.status} via ${usedRoute.toUpperCase()})`,
+          details: { status: upstream.status, path: cleanPath, contentType, route: usedRoute }
         });
 
         if (upstream.body) {

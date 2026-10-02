@@ -805,7 +805,7 @@ export const RelationalDatabaseAndMatrixTab: React.FC<RelationalDatabaseAndMatri
 
             <div className="flex items-center gap-2">
               <a
-                href={`https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production/${selectedTrack.id}`}
+                href={`https://nextcloud.mermaid-symmetric.ts.net/index.php/apps/files/files/207332?dir=/Music-Production/${selectedTrack.id}`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"

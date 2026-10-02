@@ -1,7 +1,8 @@
 {
-  "serverUrl": "https://nextcloud.moyercloud.com",
+  "serverUrl": "https://nextcloud.mermaid-symmetric.ts.net",
   "username": "ncted",
   "password": "Ariak!!2009",
   "hasValidAuth": true,
-  "lastValidatedAt": "2026-10-02T08:41:22.790Z"
+  "lastValidatedAt": "2026-10-02T08:41:22.790Z",
+  "fallbackServerUrl": "https://nextcloud.moyercloud.com"
 }

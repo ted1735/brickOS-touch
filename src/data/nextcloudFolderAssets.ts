@@ -1,5 +1,5 @@
 import { NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig, Track } from '../types';
-import { ALL_CANONICAL_NEXTCLOUD_ASSETS, ECV_CANONICAL_ASSETS, getTrackNextcloudAssets, matchNextcloudFilenameToTrack } from './nextcloudAssetIndex';
+import { ALL_CANONICAL_NEXTCLOUD_ASSETS, ECV_CANONICAL_ASSETS, getTrackNextcloudAssets, matchNextcloudFilenameToTrack, NEXTCLOUD_SHARE_ROOT } from './nextcloudAssetIndex';
 import {
   DEFAULT_NEXTCLOUD_CONFIG,
   LOCAL_STORAGE_NC_CONFIG_KEY,
@@ -30,7 +30,7 @@ export const INITIAL_FOLDER_207332_ASSETS: NextcloudFolderAsset[] = [
     fileSizeFormatted: '15.0 KB',
     mimeType: 'text/markdown',
     webdavPath: '/remote.php/dav/files/ncted/Music-Production/docs/Nashville_SOP_Rules_v1_9_Production_Rulebook.md',
-    shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
+    shareUrl: NEXTCLOUD_SHARE_ROOT,
     matchedTrackId: undefined,
     matchConfidence: 100,
     suggestedCategory: 'LYRIC_SOP_DOC',
@@ -169,7 +169,7 @@ export function getSavedNextcloudAssets(catalog: Track[]): NextcloudFolderAsset[
             ...asset,
             folderId: '207332',
             webdavPath: (asset.webdavPath || '').replace('/brickOS/', '/Music-Production/'),
-            shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production'
+            shareUrl: NEXTCLOUD_SHARE_ROOT
           });
         });
 

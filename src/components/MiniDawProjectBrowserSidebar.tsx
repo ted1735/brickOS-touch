@@ -27,10 +27,10 @@ import {
 } from 'lucide-react';
 import { Track, NextcloudFolderAsset, NextcloudAssetCategory } from '../types';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
-import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
+import { getTrackNextcloudAssets, NEXTCLOUD_SHARE_ROOT } from '../data/nextcloudAssetIndex';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { getSavedNextcloudAssets, saveNextcloudAssets, autoMatchAssetToCatalog } from '../data/nextcloudFolderAssets';
-import { buildNextcloudStreamUrl, getSavedNextcloudConfig } from '../utils/nextcloudStream';
+import { buildNextcloudStreamUrl, getSavedNextcloudConfig, NEXTCLOUD_PRIMARY_SERVER_URL } from '../utils/nextcloudStream';
 
 interface MiniDawProjectBrowserSidebarProps {
   selectedTrack: Track;
@@ -223,7 +223,7 @@ export const MiniDawProjectBrowserSidebar: React.FC<MiniDawProjectBrowserSidebar
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           folderId: '207332',
-          serverUrl: cfg.serverUrl || 'https://nextcloud.moyercloud.com',
+          serverUrl: cfg.serverUrl || NEXTCLOUD_PRIMARY_SERVER_URL,
           username: cfg.username || 'ncted',
           password: cfg.appPassword || '',
           webdavPath: cfg.webdavRoot || '/remote.php/dav/files/ncted/Music-Production',
@@ -270,7 +270,7 @@ export const MiniDawProjectBrowserSidebar: React.FC<MiniDawProjectBrowserSidebar
             mimeType: file.mimeType || (lower.endsWith('.wav') ? 'audio/wav' : lower.endsWith('.mp3') ? 'audio/mpeg' : 'application/octet-stream'),
             webdavPath,
             audioUrl,
-            shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
+            shareUrl: NEXTCLOUD_SHARE_ROOT,
             isMatched: Boolean(match.matchedTrackId),
             linkedTrackIds: match.matchedTrackId ? [match.matchedTrackId] : undefined,
             stemType: guessedCat === 'UVR5_VOCAL_STEM' ? 'vocal' : guessedCat === 'UVR5_HARMONY_STEM' ? 'choir' : guessedCat === 'UVR5_DRUMS_STEM' ? 'drums' : guessedCat === 'UVR5_BASS_STEM' ? 'bass' : 'instrumental',

@@ -1958,7 +1958,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           {/* Sync status & actions */}
           <div className="p-3 bg-slate-950/40 border-b border-slate-800/80 flex items-center justify-between gap-2">
             <span className="text-[10px] text-slate-400">
-              Host: <strong className="text-sky-300">nextcloud.moyercloud.com</strong>
+              Host: <strong className="text-sky-300">nextcloud.mermaid-symmetric.ts.net</strong>
             </span>
             <button
               type="button"

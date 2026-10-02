@@ -10,16 +10,18 @@ import {
 // ==============================================================================
 // 1. LIVE NEXTCLOUD WEBDAV ENDPOINT CONFIGURATION
 // ==============================================================================
-export const PRODUCTION_NEXTCLOUD_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
-export const PRODUCTION_NEXTCLOUD_BASE = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
+export const PRODUCTION_NEXTCLOUD_WEBDAV = 'https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production';
+export const PRODUCTION_NEXTCLOUD_BASE = 'https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production';
+export const PRODUCTION_NEXTCLOUD_FALLBACK = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
 export const DEFAULT_WEBDAV_USER = 'ncted';
 
 /**
  * Dynamic WebDAV Asset Resolution
  * Generates exact live WebDAV URL matching sovereign folder structure in /Music-Production:
- * Visuals: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/[TRK-ID]/visuals/[version]/[filename]
- * Stems:   https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/[TRK-ID]/stems/[filename]
- * Shared:  https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/shared/[collection]/[filename]
+ * Visuals: https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/[TRK-ID]/visuals/[version]/[filename]
+ * Stems:   https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/[TRK-ID]/stems/[filename]
+ * Shared:  https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production/shared/[collection]/[filename]
+ * (Fallback: https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production/...)
  */
 export function resolveWebDavAssetUrl(
   trackId: string,

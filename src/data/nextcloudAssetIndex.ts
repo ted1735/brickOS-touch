@@ -1,8 +1,9 @@
 import { NextcloudFolderAsset, NextcloudAssetCategory, MixerTrack, Track } from '../types';
 import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
 
-export const NEXTCLOUD_BASE_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
-export const NEXTCLOUD_SHARE_ROOT = 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production';
+export const NEXTCLOUD_BASE_WEBDAV = 'https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production';
+export const NEXTCLOUD_SHARE_ROOT = 'https://nextcloud.mermaid-symmetric.ts.net/index.php/apps/files/files/207332?dir=/Music-Production';
+export const NEXTCLOUD_FALLBACK_BASE_WEBDAV = 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production';
 
 export interface TrackNextcloudDefinition {
   trackId: string;

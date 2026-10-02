@@ -1,11 +1,17 @@
 import { NextcloudSyncConfig } from '../types';
 
+export const NEXTCLOUD_PRIMARY_SERVER_URL = 'https://nextcloud.mermaid-symmetric.ts.net';
+export const NEXTCLOUD_FALLBACK_SERVER_URL = 'https://nextcloud.moyercloud.com';
+
 export const DEFAULT_NEXTCLOUD_CONFIG: NextcloudSyncConfig = {
-  serverUrl: 'https://nextcloud.moyercloud.com',
+  serverUrl: NEXTCLOUD_PRIMARY_SERVER_URL,
+  fallbackServerUrl: NEXTCLOUD_FALLBACK_SERVER_URL,
+  activeRoute: 'primary',
   username: 'ncted',
-  webdavRoot: 'https://nextcloud.moyercloud.com/remote.php/dav/files/ncted/Music-Production',
-  folderIdOrShareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
+  webdavRoot: `${NEXTCLOUD_PRIMARY_SERVER_URL}/remote.php/dav/files/ncted/Music-Production`,
+  folderIdOrShareUrl: `${NEXTCLOUD_PRIMARY_SERVER_URL}/index.php/apps/files/files/207332?dir=/Music-Production`,
   lastConnectionStatus: 'idle',
+  isPushConnected: false,
 };
 
 export const LOCAL_STORAGE_NC_CONFIG_KEY = 'brickos_nextcloud_sync_config';

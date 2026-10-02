@@ -51,7 +51,7 @@ import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studioNavigationData';
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
-import { getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
+import { getTrackStems, getTrackNextcloudAssets, NEXTCLOUD_SHARE_ROOT } from '../data/nextcloudAssetIndex';
 import { getSavedNextcloudConfig, saveNextcloudConfig, saveNextcloudAssets, autoMatchAssetToCatalog, buildNextcloudStreamUrl } from '../data/nextcloudFolderAssets';
 import type { StudioWorkspace } from './StudioHome';
 
@@ -389,7 +389,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
           mimeType: file.mimeType || existing?.mimeType || 'application/octet-stream',
           webdavPath,
           audioUrl: (cat.includes('AUDIO') || cat.includes('STEM')) ? audioUrl : undefined,
-          shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
+          shareUrl: NEXTCLOUD_SHARE_ROOT,
           matchedTrackId: isMatched ? selectedTrack.id : existing?.matchedTrackId,
           matchedTrackTitle: isMatched ? selectedTrack.title : existing?.matchedTrackTitle,
           matchConfidence: isMatched ? 100 : existing?.matchConfidence || 0,
@@ -1766,7 +1766,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
                   <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono">
                     <a
-                      href="https://nextcloud.moyercloud.com/index.php/settings/user/security"
+                      href={`${ncConfig.serverUrl || 'https://nextcloud.mermaid-symmetric.ts.net'}/index.php/settings/user/security`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-cyan-400 hover:underline flex items-center gap-0.5"
