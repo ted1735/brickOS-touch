@@ -46,7 +46,7 @@ interface MiniDawMixerTabProps {
   allTracks?: Track[];
 }
 
-export const getTrackStems = (track: Track): MixerTrack[] => {
+const getTrackStems = (track: Track): MixerTrack[] => {
   return getUniversalTrackStems(track);
 };
 
