@@ -177,7 +177,19 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
   const handleSelectBus = (busId: 'master' | 'suno' | 'vocal' | 'instrumental' | 'ref') => {
     setActiveBus(busId);
     const activeStems = tracks.length > 0 && tracks[0].audioUrl ? tracks : getTrackStems(track);
+    if (!isPlaying) {
+      audioMiniDaw.startPlayback(activeStems, track.bpm, track.key);
+      setIsPlaying(true);
+    }
     audioMiniDaw.updateBusRouting(busId, activeStems);
+    
+    const stemName = busId === 'master' ? 'Final Master Print (FLAC/WAV)' :
+      busId === 'vocal' ? 'UVR5 Isolated Dry Lead Vocal' :
+      busId === 'instrumental' ? 'Full Backing Instrumental Bed' :
+      busId === 'suno' ? 'Raw Pre-Master Generation' :
+      'Billboard Commercial Top-100 Reference Curve';
+    setCorrectionFeedback(`Solo Auditioning: ${stemName}`);
+    setTimeout(() => setCorrectionFeedback(null), 3000);
   };
 
   // Select Target Profile
@@ -482,6 +494,36 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
             </button>
           ))}
         </div>
+
+        {/* ACTIVE STEM DETAIL BADGE */}
+        {(() => {
+          const activeTrackDef = 
+            activeBus === 'master' ? (tracks.find(t => t.stemType === 'master') || tracks[0]) :
+            activeBus === 'vocal' ? (tracks.find(t => t.stemType === 'vocal' || t.name.toLowerCase().includes('vocal')) || tracks[1]) :
+            activeBus === 'instrumental' ? (tracks.find(t => t.stemType === 'guitar' || t.stemType === 'drums' || t.stemType === 'bass' || t.name.toLowerCase().includes('instrumental')) || tracks[2]) :
+            activeBus === 'suno' ? (tracks.find(t => t.name.toLowerCase().includes('v6') || t.name.toLowerCase().includes('original') || t.name.toLowerCase().includes('suno') || t.id === 4) || tracks[tracks.length - 1]) :
+            (tracks.find(t => t.stemType === 'master') || tracks[0]);
+
+          const rawFilename = activeTrackDef?.webdavPath?.split('/').pop() || activeTrackDef?.name || 'Master Audio';
+
+          return (
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-slate-400 text-[11px]">SOLO ROUTED:</span>
+                <span className="text-white font-bold truncate max-w-[280px] sm:max-w-[420px]" title={rawFilename}>
+                  {rawFilename}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded bg-indigo-900/60 border border-indigo-500/40 text-indigo-300 font-bold uppercase">
+                  {activeBus === 'master' ? 'Gold Master WAV' : activeBus === 'vocal' ? 'UVR5 Vocal Stem' : activeBus === 'instrumental' ? 'Backing Stems' : activeBus === 'suno' ? 'Pre-Master Mix' : 'Reference Match'}
+                </span>
+                <span className="text-slate-500 font-bold">24-Bit / 48kHz WebDAV</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* CORE REAL-TIME LUFS METER DASHBOARD */}

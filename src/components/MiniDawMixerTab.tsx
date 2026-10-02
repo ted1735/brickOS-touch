@@ -277,6 +277,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
       setIsPlaying(false);
     } else {
       audioMiniDaw.startPlayback(tracks, track.bpm || 78, track.key || 'G Major');
+      audioMiniDaw.updateBusRouting(effects.busRouting || 'daw', tracks);
       setIsPlaying(true);
     }
   };
@@ -869,10 +870,11 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     }}
                     className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] font-mono text-slate-200 cursor-pointer"
                   >
-                    <option value="master">All Stems (Master Bus)</option>
-                    <option value="vocal">Vocal Isolation (Stem 2)</option>
-                    <option value="instrumental">Instrumental Bus (Stem 1+4)</option>
-                    <option value="suno">Suno Master Bus (Stem 1)</option>
+                    <option value="daw">All 4 Tracks Sum (Full Mix)</option>
+                    <option value="master">Gold Master Print</option>
+                    <option value="vocal">Dry Lead Vocal Stem</option>
+                    <option value="instrumental">Backing Instrumental Bed</option>
+                    <option value="suno">Raw Suno / Alternate Cut</option>
                   </select>
                 </div>
               </div>

@@ -1195,14 +1195,47 @@ class MiniDawEngine {
     if (!this.ctx) return;
 
     this.trackNodes.forEach((node, id) => {
-      let active = true;
-      if (bus === 'vocal' && id !== 2) active = false;
-      if (bus === 'instrumental' && (id === 2 || id === 3)) active = false;
-      if (bus === 'suno') active = (id === 1);
-      if (bus === 'ref') active = (id === 1 || id === 2);
+      const trackDef = tracks.find(t => t.id === id);
+      const stemType = (trackDef?.stemType || '').toLowerCase();
+      const trackName = (trackDef?.name || '').toLowerCase();
 
-      const target = active ? 0.2 : 0;
-      node.gain.gain.setTargetAtTime(target, this.ctx!.currentTime, 0.04);
+      let active = false;
+
+      if (bus === 'all' || bus === 'daw') {
+        // DAW 4-track mode: All active channels play
+        active = !trackDef?.muted;
+      } else if (bus === 'master') {
+        // [D] Final Master: Play the Gold Master print
+        const masterTrack = tracks.find(t => t.stemType === 'master' || t.name.toLowerCase().includes('master')) || tracks[0];
+        active = (trackDef?.id === masterTrack?.id);
+      } else if (bus === 'vocal') {
+        // [B] Dry Vocal: Solo the UVR5 isolated dialogue/vocal stem
+        active = stemType === 'vocal' || trackName.includes('vocal') || trackName.includes('vox') || trackName.includes('lead');
+      } else if (bus === 'instrumental') {
+        // [C] True Instrumental: Solo the backing instrumental bed
+        active = stemType === 'guitar' || stemType === 'drums' || stemType === 'bass' || stemType === 'piano' || stemType === 'organ' || trackName.includes('instrumental');
+      } else if (bus === 'suno') {
+        // [A] Raw Suno Gen / Pre-Master: Play the alternate pre-master cut
+        const altTrack = tracks.find(t => t.name.toLowerCase().includes('v6') || t.name.toLowerCase().includes('original') || t.name.toLowerCase().includes('suno') || t.id === 4) || tracks[tracks.length - 1];
+        active = (trackDef?.id === altTrack?.id);
+      } else if (bus === 'ref') {
+        // [REF] Billboard Reference: Level-matched reference audition of the master
+        const masterTrack = tracks.find(t => t.stemType === 'master' || t.name.toLowerCase().includes('master')) || tracks[0];
+        active = (trackDef?.id === masterTrack?.id);
+      }
+
+      // Safe fallback if no track matched
+      if (!active && bus === 'master' && id === 1 && !tracks.some(t => t.stemType === 'master')) {
+        active = true;
+      }
+
+      const targetGain = active ? ((trackDef?.vol ?? 90) / 100) * 0.25 : 0;
+      node.gain.gain.setTargetAtTime(targetGain, this.ctx!.currentTime, 0.03);
+
+      if (node.audioEl) {
+        node.audioEl.muted = !active;
+        node.audioEl.volume = active ? Math.max(0, Math.min(1, ((trackDef?.vol ?? 95) / 100) * 0.95)) : 0;
+      }
     });
   }
 
