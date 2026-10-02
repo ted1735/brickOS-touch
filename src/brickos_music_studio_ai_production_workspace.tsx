@@ -99,7 +99,6 @@ import { StudioCommandPalette } from './components/StudioCommandPalette';
 import { StudioCopilotDrawer } from './components/StudioCopilotDrawer';
 import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
 import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
-import { BrickOsBrandLogo } from './components/BrickOsBrandLogo';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -1671,11 +1670,13 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         }`}
       >
         <div className="flex items-center gap-3">
-          <BrickOsBrandLogo
-            size="md"
+          <button
             onClick={() => setActiveTab('kanban')}
-            className="cursor-pointer"
-          />
+            className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer"
+            title="Return to Master Kanban Dashboard"
+          >
+            b
+          </button>
           <div>
             <div className="flex items-center gap-2">
               <h1 

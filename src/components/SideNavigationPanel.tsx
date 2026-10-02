@@ -53,7 +53,6 @@ import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studi
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
 import { getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { getSavedNextcloudConfig, saveNextcloudConfig, saveNextcloudAssets, autoMatchAssetToCatalog, buildNextcloudStreamUrl } from '../data/nextcloudFolderAssets';
-import { BrickOsBrandLogo } from './BrickOsBrandLogo';
 
 interface SideNavigationPanelProps {
   tracks: Track[];
@@ -1111,8 +1110,10 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
       {/* HEADER: TITLE, TAB SWITCHER & PIN/COLLAPSE */}
       <div className={`p-3.5 border-b space-y-3 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <BrickOsBrandLogo size="xs" withGlow={false} />
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
+              bOS
+            </div>
             <div>
               <h2 className={`text-xs font-black uppercase tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Studio Side Nav</h2>
               <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Projects, Sessions & Assets</p>
