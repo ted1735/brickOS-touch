@@ -99,6 +99,8 @@ import { StudioCommandPalette } from './components/StudioCommandPalette';
 import { StudioCopilotDrawer } from './components/StudioCopilotDrawer';
 import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
 import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
+import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
+import type { StudioWorkspace } from './components/StudioHome';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -136,8 +138,16 @@ export default function BrickOSMusicStudioWorkspace() {
     return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
   });
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix' | 'brainstorming'
-  >('kanban');
+    'home' | 'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix' | 'brainstorming'
+  >('home');
+  const [workspaceMode, setWorkspaceMode] = useState<StudioWorkspace>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('brickos_workspace_mode') : null;
+    return saved === 'write' || saved === 'produce' || saved === 'release' || saved === 'all' ? saved : 'all';
+  });
+  const handleSetWorkspaceMode = (mode: StudioWorkspace) => {
+    setWorkspaceMode(mode);
+    localStorage.setItem('brickos_workspace_mode', mode);
+  };
   const [copiedNotification, setCopiedNotification] = useState('');
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
 
@@ -260,9 +270,16 @@ export default function BrickOSMusicStudioWorkspace() {
   }, [isCommandPaletteOpen, isCopilotDrawerOpen, isThemeModalOpen, studioTheme, focusMode]);
 
   // Firestore persistent cloud database synchronization state
-  const [isDbConnected, setIsDbConnected] = useState<boolean>(isFirebaseConfigured());
+  const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
   const [isDbSyncing, setIsDbSyncing] = useState<boolean>(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string>('');
+  const [cloudSyncError, setCloudSyncError] = useState('');
+  const recordCloudSave = () => {
+    setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    setIsDbConnected(isFirebaseConfigured());
+    setCloudSyncError('');
+  };
+  const recordCloudSaveFailure = (message: string) => setCloudSyncError(`${message} Changes remain saved on this device.`);
 
   // Composition Sessions State
   const [sessions, setSessions] = useState<CompositionSession[]>(() => {
@@ -305,7 +322,6 @@ export default function BrickOSMusicStudioWorkspace() {
         const cloudTracks = await loadTracksFromFirestore(CANONICAL_TRACKS);
         if (isMounted && cloudTracks && cloudTracks.length > 0) {
           setTracks(cloudTracks);
-          setIsDbConnected(true);
           setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
           setSelectedTrack(prev => {
             const found = cloudTracks.find(t => t.id === prev?.id);
@@ -325,6 +341,7 @@ export default function BrickOSMusicStudioWorkspace() {
             if (isMounted && realtimeTracks && realtimeTracks.length > 0) {
               setTracks(realtimeTracks);
               setIsDbConnected(true);
+              setCloudSyncError('');
               setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
               setSelectedTrack(prev => {
                 const found = realtimeTracks.find(t => t.id === prev?.id);
@@ -333,6 +350,10 @@ export default function BrickOSMusicStudioWorkspace() {
             }
           },
           (err) => {
+            if (isMounted) {
+              setIsDbConnected(false);
+              setCloudSyncError('Cloud connection lost. Changes remain saved on this device.');
+            }
             console.warn('Firestore real-time subscription error:', err);
           }
         );
@@ -345,10 +366,15 @@ export default function BrickOSMusicStudioWorkspace() {
             }
           },
           (err) => {
+            if (isMounted) {
+              setIsDbConnected(false);
+              setCloudSyncError('Cloud connection lost. Changes remain saved on this device.');
+            }
             console.warn('Firestore sessions subscription error:', err);
           }
         );
       } catch (err) {
+        if (isMounted) setCloudSyncError('Cloud connection failed. Changes remain saved on this device.');
         console.error('Failed to initialize Firestore cloud catalog:', err);
       } finally {
         if (isMounted) setIsDbSyncing(false);
@@ -388,7 +414,7 @@ export default function BrickOSMusicStudioWorkspace() {
 
     if (session.activeTab && session.activeTab !== 'kanban') {
       setActiveTab(session.activeTab as any);
-    } else if (activeTab === 'kanban') {
+    } else if (activeTab === 'kanban' || activeTab === 'home') {
       setActiveTab('lyrics');
     }
 
@@ -446,10 +472,11 @@ export default function BrickOSMusicStudioWorkspace() {
     try {
       setIsDbSyncing(true);
       await saveSessionToFirestore(newSession);
-      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      setCopiedNotification(`Saved composition session "${newSession.name}" to Cloud!`);
+      recordCloudSave();
+      setCopiedNotification(isFirebaseConfigured() ? `Saved composition session "${newSession.name}" to Cloud!` : `Saved composition session "${newSession.name}" on this device.`);
       setTimeout(() => setCopiedNotification(''), 4000);
     } catch (err) {
+      recordCloudSaveFailure('Cloud sync failed.');
       console.error('Failed to save session to Firestore:', err);
     } finally {
       setIsDbSyncing(false);
@@ -490,10 +517,11 @@ export default function BrickOSMusicStudioWorkspace() {
       try {
         setIsDbSyncing(true);
         await saveSessionToFirestore(updatedSession);
-        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        recordCloudSave();
         setCopiedNotification(`Updated session snapshot for "${(updatedSession as CompositionSession).name}"!`);
         setTimeout(() => setCopiedNotification(''), 3500);
       } catch (err) {
+        recordCloudSaveFailure('Cloud sync failed.');
         console.error('Failed to update session in Firestore:', err);
       } finally {
         setIsDbSyncing(false);
@@ -519,9 +547,11 @@ export default function BrickOSMusicStudioWorkspace() {
     try {
       setIsDbSyncing(true);
       await saveSessionToFirestore(forkedSession);
+      recordCloudSave();
       setCopiedNotification(`Forked session: "${forkedSession.name}"`);
       setTimeout(() => setCopiedNotification(''), 3500);
     } catch (err) {
+      recordCloudSaveFailure('Cloud sync failed.');
       console.error('Failed to fork session:', err);
     } finally {
       setIsDbSyncing(false);
@@ -538,9 +568,11 @@ export default function BrickOSMusicStudioWorkspace() {
     try {
       setIsDbSyncing(true);
       await deleteSessionFromFirestore(sessionId);
+      recordCloudSave();
       setCopiedNotification('Session removed from cloud.');
       setTimeout(() => setCopiedNotification(''), 3000);
     } catch (err) {
+      recordCloudSaveFailure('Cloud sync failed.');
       console.error('Failed to delete session:', err);
     } finally {
       setIsDbSyncing(false);
@@ -566,7 +598,9 @@ export default function BrickOSMusicStudioWorkspace() {
 
     try {
       await saveSessionToFirestore(updated);
+      recordCloudSave();
     } catch (err) {
+      recordCloudSaveFailure('Cloud sync failed.');
       console.error('Failed to update session pin status:', err);
     }
   };
@@ -589,7 +623,10 @@ export default function BrickOSMusicStudioWorkspace() {
         setIsDbSyncing(true);
         await saveTrackToFirestore(targetTrack);
         setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        setIsDbConnected(isFirebaseConfigured());
+        setCloudSyncError('');
       } catch (err) {
+        setCloudSyncError('Cloud sync failed. Changes remain saved locally.');
         console.warn('Could not save status change to Firestore:', err);
       } finally {
         setIsDbSyncing(false);
@@ -642,9 +679,12 @@ export default function BrickOSMusicStudioWorkspace() {
       setIsDbSyncing(true);
       await saveTrackToFirestore(newTrack);
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setIsDbConnected(isFirebaseConfigured());
+      setCloudSyncError('');
       setCopiedNotification(`Created & saved "${newTrack.title}" (${newTrack.id}) with 4-Phase Storyboard Prompts to Cloud Firestore!`);
       setTimeout(() => setCopiedNotification(''), 4500);
     } catch (err) {
+      setCloudSyncError('Cloud sync failed. Your new song is saved locally.');
       console.error('Failed to save new track to cloud Firestore:', err);
     } finally {
       setIsDbSyncing(false);
@@ -655,10 +695,17 @@ export default function BrickOSMusicStudioWorkspace() {
   const handleManualSyncDatabase = async () => {
     try {
       setIsDbSyncing(true);
+      setCloudSyncError('');
       await seedInitialCatalog(tracks);
-      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      showToast(`Successfully synced all ${tracks.length} tracks to Cloud Firestore!`, 'success');
+      if (isFirebaseConfigured()) {
+        setIsDbConnected(true);
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        showToast(`Successfully synced all ${tracks.length} tracks to Cloud Firestore!`, 'success');
+      } else {
+        showToast('Cloud is not configured. Your work is saved in this browser only.', 'info');
+      }
     } catch (err: any) {
+      setCloudSyncError('Cloud sync failed. Your work is saved locally.');
       showToast(`Cloud sync error: ${err.message || 'Check connection'}`, 'error');
     } finally {
       setIsDbSyncing(false);
@@ -1267,10 +1314,16 @@ export default function BrickOSMusicStudioWorkspace() {
 
     if (modifiedTrackToPersist) {
       try {
+        setIsDbSyncing(true);
         await saveTrackToFirestore(modifiedTrackToPersist);
         setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        setCloudSyncError('');
+        setIsDbConnected(isFirebaseConfigured());
       } catch (err) {
+        setCloudSyncError('Cloud sync failed. The latest change is saved locally.');
         console.warn('Failed to persist track modification to Firestore:', err);
+      } finally {
+        setIsDbSyncing(false);
       }
     }
   };
@@ -1671,20 +1724,20 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       >
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setActiveTab('kanban')}
+            onClick={() => setActiveTab('home')}
             className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer"
-            title="Return to Master Kanban Dashboard"
+            title="Return to Studio Home"
           >
             b
           </button>
           <div>
             <div className="flex items-center gap-2">
               <h1 
-                onClick={() => setActiveTab('kanban')}
+              onClick={() => setActiveTab('home')}
                 className={`text-base font-black tracking-wider transition cursor-pointer ${
                   isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
                 }`}
-                title="Return to Master Kanban Dashboard"
+              title="Return to Studio Home"
               >
                 brickOS MASTER STUDIO
               </h1>
@@ -1704,15 +1757,19 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 type="button"
                 onClick={handleManualSyncDatabase}
                 className={`hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border transition cursor-pointer ${
-                  isDbConnected
+                  cloudSyncError
+                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+                    : isDbSyncing
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : isDbConnected
                     ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
-                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                    : 'bg-slate-500/10 text-slate-400 border-slate-500/30 hover:bg-slate-500/20'
                 }`}
-                title={`Firestore Cloud Database: ${isDbConnected ? 'Connected & Auto-Saving' : 'Connecting...'} • Click to trigger cloud re-sync`}
+                title={`${cloudSyncError || (isDbConnected ? `Cloud synced${lastSyncedAt ? ` at ${lastSyncedAt}` : ''}` : isFirebaseConfigured() ? 'Connecting to cloud' : 'Saved locally in this browser')}. Click to sync now.`}
               >
-                <Database className={`w-3 h-3 ${isDbSyncing ? 'animate-spin text-amber-400' : 'text-cyan-400'}`} />
-                <span>{isDbSyncing ? 'Syncing...' : isDbConnected ? 'Firestore Online' : 'Connecting...'}</span>
-                {lastSyncedAt && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
+                <Database className={`w-3 h-3 ${isDbSyncing ? 'animate-spin text-amber-400' : cloudSyncError ? 'text-rose-400' : isDbConnected ? 'text-cyan-400' : 'text-slate-400'}`} />
+                <span>{isDbSyncing ? 'Saving...' : cloudSyncError ? 'Local copy • sync issue' : isDbConnected ? 'Cloud synced' : isFirebaseConfigured() ? 'Connecting...' : 'Saved locally'}</span>
+                {lastSyncedAt && isDbConnected && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
               </button>
             </div>
             <p className={`text-[11px] flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -1720,7 +1777,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               <span>•</span>
               <span className="text-indigo-500 font-medium">BRICK Records</span>
               <span>•</span>
-              {activeTab === 'kanban' ? (
+              {activeTab === 'home' ? (
+                <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">Studio Home</span>
+              ) : activeTab === 'kanban' ? (
                 <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                   {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
                 </span>
@@ -1738,18 +1797,27 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         {/* Global Nav Actions */}
         <div className="workspace-header-actions flex items-center gap-2 sm:gap-2.5 flex-wrap">
           <button
-            onClick={() => setActiveTab('kanban')}
+            onClick={() => setActiveTab('home')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              activeTab === 'kanban'
+              activeTab === 'home'
                 ? 'bg-indigo-600 border-indigo-500 text-white'
                 : isDarkMode
                 ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
             }`}
-            title="Master Kanban Pipeline Dashboard"
+            title="Studio Home"
           >
             <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Dashboard</span>
+            <span>Home</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('kanban')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${activeTab === 'kanban' ? 'bg-indigo-600 border-indigo-500 text-white' : isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'}`}
+            title="Open the Kanban production pipeline"
+          >
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Pipeline</span>
           </button>
 
           {/* NEXTCLOUD WEBDAV MATCHER & SYNC (FOLDER 207332) */}
@@ -1917,6 +1985,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 onToggleCollapse={() => setIsSideNavCollapsed(!isSideNavCollapsed)}
                 onClose={() => setIsSideNavOpen(false)}
                 isDarkMode={isDarkMode}
+                workspaceMode={workspaceMode}
               />
             </div>
           </>
@@ -1926,16 +1995,16 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
           
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR */}
-          <div className="flex-shrink-0">
+          {activeTab !== 'home' && <div className="flex-shrink-0">
             <StudioWorkflowGuide
               activeTab={activeTab}
               onSelectTab={(tabKey) => setActiveTab(tabKey as any)}
               isDarkMode={isDarkMode}
             />
-          </div>
+          </div>}
 
           {/* TRACK HEADER BANNER (Shown only on single-track workbench views) */}
-          {activeTab !== 'kanban' && (
+          {activeTab !== 'kanban' && activeTab !== 'home' && (
             <div
               className={`bento-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 transition-all duration-200 ${
                 isDarkMode
@@ -2139,7 +2208,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           )}
 
           {/* SOP TRACK LIFECYCLE STEPPER (NASHVILLE WORKFLOW PIPELINE) */}
-          {activeTab !== 'kanban' && !focusMode && (
+          {activeTab !== 'kanban' && activeTab !== 'home' && !focusMode && (
             <TrackLifecycleStepper
               selectedTrack={selectedTrack}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
@@ -2149,6 +2218,18 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           )}
 
           {/* ACTIVE SECTION CONTEXT BANNER & ESSENTIAL UTILITY ACTIONS (Icons moved to collapsible side navigation bar) */}
+          {activeTab !== 'home' && <>
+          <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${isDarkMode ? 'border-slate-800 bg-slate-900/70' : 'border-slate-200 bg-white'}`} aria-label="Choose workspace">
+            <span className={`mr-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Workspace</span>
+            {([
+              ['write', 'Write'], ['produce', 'Produce'], ['release', 'Release'], ['all', 'All tools']
+            ] as Array<[StudioWorkspace, string]>).map(([mode, label]) => (
+              <button key={mode} type="button" onClick={() => handleSetWorkspaceMode(mode)} aria-pressed={workspaceMode === mode}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${workspaceMode === mode ? 'bg-indigo-600 text-white' : isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
           <div className={`${activeTab === 'kanban' ? 'px-3 py-1.5' : 'px-4 py-2.5'} rounded-xl border flex items-center justify-between flex-wrap gap-2 transition flex-shrink-0 ${
             isDarkMode
               ? 'bg-slate-900/90 border-slate-800 text-slate-200'
@@ -2223,6 +2304,25 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               </button>
             </div>
           </div>
+          </>}
+
+          {activeTab === 'home' && (
+            <StudioHome
+              track={selectedTrack}
+              sessions={sessions}
+              isDarkMode={isDarkMode}
+              onContinue={() => {
+                const step = getSuggestedTrackStep(selectedTrack);
+                handleSetWorkspaceMode(step.workspace);
+                setActiveTab(step.tab as any);
+              }}
+              onOpenWorkspace={(workspace, tab) => {
+                handleSetWorkspaceMode(workspace);
+                setActiveTab(tab as any);
+              }}
+              onOpenSession={handleSelectSession}
+            />
+          )}
 
           {/* TAB: KANBAN & PRODUCTION DASHBOARD */}
           {activeTab === 'kanban' && (

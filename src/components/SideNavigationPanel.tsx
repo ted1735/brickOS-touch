@@ -53,6 +53,7 @@ import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studi
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
 import { getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { getSavedNextcloudConfig, saveNextcloudConfig, saveNextcloudAssets, autoMatchAssetToCatalog, buildNextcloudStreamUrl } from '../data/nextcloudFolderAssets';
+import type { StudioWorkspace } from './StudioHome';
 
 interface SideNavigationPanelProps {
   tracks: Track[];
@@ -84,6 +85,7 @@ interface SideNavigationPanelProps {
   onToggleCollapse: () => void;
   onClose?: () => void;
   isDarkMode?: boolean;
+  workspaceMode?: StudioWorkspace;
 }
 
 export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
@@ -116,6 +118,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   onToggleCollapse,
   onClose,
   isDarkMode = true,
+  workspaceMode = 'all',
 }) => {
   // Search & Filter state for Projects
   const [projectSearch, setProjectSearch] = useState('');
@@ -134,6 +137,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   // Asset Manager state
   const [assetFilter, setAssetFilter] = useState<'all' | 'stems' | 'nextcloud' | 'lyrics' | 'visuals' | 'videos'>('all');
   const [playingStemId, setPlayingStemId] = useState<number | null>(null);
+
+  const workspaceTabIds: Record<StudioWorkspace, string[] | null> = {
+    write: ['brainstorming', 'lyrics', 'version-matrix', 'prompt_library'],
+    produce: ['kanban', 'nextcloud_sync', 'mixer', 'mastering'],
+    release: ['mastering', 'youtube', 'omnipost', 'ministry', 'veo_visuals', 'video_express', 'nextcloud_sync'],
+    all: null
+  };
+  const visibleWorkspaceTabs = workspaceTabIds[workspaceMode];
+  const visibleTier1Items = visibleWorkspaceTabs ? TIER_1_NAV_ITEMS.filter(item => visibleWorkspaceTabs.includes(item.id)) : TIER_1_NAV_ITEMS;
+  const visibleTier2Items = visibleWorkspaceTabs ? TIER_2_NAV_ITEMS.filter(item => visibleWorkspaceTabs.includes(item.id)) : TIER_2_NAV_ITEMS;
 
   // Nextcloud WebDAV Live Connection & Diagnostics State
   const [ncConfig, setNcConfig] = useState<NextcloudSyncConfig>(() => getSavedNextcloudConfig());
@@ -943,7 +956,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
           <div className="grid grid-cols-2 gap-1.5 w-full">
             {/* Col 1: Tier 1 Audio Icons */}
             <div className="flex flex-col gap-1.5 items-center">
-              {TIER_1_NAV_ITEMS.map((item) => {
+              {visibleTier1Items.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
@@ -976,7 +989,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
             {/* Col 2: Tier 2 Visuals Icons */}
             <div className="flex flex-col gap-1.5 items-center">
-              {TIER_2_NAV_ITEMS.map((item) => {
+              {visibleTier2Items.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (

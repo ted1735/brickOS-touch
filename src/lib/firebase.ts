@@ -204,6 +204,7 @@ export async function seedInitialCatalog(tracks: Track[]): Promise<void> {
     console.log(`Successfully seeded ${tracks.length} tracks into Firestore.`);
   } catch (err) {
     console.error('Failed to seed catalog into Firestore:', err);
+    throw err;
   }
 }
 
@@ -728,5 +729,4 @@ export async function saveWhiteboardToFirestore(canvas: WhiteboardCanvasDoc): Pr
     throw err;
   }
 }
-
 
