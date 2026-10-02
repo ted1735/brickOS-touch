@@ -1843,6 +1843,7 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
         const xml = await davRes.text();
         const responseBlocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
 
+        const subfolderHrefs: string[] = [];
         for (const block of responseBlocks) {
           const blockXml = block[1];
           const hrefMatch = blockXml.match(/<d:href>([^<]+)<\/d:href>/i);
@@ -1851,10 +1852,24 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
           const filename = href.split('/').filter(Boolean).pop() || '';
           const isCollection = /<d:collection\s*\/?>/i.test(blockXml) || /<d:resourcetype>[\s\S]*?<d:collection[\s\S]*?<\/d:resourcetype>/i.test(blockXml);
 
+          if (isCollection) {
+            const cleanSub = href.replace(/\/+$/, '');
+            const targetPathOnly = cleanWebdavPath.replace(/\/+$/, '').toLowerCase();
+            if (cleanSub.toLowerCase() === targetPathOnly) continue;
+            if (
+              filename &&
+              !filename.startsWith('.') &&
+              !filename.startsWith('_') &&
+              !['CAD-3D', 'Apps-Scripts', 'SEO-Reports', 'Marketing-Socials', 'Reimbursements-20260725T231146Z-1-001'].includes(filename)
+            ) {
+              subfolderHrefs.push(cleanSub);
+            }
+            continue;
+          }
+
           if (
             filename &&
             !filename.startsWith('.') &&
-            !isCollection &&
             filename.toLowerCase() !== 'music-production' &&
             filename.toLowerCase() !== 'ncted' &&
             filename.toLowerCase() !== 'files'
@@ -1869,6 +1884,7 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
             else if (lower.endsWith('.flac')) mimeType = 'audio/flac';
             else if (lower.endsWith('.png')) mimeType = 'image/png';
             else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
+            else if (lower.endsWith('.webp')) mimeType = 'image/webp';
             else if (lower.endsWith('.mp4')) mimeType = 'video/mp4';
             else if (lower.endsWith('.md')) mimeType = 'text/markdown';
 
@@ -1879,6 +1895,64 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
               mimeType,
               streamUrl: `/api/nextcloud/stream?path=${encodeURIComponent(href)}`
             });
+          }
+        }
+
+        // Also query active project subfolders (Brick-by-Brick, Every-Candles-Victory, etc.) to discover live stems, versions, and visuals
+        if (subfolderHrefs.length > 0) {
+          const subfolderFetches = subfolderHrefs.slice(0, 16).map(async (subUrl) => {
+            try {
+              const subRes = await smartFetch(subUrl, {
+                method: 'PROPFIND',
+                headers,
+                signal: AbortSignal.timeout(6000)
+              });
+              if (subRes.status >= 200 && subRes.status < 300) {
+                const subXml = await subRes.text();
+                const subBlocks = [...subXml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+                const parsedSubFiles: Array<{ name: string; size: number; href: string; mimeType: string; streamUrl: string }> = [];
+                for (const sBlock of subBlocks) {
+                  const sXml = sBlock[1];
+                  const sHrefMatch = sXml.match(/<d:href>([^<]+)<\/d:href>/i);
+                  if (!sHrefMatch) continue;
+                  const sHref = decodeURIComponent(sHrefMatch[1]);
+                  const sName = sHref.split('/').filter(Boolean).pop() || '';
+                  const sIsCol = /<d:collection\s*\/?>/i.test(sXml);
+                  if (!sName || sName.startsWith('.') || sIsCol) continue;
+                  const sLower = sName.toLowerCase();
+                  const sLenMatch = sXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+                  const sSize = sLenMatch ? parseInt(sLenMatch[1], 10) : 0;
+                  let sMime = 'application/octet-stream';
+                  if (sLower.endsWith('.wav')) sMime = 'audio/wav';
+                  else if (sLower.endsWith('.mp3')) sMime = 'audio/mpeg';
+                  else if (sLower.endsWith('.flac')) sMime = 'audio/flac';
+                  else if (sLower.endsWith('.png')) sMime = 'image/png';
+                  else if (sLower.endsWith('.jpg') || sLower.endsWith('.jpeg')) sMime = 'image/jpeg';
+                  else if (sLower.endsWith('.webp')) sMime = 'image/webp';
+                  else if (sLower.endsWith('.mp4')) sMime = 'video/mp4';
+                  else if (sLower.endsWith('.md')) sMime = 'text/markdown';
+
+                  parsedSubFiles.push({
+                    name: sName,
+                    size: sSize,
+                    href: sHref,
+                    mimeType: sMime,
+                    streamUrl: `/api/nextcloud/stream?path=${encodeURIComponent(sHref)}`
+                  });
+                }
+                return parsedSubFiles;
+              }
+            } catch {
+              // ignore subfolder timeout
+            }
+            return [];
+          });
+
+          const subResults = await Promise.allSettled(subfolderFetches);
+          for (const res of subResults) {
+            if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+              liveFiles.push(...res.value);
+            }
           }
         }
         liveItemsFound = liveFiles.length;
