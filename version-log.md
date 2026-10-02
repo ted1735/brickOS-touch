@@ -407,6 +407,31 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Configured automated nightly backup job in Proxmox VE 8 (`/etc/pve/jobs.cfg`, Job `d42b7fbe-eab6-4048-af99-682a99fe0104`) targeting `pbs-moyercloud` (`backup-7tb` on `192.168.1.74`).
     - Scheduled at **02:00 AM daily** in live `snapshot` mode (zero Nextcloud downtime) with automated retention pruning (`keep-daily=7, keep-weekly=4, keep-monthly=2`).
 
+---
+
+## [v3.0] — System-Wide Click-Efficiency Audit, Direct Icon Actions, Keyboard Lightbox & Audio Remap
+- **Date**: 2026-10-02
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v3.0`**.
+  - **Single-Click Direct Icon Actions (Zero Redundant Buttons)**:
+    - In `NextcloudWebDavFileExplorer.tsx`, clicking audio icons (`.wav`, `.mp3`, `.flac`) directly plays/auditions the stream with interactive hover and play/pause states.
+    - Clicking image, video, or document icons directly triggers the fullscreen lightbox preview.
+    - Removed redundant separate "View" buttons across file cards and list rows.
+  - **Lightbox Keyboard Navigation (`ArrowLeft` / `ArrowRight`) & Rapid Preview**:
+    - Embedded `ArrowLeft` (`←`) and `ArrowRight` (`→`) keyboard shortcuts for cycling through images and assets in the preview popup.
+    - Added on-screen Previous (`<`) and Next (`>`) navigation buttons, item index counter (`Item X of Y`), and video player preview.
+  - **Catalog & Nextcloud Audio Stream Linking**:
+    - Remapped all 27 tracks in `CATALOG_TRACK_DEFINITIONS` (`src/data/nextcloudAssetIndex.ts`) to exact Nextcloud `/Music-Production/` directory names.
+    - Resolved real audio streaming through `/api/nextcloud/stream?path=...` across the Mini-DAW mixer and side navigation player.
+  - **Mini-DAW "Play 4-Track" Button Styling**:
+    - Upgraded the 4-track play button with a rich gradient (`from-indigo-600 via-purple-600 to-indigo-600`), amber icon accents, glowing ring, and active pulsing feedback.
+  - **Site Logo & Transparent Branding**:
+    - Integrated transparent brand asset `brick-logo-transparent1000_1.webp` (`/brick-logo.webp`) across browser favicon, header branding button, and sidebar panel badge.
+  - **System-Wide & Workspace Skills**:
+    - Created `vite-react-click-audit` system-wide skill and custom `brickos-ui-ux-click-audit` workspace skill.
+
+
 
 
 

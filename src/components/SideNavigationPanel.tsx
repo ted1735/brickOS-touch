@@ -1124,8 +1124,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
       <div className={`p-3.5 border-b space-y-3 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
-              bOS
+            <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700/60 p-0.5 flex items-center justify-center shadow-md overflow-hidden">
+              <img src="/brick-logo.webp" alt="brickOS Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <h2 className={`text-xs font-black uppercase tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Studio Side Nav</h2>

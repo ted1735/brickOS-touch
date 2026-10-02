@@ -1727,10 +1727,14 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         <div className="flex items-center gap-3">
           <button
             onClick={() => setActiveTab('home')}
-            className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer"
+            className="w-10 h-10 rounded-xl bg-slate-900/90 border border-slate-700/60 p-1 flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer overflow-hidden group"
             title="Return to Studio Home"
           >
-            b
+            <img 
+              src="/brick-logo.webp" 
+              alt="brickOS Studio Logo" 
+              className="w-full h-full object-contain drop-shadow group-hover:brightness-110 transition" 
+            />
           </button>
           <div>
             <div className="flex items-center gap-2">

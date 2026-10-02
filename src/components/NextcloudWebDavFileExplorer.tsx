@@ -14,6 +14,7 @@ import {
   Search,
   ArrowUp,
   ChevronRight,
+  ChevronLeft,
   MoreVertical,
   Trash2,
   Edit2,
@@ -493,7 +494,17 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     }
   };
 
-  // Preview File Handler (Text/Markdown reader)
+  // Previewable files list for current directory (Images, Documents, Videos)
+  const previewableFiles = useMemo(() => {
+    return filteredFiles.filter(f => f.isImage || f.isDocument || f.isVideo);
+  }, [filteredFiles]);
+
+  const currentPreviewIndex = useMemo(() => {
+    if (!previewFile) return -1;
+    return previewableFiles.findIndex(f => f.path === previewFile.path);
+  }, [previewFile, previewableFiles]);
+
+  // Preview File Handler (Text/Markdown reader / Image / Video)
   const handleOpenPreview = async (file: WebDavFileItem) => {
     setPreviewFile(file);
     if (file.isDocument) {
@@ -511,6 +522,46 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
       setPreviewContent('');
     }
   };
+
+  const handlePrevPreview = () => {
+    if (currentPreviewIndex > 0) {
+      handleOpenPreview(previewableFiles[currentPreviewIndex - 1]);
+    }
+  };
+
+  const handleNextPreview = () => {
+    if (currentPreviewIndex >= 0 && currentPreviewIndex < previewableFiles.length - 1) {
+      handleOpenPreview(previewableFiles[currentPreviewIndex + 1]);
+    }
+  };
+
+  // Keyboard Navigation for Image/Asset Lightbox (Left / Right Arrow, Escape)
+  useEffect(() => {
+    if (!previewFile) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (currentPreviewIndex > 0) {
+          handleOpenPreview(previewableFiles[currentPreviewIndex - 1]);
+        }
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (currentPreviewIndex >= 0 && currentPreviewIndex < previewableFiles.length - 1) {
+          handleOpenPreview(previewableFiles[currentPreviewIndex + 1]);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setPreviewFile(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewFile, currentPreviewIndex, previewableFiles]);
 
   // Format Helpers
   const formatBytes = (bytes: number): string => {
@@ -1112,24 +1163,68 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                             : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
                         }`}
                       >
-                        {/* File Card Top: Icon, Category & Actions */}
+                        {/* File Card Top: Interactive Icon (Audition / View), Category & Stream Status */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                              file.isAudio
-                                ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
-                                : file.isImage
-                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                : file.isVideo
-                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                                : 'bg-slate-800 text-slate-300'
-                            }`}>
-                              {file.isAudio && <Music className="w-4 h-4" />}
-                              {file.isImage && <ImageIcon className="w-4 h-4" />}
-                              {file.isVideo && <Video className="w-4 h-4" />}
-                              {file.isDocument && <FileText className="w-4 h-4" />}
-                              {!file.isAudio && !file.isImage && !file.isVideo && !file.isDocument && <FileCode className="w-4 h-4" />}
-                            </div>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Direct-Action Icon: Click plays audio or previews image/doc/video */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (file.isAudio) {
+                                  handleTogglePlay(file);
+                                } else if (file.isImage || file.isDocument || file.isVideo) {
+                                  handleOpenPreview(file);
+                                }
+                              }}
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 cursor-pointer group/icon relative overflow-hidden shadow-sm ${
+                                isCurrentPlaying
+                                  ? 'bg-indigo-600 text-white shadow-indigo-600/50 shadow-md ring-2 ring-indigo-400 animate-pulse'
+                                  : file.isAudio
+                                  ? 'bg-indigo-500/15 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30'
+                                  : file.isImage
+                                  ? 'bg-emerald-500/15 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30'
+                                  : file.isVideo
+                                  ? 'bg-amber-500/15 hover:bg-amber-600 text-amber-400 hover:text-white border border-amber-500/30'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
+                              }`}
+                              title={
+                                file.isAudio
+                                  ? isCurrentPlaying
+                                    ? 'Pause audition (Click)'
+                                    : 'Audition audio stream (Click)'
+                                  : file.isImage || file.isDocument || file.isVideo
+                                  ? `Preview ${file.isImage ? 'image' : file.isVideo ? 'video' : 'document'} (Click)`
+                                  : 'File'
+                              }
+                            >
+                              {file.isAudio && (
+                                isCurrentPlaying ? <Pause className="w-5 h-5 fill-current" /> : (
+                                  <>
+                                    <Music className="w-5 h-5 group-hover/icon:hidden" />
+                                    <Play className="w-5 h-5 fill-current hidden group-hover/icon:block" />
+                                  </>
+                                )
+                              )}
+                              {file.isImage && (
+                                <>
+                                  <ImageIcon className="w-5 h-5 group-hover/icon:hidden" />
+                                  <Eye className="w-5 h-5 hidden group-hover/icon:block" />
+                                </>
+                              )}
+                              {file.isVideo && (
+                                <>
+                                  <Video className="w-5 h-5 group-hover/icon:hidden" />
+                                  <Play className="w-5 h-5 fill-current hidden group-hover/icon:block" />
+                                </>
+                              )}
+                              {file.isDocument && (
+                                <>
+                                  <FileText className="w-5 h-5 group-hover/icon:hidden" />
+                                  <Eye className="w-5 h-5 hidden group-hover/icon:block" />
+                                </>
+                              )}
+                              {!file.isAudio && !file.isImage && !file.isVideo && !file.isDocument && <FileCode className="w-5 h-5" />}
+                            </button>
 
                             <div className="min-w-0">
                               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
@@ -1137,6 +1232,8 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                                   ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                                   : file.isAudio
                                   ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+                                  : file.isImage
+                                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                                   : 'bg-slate-800 text-slate-400'
                               }`}>
                                 {file.category}
@@ -1147,19 +1244,11 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                             </div>
                           </div>
 
-                          {/* Quick Audition Play Button for Audio */}
-                          {file.isAudio && (
-                            <button
-                              onClick={() => handleTogglePlay(file)}
-                              className={`p-2 rounded-xl transition cursor-pointer shadow-md ${
-                                isCurrentPlaying
-                                  ? 'bg-indigo-600 text-white animate-pulse'
-                                  : 'bg-indigo-500/20 hover:bg-indigo-600 hover:text-white text-indigo-300'
-                              }`}
-                              title={isCurrentPlaying ? 'Pause audition' : 'Audition stream'}
-                            >
-                              {isCurrentPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
-                            </button>
+                          {/* Quick Audition Pill Indicator */}
+                          {file.isAudio && isCurrentPlaying && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 animate-pulse">
+                              AUDITIONING
+                            </span>
                           )}
                         </div>
 
@@ -1176,7 +1265,7 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                           </p>
                         </div>
 
-                        {/* Bottom: Action Buttons */}
+                        {/* Bottom: Stream & DAW Action Buttons */}
                         <div className={`pt-2 border-t flex items-center justify-between gap-1 text-[11px] ${
                           isDarkMode ? 'border-slate-800/80' : 'border-slate-100'
                         }`}>
@@ -1189,16 +1278,6 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                               >
                                 <Sliders className="w-3 h-3" />
                                 <span>DAW</span>
-                              </button>
-                            )}
-
-                            {(file.isDocument || file.isImage) && (
-                              <button
-                                onClick={() => handleOpenPreview(file)}
-                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer flex items-center gap-1"
-                              >
-                                <Eye className="w-3 h-3" />
-                                <span>View</span>
                               </button>
                             )}
 
@@ -1281,25 +1360,35 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                             }`}
                           >
                             <td className="py-2 px-4 flex items-center gap-2.5 min-w-0">
-                              {file.isAudio ? (
-                                <button
-                                  onClick={() => handleTogglePlay(file)}
-                                  className={`p-1.5 rounded-lg transition shrink-0 cursor-pointer ${
-                                    isCurrentPlaying
-                                      ? 'bg-indigo-600 text-white'
-                                      : 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-600 hover:text-white'
-                                  }`}
-                                >
-                                  {isCurrentPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                                </button>
-                              ) : (
-                                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-400 shrink-0">
-                                  {file.isImage && <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />}
-                                  {file.isVideo && <Video className="w-3.5 h-3.5 text-amber-400" />}
-                                  {file.isDocument && <FileText className="w-3.5 h-3.5 text-blue-400" />}
-                                  {!file.isImage && !file.isVideo && !file.isDocument && <FileCode className="w-3.5 h-3.5" />}
-                                </div>
-                              )}
+                              {/* Action Icon: Click plays audio or previews image/doc/video */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (file.isAudio) {
+                                    handleTogglePlay(file);
+                                  } else if (file.isImage || file.isDocument || file.isVideo) {
+                                    handleOpenPreview(file);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-lg transition shrink-0 cursor-pointer ${
+                                  isCurrentPlaying
+                                    ? 'bg-indigo-600 text-white animate-pulse shadow-md shadow-indigo-950/50'
+                                    : file.isAudio
+                                    ? 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-600 hover:text-white'
+                                    : file.isImage
+                                    ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-600 hover:text-white'
+                                    : file.isVideo
+                                    ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-600 hover:text-white'
+                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                }`}
+                                title={file.isAudio ? 'Audition audio' : 'Preview asset'}
+                              >
+                                {file.isAudio && (isCurrentPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />)}
+                                {file.isImage && <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />}
+                                {file.isVideo && <Video className="w-3.5 h-3.5 text-amber-400" />}
+                                {file.isDocument && <FileText className="w-3.5 h-3.5 text-blue-400" />}
+                                {!file.isAudio && !file.isImage && !file.isVideo && !file.isDocument && <FileCode className="w-3.5 h-3.5" />}
+                              </button>
                               <span className="font-bold truncate max-w-sm">{file.name}</span>
                             </td>
                             <td className="py-2 px-3">
@@ -1683,54 +1772,154 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         </div>
       )}
 
-      {/* LIGHTBOX / PREVIEW MODAL */}
+      {/* LIGHTBOX / PREVIEW MODAL WITH ARROW KEY NAVIGATION */}
       {previewFile && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-3xl max-h-[85vh] rounded-2xl border flex flex-col shadow-2xl overflow-hidden ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className="p-4 border-b flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="font-black text-sm truncate">{previewFile.name}</h3>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  {previewFile.category} · {formatBytes(previewFile.size)} · {previewFile.path}
-                </p>
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div 
+            className={`w-full max-w-4xl max-h-[90vh] rounded-2xl border flex flex-col shadow-2xl overflow-hidden relative ${
+              isDarkMode ? 'bg-slate-900/95 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/40">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/30">
+                  {previewFile.isImage && <ImageIcon className="w-4 h-4 text-emerald-400" />}
+                  {previewFile.isVideo && <Video className="w-4 h-4 text-amber-400" />}
+                  {previewFile.isDocument && <FileText className="w-4 h-4 text-blue-400" />}
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-sm truncate max-w-md">{previewFile.name}</h3>
+                    {currentPreviewIndex >= 0 && previewableFiles.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
+                        {currentPreviewIndex + 1} / {previewableFiles.length}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-mono truncate">
+                    {previewFile.category} · {formatBytes(previewFile.size)} · {previewFile.path}
+                  </p>
+                </div>
               </div>
+
               <div className="flex items-center gap-2">
+                {/* Keyboard Navigation Pill Hint */}
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[10px] font-mono text-slate-300 font-medium">
+                  <kbd className="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-indigo-300 font-bold">←</kbd>
+                  <kbd className="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-indigo-300 font-bold">→</kbd>
+                  <span>to navigate</span>
+                  <span className="text-slate-600">•</span>
+                  <kbd className="px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 font-bold">ESC</kbd>
+                </div>
+
                 <a
                   href={previewFile.streamUrl}
                   download={previewFile.name}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+                  title="Download raw file"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download</span>
+                  <span className="hidden sm:inline">Download</span>
                 </a>
-                <button onClick={() => setPreviewFile(null)} className="p-1 rounded text-slate-400 hover:text-white">
+
+                <button 
+                  onClick={() => setPreviewFile(null)} 
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  title="Close preview (Esc)"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 p-6 overflow-y-auto flex items-center justify-center">
-              {previewFile.isImage && (
-                <img
-                  src={previewFile.streamUrl}
-                  alt={previewFile.name}
-                  className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-xl"
-                />
+            {/* Modal Body with Left/Right Interactive Overlay Controls */}
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto flex items-center justify-center relative min-h-[350px] bg-slate-950/60">
+              {/* Previous Item Button */}
+              {previewableFiles.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handlePrevPreview}
+                  disabled={currentPreviewIndex <= 0}
+                  className={`absolute left-3 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-2xl border transition-all cursor-pointer shadow-xl backdrop-blur-md ${
+                    currentPreviewIndex > 0
+                      ? 'bg-slate-900/80 hover:bg-indigo-600 text-white border-slate-700/80 hover:border-indigo-400 hover:scale-110 active:scale-95'
+                      : 'bg-slate-900/40 text-slate-600 border-slate-800/40 opacity-40 cursor-not-allowed'
+                  }`}
+                  title="Previous item (Left Arrow ←)"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
               )}
 
+              {/* Next Item Button */}
+              {previewableFiles.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleNextPreview}
+                  disabled={currentPreviewIndex >= previewableFiles.length - 1}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 z-20 p-2.5 rounded-2xl border transition-all cursor-pointer shadow-xl backdrop-blur-md ${
+                    currentPreviewIndex < previewableFiles.length - 1
+                      ? 'bg-slate-900/80 hover:bg-indigo-600 text-white border-slate-700/80 hover:border-indigo-400 hover:scale-110 active:scale-95'
+                      : 'bg-slate-900/40 text-slate-600 border-slate-800/40 opacity-40 cursor-not-allowed'
+                  }`}
+                  title="Next item (Right Arrow →)"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              )}
+
+              {/* Image Preview */}
+              {previewFile.isImage && (
+                <div className="flex flex-col items-center gap-3">
+                  <img
+                    src={previewFile.streamUrl}
+                    alt={previewFile.name}
+                    className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-2xl ring-1 ring-white/10 select-none animate-in fade-in duration-200"
+                  />
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {previewFile.name} ({currentPreviewIndex + 1} of {previewableFiles.length})
+                  </span>
+                </div>
+              )}
+
+              {/* Video Preview */}
+              {previewFile.isVideo && (
+                <div className="flex flex-col items-center gap-3 w-full max-w-2xl">
+                  <video
+                    src={previewFile.streamUrl}
+                    controls
+                    autoPlay
+                    className="max-h-[65vh] max-w-full rounded-xl shadow-2xl ring-1 ring-white/10"
+                  />
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {previewFile.name} ({currentPreviewIndex + 1} of {previewableFiles.length})
+                  </span>
+                </div>
+              )}
+
+              {/* Document / Markdown / Lyrics Preview */}
               {previewFile.isDocument && (
-                <div className="w-full h-full">
+                <div className="w-full h-full max-w-3xl">
                   {isLoadingPreview ? (
-                    <div className="py-12 text-center text-slate-400">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
-                      <p className="text-xs">Loading document...</p>
+                    <div className="py-16 text-center text-slate-400">
+                      <RefreshCw className="w-7 h-7 animate-spin mx-auto mb-3 text-indigo-400" />
+                      <p className="text-xs font-bold">Loading document stream from Nextcloud...</p>
                     </div>
                   ) : (
-                    <pre className="p-4 rounded-xl bg-slate-950 font-mono text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto max-h-[60vh] border border-slate-800">
-                      {previewContent}
-                    </pre>
+                    <div className="space-y-2">
+                      <pre className="p-5 rounded-2xl bg-slate-950 font-mono text-xs text-slate-200 whitespace-pre-wrap overflow-x-auto max-h-[65vh] border border-slate-800/90 leading-relaxed shadow-inner">
+                        {previewContent}
+                      </pre>
+                      <span className="block text-right text-[11px] font-mono text-slate-400">
+                        {previewFile.name} ({currentPreviewIndex + 1} of {previewableFiles.length})
+                      </span>
+                    </div>
                   )}
                 </div>
               )}

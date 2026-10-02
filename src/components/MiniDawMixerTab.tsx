@@ -538,29 +538,30 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
               <span className="text-xs font-mono font-bold text-indigo-300 w-8 text-right">{masterVolume}%</span>
             </div>
 
-            {/* Master Transport Play/Stop Button */}
+            {/* Master Transport Play/Stop Button with Enhanced Glowing Styling */}
             <button
               onClick={handleTogglePlay}
-              className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-lg transition cursor-pointer ${
+              className={`px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2.5 transition-all duration-200 cursor-pointer shadow-xl border ${
                 isPlaying
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950 ring-2 ring-rose-500/50'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-950'
+                  ? 'bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white border-rose-400/40 shadow-rose-950/80 ring-2 ring-rose-500/50 animate-pulse'
+                  : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:via-purple-500 hover:to-indigo-500 text-white border-indigo-400/40 shadow-indigo-950/80 hover:shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98]'
               }`}
+              title={isPlaying ? 'Stop playback (Spacebar)' : 'Play 4-Track Lossless PCM Stream (Spacebar)'}
             >
               {isPlaying ? (
                 isLoadingAudio ? (
                   <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
                 ) : (
-                  <Square className="w-4 h-4 fill-current" />
+                  <Square className="w-4 h-4 fill-current text-white" />
                 )
               ) : (
-                <Play className="w-4 h-4 fill-current" />
+                <Play className="w-4 h-4 fill-current text-amber-300" />
               )}
-              <span>
+              <span className="tracking-wide">
                 {isPlaying
                   ? isLoadingAudio
                     ? 'Loading Audio...'
-                    : 'Stop Playback'
+                    : 'Stop 4-Track'
                   : 'Play 4-Track'}
               </span>
             </button>
