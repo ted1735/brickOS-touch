@@ -67,6 +67,7 @@ import { UniversalAssetEditorModal } from './components/UniversalAssetEditorModa
 import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIONS } from './data/canonicalCatalog';
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
 import { audioMiniDaw } from './utils/audioEngine';
+import { getTrackStems } from './data/nextcloudAssetIndex';
 import { KanbanDashboardTab } from './components/KanbanDashboardTab';
 import { LyricsAndSunoTab } from './components/LyricsAndSunoTab';
 import { MiniDawMixerTab } from './components/MiniDawMixerTab';
@@ -789,12 +790,11 @@ export default function BrickOSMusicStudioWorkspace() {
   // Mini-DAW Mixer State
   const [isPlaying, setIsPlaying] = useState(false);
   const [masterVolume, setMasterVolume] = useState(85);
-  const [trackStates, setTrackStates] = useState<MixerTrack[]>([
-    { id: 1, name: "Track 1: Master Instrumental", vol: 90, pan: 0, muted: false, solo: false, trimIn: 0, trimOut: 100, freq: 110, waveType: 'sawtooth', color: '#6366f1' },
-    { id: 2, name: "Track 2: Dry Vocal (UVR5)", vol: 95, pan: 0, muted: false, solo: false, trimIn: 0, trimOut: 100, freq: 220, waveType: 'triangle', color: '#10b981' },
-    { id: 3, name: "Track 3: Harmonies & Ad-libs", vol: 75, pan: -20, muted: false, solo: false, trimIn: 0, trimOut: 100, freq: 330, waveType: 'sine', color: '#f59e0b' },
-    { id: 4, name: "Track 4: Click & Ambient Plate", vol: 60, pan: 20, muted: false, solo: false, trimIn: 0, trimOut: 100, freq: 440, waveType: 'square', color: '#ec4899' }
-  ]);
+  const [trackStates, setTrackStates] = useState<MixerTrack[]>(() => getTrackStems(selectedTrack));
+
+  useEffect(() => {
+    setTrackStates(getTrackStems(selectedTrack));
+  }, [selectedTrack.id, selectedTrack.title]);
 
   // A/B Master Switcher State
   const [activeBus, setActiveBus] = useState<'master' | 'suno' | 'vocal' | 'instrumental' | 'ref'>('master');
@@ -810,7 +810,8 @@ export default function BrickOSMusicStudioWorkspace() {
       showToast('Audio preview paused [Space]', 'info');
     } else {
       audioMiniDaw.init();
-      audioMiniDaw.startPlayback(trackStates, selectedTrack.bpm);
+      const currentStems = getTrackStems(selectedTrack);
+      audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key);
       setIsPlaying(true);
       showToast(`Playing stem preview: "${selectedTrack.title}" (${selectedTrack.bpm} BPM) [Space]`, 'success');
     }
@@ -1336,7 +1337,8 @@ export default function BrickOSMusicStudioWorkspace() {
       audioMiniDaw.stopPlayback();
       setIsPlaying(false);
     } else {
-      audioMiniDaw.startPlayback(trackStates, selectedTrack.bpm);
+      const stems = trackStates.length > 0 && trackStates[0].audioUrl ? trackStates : getTrackStems(selectedTrack);
+      audioMiniDaw.startPlayback(stems, selectedTrack.bpm, selectedTrack.key);
       setIsPlaying(true);
     }
   };

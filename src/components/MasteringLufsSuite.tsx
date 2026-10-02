@@ -40,7 +40,7 @@ import {
   saveCustomMasteringPreset,
   deleteCustomMasteringPreset
 } from '../data/masteringPresets';
-import { INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
+import { getTrackStems } from '../data/nextcloudAssetIndex';
 import { AudioWaveformVisualizer } from './AudioWaveformVisualizer';
 import { MasterDeliverablesExportModal } from './MasterDeliverablesExportModal';
 
@@ -61,7 +61,11 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [activeBus, setActiveBus] = useState<'master' | 'suno' | 'vocal' | 'instrumental' | 'ref'>('master');
   const [isMonoCollapse, setIsMonoCollapse] = useState<boolean>(false);
-  const [tracks, setTracks] = useState<MixerTrack[]>(INITIAL_DAW_STEMS);
+  const [tracks, setTracks] = useState<MixerTrack[]>(() => getTrackStems(track));
+
+  useEffect(() => {
+    setTracks(getTrackStems(track));
+  }, [track.id, track.title]);
 
   // Active Effects & Mastering State
   const [currentEffects, setCurrentEffects] = useState<DawEffectsState>(audioMiniDaw.getEffects());
@@ -156,7 +160,8 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
       audioMiniDaw.stopPlayback();
       setIsPlaying(false);
     } else {
-      audioMiniDaw.startPlayback(tracks, track.bpm);
+      const activeStems = tracks.length > 0 && tracks[0].audioUrl ? tracks : getTrackStems(track);
+      audioMiniDaw.startPlayback(activeStems, track.bpm, track.key);
       setIsPlaying(true);
     }
   };
@@ -171,7 +176,8 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
   // Switch A/B routing bus
   const handleSelectBus = (busId: 'master' | 'suno' | 'vocal' | 'instrumental' | 'ref') => {
     setActiveBus(busId);
-    audioMiniDaw.updateBusRouting(busId, tracks);
+    const activeStems = tracks.length > 0 && tracks[0].audioUrl ? tracks : getTrackStems(track);
+    audioMiniDaw.updateBusRouting(busId, activeStems);
   };
 
   // Select Target Profile

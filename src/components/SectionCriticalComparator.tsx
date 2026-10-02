@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { SongVersion } from './SongVersionCompareTab';
 import { Track } from '../types';
+import { getTrackStems } from '../data/nextcloudAssetIndex';
 
 export interface SectionBreakdown {
   id: string;
@@ -268,115 +269,34 @@ export const SectionCriticalComparator: React.FC<SectionCriticalComparatorProps>
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showToast]);
 
-  // Clean Web Audio Engine synthesis on version switch or play/pause
+  // Real Audio streaming reference for Section Comparator
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+
+  // Clean Audio Streaming on version switch or play/pause
   useEffect(() => {
     if (!isPlaying) {
-      if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
-        audioCtxRef.current.suspend();
+      if (audioElRef.current) {
+        audioElRef.current.pause();
       }
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
 
     try {
-      if (!audioCtxRef.current) {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        audioCtxRef.current = new AudioCtx();
+      if (activeTrack) {
+        const stems = getTrackStems(activeTrack);
+        const targetStem = stems[activeAuditionIndex % stems.length] || stems[0];
+        if (targetStem?.audioUrl) {
+          if (!audioElRef.current) {
+            audioElRef.current = new Audio();
+            audioElRef.current.loop = isLooping;
+          }
+          if (audioElRef.current.src !== targetStem.audioUrl) {
+            audioElRef.current.src = targetStem.audioUrl;
+          }
+          audioElRef.current.play().catch(err => console.warn('Audio play note:', err));
+        }
       }
-
-      if (audioCtxRef.current.state === 'suspended') {
-        audioCtxRef.current.resume();
-      }
-
-      const ctx = audioCtxRef.current;
-      const bpm = activeTrack?.bpm || 120;
-      const baseFreq = 130.81; // C3 note
-
-      // Clear previous oscillators
-      oscNodesRef.current.forEach(osc => {
-        try { osc.stop(); osc.disconnect(); } catch (e) {}
-      });
-      oscNodesRef.current = [];
-
-      const masterGain = ctx.createGain();
-      gainNodeRef.current = masterGain;
-
-      // Apply Fletcher-Munson LUFS Loudness Matching Gain Trim
-      let trimDb = 0;
-      if (loudnessMatchEnabled) {
-        trimDb = DEFAULT_VERSION_LUFS[activeAuditionIndex]?.targetTrimDb || 0;
-      }
-      const linearGain = Math.pow(10, trimDb / 20) * 0.22; // Safe headroom
-      masterGain.gain.setValueAtTime(linearGain, ctx.currentTime);
-
-      // Create distinct sonic signature for each version
-      if (activeAuditionIndex === 0) {
-        // Version 1: Warm Acoustic Fingerpicked Blueprint (Triangle + Sine sub)
-        const osc1 = ctx.createOscillator();
-        osc1.type = 'triangle';
-        osc1.frequency.setValueAtTime(baseFreq, ctx.currentTime);
-
-        const osc2 = ctx.createOscillator();
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(baseFreq * 1.5, ctx.currentTime); // Perfect fifth
-
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1400, ctx.currentTime); // Soft acoustic roll-off
-
-        osc1.connect(filter);
-        osc2.connect(filter);
-        filter.connect(masterGain);
-
-        osc1.start();
-        osc2.start();
-        oscNodesRef.current = [osc1, osc2];
-      } else if (activeAuditionIndex === 1) {
-        // Version 2: Studio Cinematic (Warm Saw with chorus detune & Rhodes texture)
-        const osc1 = ctx.createOscillator();
-        osc1.type = 'sawtooth';
-        osc1.frequency.setValueAtTime(baseFreq, ctx.currentTime);
-
-        const osc2 = ctx.createOscillator();
-        osc2.type = 'sawtooth';
-        osc2.frequency.setValueAtTime(baseFreq * 1.01, ctx.currentTime); // Detune shimmer
-
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(800, ctx.currentTime);
-        filter.Q.setValueAtTime(2, ctx.currentTime);
-
-        osc1.connect(filter);
-        osc2.connect(filter);
-        filter.connect(masterGain);
-
-        osc1.start();
-        osc2.start();
-        oscNodesRef.current = [osc1, osc2];
-      } else {
-        // Version 3: High-Energy Master Anthem (Deep 808 sub + Bright Supersaw)
-        const sub = ctx.createOscillator();
-        sub.type = 'sine';
-        sub.frequency.setValueAtTime(baseFreq / 2, ctx.currentTime); // Sub octave
-
-        const lead = ctx.createOscillator();
-        lead.type = 'sawtooth';
-        lead.frequency.setValueAtTime(baseFreq * 2, ctx.currentTime);
-
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(3600, ctx.currentTime); // Wide open sparkle
-
-        sub.connect(masterGain);
-        lead.connect(filter);
-        filter.connect(masterGain);
-
-        sub.start();
-        lead.start();
-        oscNodesRef.current = [sub, lead];
-      }
-
-      masterGain.connect(ctx.destination);
 
       // Animation loop for synchronized playhead
       playheadStartRef.current = Date.now() - playheadMs;
@@ -388,22 +308,20 @@ export const SectionCriticalComparator: React.FC<SectionCriticalComparatorProps>
       animFrameRef.current = requestAnimationFrame(updatePlayhead);
 
     } catch (err) {
-      console.warn('Web Audio synthesis initialisation note:', err);
+      console.warn('Audio initialisation note:', err);
     }
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isPlaying, activeAuditionIndex, loudnessMatchEnabled, activeTrack?.bpm]);
+  }, [isPlaying, activeAuditionIndex, loudnessMatchEnabled, activeTrack, isLooping, totalSectionDurationMs]);
 
   // Stop audio on unmount
   useEffect(() => {
     return () => {
-      oscNodesRef.current.forEach(osc => {
-        try { osc.stop(); osc.disconnect(); } catch (e) {}
-      });
-      if (audioCtxRef.current) {
-        try { audioCtxRef.current.close(); } catch (e) {}
+      if (audioElRef.current) {
+        audioElRef.current.pause();
+        audioElRef.current = null;
       }
     };
   }, []);

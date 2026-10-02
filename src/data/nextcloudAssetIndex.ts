@@ -43,14 +43,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Christian Hip Hop / Boom-Bap',
     vocal: 'The Architect',
     versions: [
-      { tag: 'v3.0', styleName: 'Master Boom-Bap Cut', notes: 'Gritty MPC swing, warm upright bass, authentic male rap vocal.' },
-      { tag: 'v1.0', styleName: 'Initial Acoustic Blueprint', notes: 'Raw spoken word sketch with vinyl crackle.' }
+      { tag: 'v3.5', styleName: 'Extended Remastered Cut', notes: 'Gritty MPC swing, warm upright bass, authentic male rap vocal.' },
+      { tag: 'v2.5', styleName: 'Original Boom-Bap Cut', notes: 'Raw spoken word sketch with vinyl crackle.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Lead Vocal (The Architect) [Clean BS-Roformer]', stemFilename: 'TRK-01_Lead_Vocal_UVR5_Clean_BS-Roformer.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: MPC Boom-Bap Drums & Percussion', stemFilename: 'TRK-01_Drums_MPC_BoomBap_88BPM.wav', stemType: 'drums', color: '#10b981', freq: 220, waveType: 'square' },
-      { id: 3, name: 'Track 3: Upright Acoustic Bass & Rhodes Chords', stemFilename: 'TRK-01_Upright_Bass_Rhodes_Chords.wav', stemType: 'piano', color: '#f59e0b', freq: 110, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Vinyl Crackle & Ambient Foley', stemFilename: 'TRK-01_Vinyl_Crackle_Ambient_Bed.wav', stemType: 'organ', color: '#ec4899', freq: 293.66, waveType: 'sine' }
+      { id: 1, name: 'Track 1: Extended Remastered Cut (FLAC)', stemFilename: 'Brick-by-Brick-Extended-Remastered-_02-44-v3.5.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Original Boom-Bap Cut v2.5 (MP3)', stemFilename: 'Brick-by-Brick_02-53-v2.5.mp3', stemType: 'drums', color: '#10b981', freq: 220, waveType: 'square' },
+      { id: 3, name: 'Track 3: Extended Cut v3.5 (MP3)', stemFilename: 'Brick-by-Brick-Extended_02-44-v3.5.mp3', stemType: 'piano', color: '#f59e0b', freq: 110, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Dry Rewrite Version v15.75 (MP3)', stemFilename: 'Brick-By-Brick-v15.75-dry-rewrite.mp3', stemType: 'vocal', color: '#ec4899', freq: 293.66, waveType: 'sine' }
     ],
     visualTitle: 'Ruins to Blueprint Kintsugi Brickwork',
     sceneTitle: 'Streets Hum a Hymn - Morning Construction'
@@ -65,14 +65,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Melodic Dubstep / Spoken Word',
     vocal: 'Brandon / Silas Thorne',
     versions: [
-      { tag: 'v2.0', styleName: 'Heavy Melodic Drop Master', notes: 'Massive supersaws, filtered drops, wood lathe foley, raw spoken word intro.' },
-      { tag: 'v1.0', styleName: 'Acoustic Woodshop Narrative', notes: 'Weathered cedar acoustic fingerpicking.' }
+      { tag: 'v3.0a', styleName: 'Heavy Melodic Drop Master', notes: 'Massive supersaws, filtered drops, wood lathe foley, raw spoken word intro.' },
+      { tag: 'v2.1', styleName: 'Acoustic Woodshop Narrative', notes: 'Weathered cedar acoustic fingerpicking.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Raspy Lead Spoken Word (Brandon)', stemFilename: 'TRK-02_Lead_Vocal_Raspy_Storyteller.wav', stemType: 'vocal', color: '#6366f1', freq: 185, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Melodic Supersaws & Synth Swells', stemFilename: 'TRK-02_Melodic_Supersaw_Stabs.wav', stemType: 'organ', color: '#10b981', freq: 370, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Wood Lathe Foley & Acoustic Martin Guitar', stemFilename: 'TRK-02_Wood_Lathe_Foley_Acoustic.wav', stemType: 'guitar', color: '#f59e0b', freq: 277.18, waveType: 'sine' },
-      { id: 4, name: 'Track 4: 140 BPM Dubstep Snare & Sub Kick', stemFilename: 'TRK-02_Heavy_Dubstep_Rhythm_Section.wav', stemType: 'drums', color: '#ec4899', freq: 92.5, waveType: 'square' }
+      { id: 1, name: "Track 1: Master's Hand v3.0a Remastered", stemFilename: 'The-Masters-Hand-v3.0a-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 185, waveType: 'sawtooth' },
+      { id: 2, name: "Track 2: Master's Hand v2.1 Remastered", stemFilename: 'The-Masters-Hand-v2.1-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 370, waveType: 'triangle' },
+      { id: 3, name: "Track 3: Master's Hand v2.5 Original Cut", stemFilename: 'The Masters Hand- v2.5.mp3', stemType: 'guitar', color: '#f59e0b', freq: 277.18, waveType: 'sine' },
+      { id: 4, name: 'Track 4: The Grain of the Wood v1.0', stemFilename: 'The-Grain-of-the-Wood-v1.0_02-07.mp3', stemType: 'vocal', color: '#ec4899', freq: 92.5, waveType: 'square' }
     ],
     visualTitle: 'Weathered Cedar Woodshop Golden Hour',
     sceneTitle: 'The Lathe and the Fire Sanctification'
@@ -87,14 +87,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Soulful Country-Rock / Gospel',
     vocal: 'Mrs T / Brandon / Gospel Choir',
     versions: [
-      { tag: 'v2.0', styleName: 'Gospel Group Shout', notes: 'Warm Hammond organ swell, gentle gospel piano chords, vocal ad-libs, explosive full choir finale.' },
-      { tag: 'v1.0', styleName: 'Solo Tribute Acoustic', notes: 'Original intimate solo vocal and piano tribute to cancer survival.' }
+      { tag: 'v2.1', styleName: 'Gospel Group Shout Master', notes: 'Warm Hammond organ swell, gentle gospel piano chords, vocal ad-libs, explosive full choir finale.' },
+      { tag: 'v2.0', styleName: 'Solo Tribute Acoustic', notes: 'Original intimate solo vocal and piano tribute to cancer survival.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Lead Vocal (Mrs T & Brandon) [Clean BS-Roformer]', stemFilename: 'ECV_Lead_Vocal_MrsT_Clean_BS-Roformer.wav', stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Gospel Choir & Worship Harmonies', stemFilename: 'ECV_Gospel_Choir_Harmonies_UVR5.wav', stemType: 'choir', color: '#10b981', freq: 246.94, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Hammond B3 Organ (Leslie Rotary)', stemFilename: 'ECV_Hammond_B3_Organ_Worship_Bed_G_Major.wav', stemType: 'organ', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Grand Piano & Martin Guitar Bed', stemFilename: 'ECV_Acoustic_Piano_Martin_Guitar_Bed.wav', stemType: 'guitar', color: '#ec4899', freq: 392, waveType: 'sawtooth' }
+      { id: 1, name: "Track 1: Every Candle's Victory Gospel v2.1", stemFilename: 'Every-Candles-Victory-Gospel-v2.1.mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: "Track 2: Every Candle's Victory Gospel v2.0", stemFilename: 'Every-Candles-Victory-Gospel-v2.0.mp3', stemType: 'choir', color: '#10b981', freq: 246.94, waveType: 'triangle' },
+      { id: 3, name: "Track 3: Gospel Instrumental Resonance", stemFilename: 'Every-Candles-Victory-Gospel-v2.1.mp3', stemType: 'organ', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: "Track 4: Choir & Worship Bed", stemFilename: 'Every-Candles-Victory-Gospel-v2.0.mp3', stemType: 'guitar', color: '#ec4899', freq: 392, waveType: 'sawtooth' }
     ],
     visualTitle: 'Golden Beeswax Candle in Sanctuary Chiaroscuro',
     sceneTitle: 'Underneath the Open Skies Cancer Survivor Testimony'
@@ -109,14 +109,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'EDM / Hip-Hop / Rock Reimagining',
     vocal: 'Mrs T / Kane',
     versions: [
-      { tag: 'v2.0', styleName: 'High-Octane 808 Festival Cut', notes: 'Driving 808 bass, trap hi-hat rolls, distorted electric guitar riffs.' },
-      { tag: 'v1.0', styleName: 'Deep Alto Hymnal Flow', notes: 'Intimate gospel roots with electronic undertones.' }
+      { tag: 'v3.0b', styleName: 'Modern Worship Leader Master', notes: 'Driving 808 bass, trap hi-hat rolls, distorted electric guitar riffs.' },
+      { tag: 'v12.55', styleName: 'Mrs T Gospel Anthem Master', notes: 'Intimate gospel roots with electronic undertones.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Deep Alto Lead (Mrs T) & 808 Rap (Kane)', stemFilename: 'TRK-04_Lead_Vocal_Duet_MrsT_Kane.wav', stemType: 'vocal', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Distorted Electric Guitar & Heavy Chords', stemFilename: 'TRK-04_Electric_Guitar_Overdrive_Bed.wav', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'square' },
-      { id: 3, name: 'Track 3: EDM Synth Arpeggios & Strings', stemFilename: 'TRK-04_EDM_Synth_Arp_Strings.wav', stemType: 'organ', color: '#f59e0b', freq: 246.94, waveType: 'sawtooth' },
-      { id: 4, name: 'Track 4: 808 Sub Kick & Trap Hi-Hats', stemFilename: 'TRK-04_808_Sub_Trap_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'triangle' }
+      { id: 1, name: 'Track 1: Modern NBTB Worship Leader v3.0b', stemFilename: 'NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Modern NBTB Worship Leader v2.86 Remaster', stemFilename: 'NBTB-v2.86_Modern_Nothing_but_the_Blood_-The__Worship_Leader__Edit-_-Remastered-f03c878f-e28a-4794-912b-256eb3d6e925.mp3', stemType: 'vocal', color: '#10b981', freq: 329.63, waveType: 'square' },
+      { id: 3, name: 'Track 3: Mrs T Gospel Anthem v12.55 Remastered', stemFilename: 'v12.55-Nothing-But-the-Blood-Mrs-T-Gospel-Anthem-Remastered.mp3', stemType: 'choir', color: '#f59e0b', freq: 246.94, waveType: 'sawtooth' },
+      { id: 4, name: 'Track 4: Mrs T Gospel Anthem v12.5 (04:04)', stemFilename: 'Nothing-But-the-Blood-Mrs-T-Gospel-Anthem_04-04-v12.5.mp3', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'triangle' }
     ],
     visualTitle: 'Ancient Weathered Cedar Cross at Dawn',
     sceneTitle: 'Scarlet River Over Dark Timber Valley'
@@ -124,21 +124,20 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
   {
     trackId: 'TRK-05',
     title: 'The Higher Measure',
-    folderName: 'The-Higher-Measure',
+    folderName: '00-Active_Projects',
     aliases: ['TRK-05', 'The-Higher-Measure', 'The_Higher_Measure', 'The Higher Measure', 'THM', '00-Active_Projects/The-Higher-Measure'],
     bpm: 104,
     key: 'D Major',
     genre: 'Anthemic Worship Pop',
     vocal: 'Brandon / Worship Collective',
     versions: [
-      { tag: 'v2.0', styleName: 'Anthemic Stadium Cut', notes: 'Big acoustic drums, soaring lead vocal, shimmering acoustic rhythm.' },
-      { tag: 'v1.0', styleName: 'Devotional Acoustic Sketch', notes: 'Simple Martin guitar and vocal.' }
+      { tag: 'v11.5', styleName: 'Persona Upbeat Master FLAC', notes: 'Big acoustic drums, soaring lead vocal, shimmering acoustic rhythm.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Soaring Worship Lead (Brandon)', stemFilename: 'TRK-05_Lead_Vocal_Brandon.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Acoustic Guitar & Shimmer Piano', stemFilename: 'TRK-05_Acoustic_Guitar_Piano_Bed.wav', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Ambient Pad & Cello Swell', stemFilename: 'TRK-05_Ambient_Pad_Cello.wav', stemType: 'organ', color: '#f59e0b', freq: 220, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Stadium Kick & Snare Groove', stemFilename: 'TRK-05_Stadium_Drums_Rhythm.wav', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: Blueprint & Blood Upbeat Remaster (FLAC)', stemFilename: 'v11.5-The-Blueprint-and-the-Blood-Persona-Upbeat-Remastered.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Glitter Gritty Rock v3.0 (FLAC)', stemFilename: 'Glitter-Gritty-Rock-v3.0.flac', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: "Track 3: Master's Hand v2.1 Remaster (FLAC)", stemFilename: 'The-Masters-Hand-v2.1-Remastered.flac', stemType: 'organ', color: '#f59e0b', freq: 220, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Modern NBTB Edit (FLAC)', stemFilename: 'v2.86-Modern-Nothing-but-the-Blood.flac', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Golden Architect Measuring Line Over Foundations',
     sceneTitle: 'Ascending Mount Zion at First Light'
@@ -146,20 +145,20 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
   {
     trackId: 'TRK-06',
     title: 'Break the Bond / Correction is Restoration',
-    folderName: 'Break-the-Bond',
+    folderName: 'Blindfold-Blessing',
     aliases: ['TRK-06', 'Break-the-Bond', 'Break_the_Bond', 'Correction-is-Restoration', 'Correction_is_Restoration', 'BTB', 'CIR', '00-Active_Projects/Break-the-Bond'],
     bpm: 92,
     key: 'C Minor',
     genre: 'Cinematic Urban Gospel',
     vocal: 'Mrs T',
     versions: [
-      { tag: 'v2.0', styleName: 'Cinematic Gospel Orchestral', notes: 'Heavy orchestral strings, thunderous tympani, and prophetic alto vocals.' }
+      { tag: 'v2.0', styleName: 'CEDM Punch Master', notes: 'Heavy orchestral strings, thunderous tympani, and prophetic alto vocals.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Prophetic Alto Lead (Mrs T)', stemFilename: 'TRK-06_Lead_Vocal_MrsT.wav', stemType: 'vocal', color: '#6366f1', freq: 130.81, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Cinematic String Section & Brass', stemFilename: 'TRK-06_Strings_Brass_Orchestra.wav', stemType: 'organ', color: '#10b981', freq: 261.63, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Grand Gospel Piano Bed', stemFilename: 'TRK-06_Gospel_Grand_Piano.wav', stemType: 'piano', color: '#f59e0b', freq: 196, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Heavy Hip Hop Rhythm & Timpani', stemFilename: 'TRK-06_Drums_Timpani_Section.wav', stemType: 'drums', color: '#ec4899', freq: 65.4, waveType: 'square' }
+      { id: 1, name: 'Track 1: Blindfold Blessing CEDM Punch Master', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'master', color: '#6366f1', freq: 130.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Heavy Sub Bass & Drop Accent', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'bass', color: '#10b981', freq: 261.63, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Lead Synth & Alto Vocal Core', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'vocal', color: '#f59e0b', freq: 196, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Stomp Percussion & Room Plate', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'drums', color: '#ec4899', freq: 65.4, waveType: 'square' }
     ],
     visualTitle: 'Shattered Iron Chains on Temple Flagstones',
     sceneTitle: 'The Altar of Restoration and Release'
@@ -174,13 +173,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Intimate Devotional Acoustic',
     vocal: 'Brandon',
     versions: [
-      { tag: 'v1.0', styleName: 'Fingerpicked Sanctuary Version', notes: 'Pure acoustic guitar, upright bass, and intimate devotional vocal.' }
+      { tag: 'v7.5', styleName: 'Worship Group Master (FLAC)', notes: 'Pure acoustic guitar, upright bass, and intimate devotional vocal.' },
+      { tag: 'v6.6', styleName: 'Worship Group Remastered', notes: 'Full sanctuary acoustic recording.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Intimate Whispered Vocal (Brandon)', stemFilename: 'TRK-07_Lead_Vocal_Brandon.wav', stemType: 'vocal', color: '#6366f1', freq: 130.81, waveType: 'sine' },
-      { id: 2, name: 'Track 2: Martin D-28 Fingerpicking Bed', stemFilename: 'TRK-07_Martin_D28_Acoustic.wav', stemType: 'guitar', color: '#10b981', freq: 261.63, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Warm Reed Organ & Upright Bass', stemFilename: 'TRK-07_Reed_Organ_Upright_Bass.wav', stemType: 'organ', color: '#f59e0b', freq: 196, waveType: 'sawtooth' },
-      { id: 4, name: 'Track 4: Subtle Room Foley & Soft Brushes', stemFilename: 'TRK-07_Room_Foley_Brushed_Snare.wav', stemType: 'drums', color: '#ec4899', freq: 65.4, waveType: 'square' }
+      { id: 1, name: 'Track 1: Real Isolated Vocals (UVR5 FLAC)', stemFilename: '1776198861_1_LNL-v5.5-v1aa-Remastered-_-Vocals.flac', stemType: 'vocal', color: '#6366f1', freq: 130.81, waveType: 'sine' },
+      { id: 2, name: 'Track 2: Real Isolated Instrumental Bed (FLAC)', stemFilename: '1776198861_1_LNL-v5.5-v1aa-Remastered-_-Instrumental.flac', stemType: 'guitar', color: '#10b981', freq: 261.63, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Worship Group v7.5 Gold Master (FLAC)', stemFilename: 'Leaning-Not-Leaving-v7.5-Worship-Group.flac', stemType: 'master', color: '#f59e0b', freq: 196, waveType: 'sawtooth' },
+      { id: 4, name: 'Track 4: Worship Group v6.6 Remastered (MP3)', stemFilename: 'Leaning-Not-Leaving-v6.6-Worship-Group-Remastered.mp3', stemType: 'choir', color: '#ec4899', freq: 65.4, waveType: 'square' }
     ],
     visualTitle: 'Open Bible on Weathered Oak Bench in Sunlight',
     sceneTitle: 'Morning Sanctuary Stillness'
@@ -188,21 +188,20 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
   {
     trackId: 'TRK-08',
     title: 'Check Your Heart Light',
-    folderName: 'Check-Your-Heart-Light',
-    aliases: ['TRK-08', 'Check-Your-Heart-Light', 'Check_Your_Heart_Light', 'Check Your Heart Light', 'CYHL', '00-Active_Projects/Check-Your-Heart-Light'],
+    folderName: 'CheckYourHeartLight',
+    aliases: ['TRK-08', 'Check-Your-Heart-Light', 'Check_Your_Heart_Light', 'Check Your Heart Light', 'CYHL', 'CheckYourHeartLight', '00-Active_Projects/Check-Your-Heart-Light'],
     bpm: 104,
     key: 'G Major',
     genre: 'Neo-Soul Gospel Funk',
     vocal: 'Mrs T & The Saints',
     versions: [
-      { tag: 'v2.0', styleName: 'Live Funk Band Cut', notes: 'Slap bass, tight horns, Rhodes keyboard, gospel call-and-response.' },
-      { tag: 'v1.0', styleName: 'Swamptronica Revival Master', notes: 'Gritty bayou acoustic slide guitar with electronic groove.' }
+      { tag: 'v1.0', styleName: 'Swamptronica Master', notes: 'Gritty bayou acoustic slide guitar with electronic groove.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Dynamic Soul Lead (Mrs T)', stemFilename: 'TRK-08_Lead_Vocal_MrsT.wav', stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Funky Brass Section (Trumpet & Sax)', stemFilename: 'TRK-08_Brass_Horns_Section.wav', stemType: 'organ', color: '#10b981', freq: 392, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Fender Rhodes & Wah Guitar Bed', stemFilename: 'TRK-08_Rhodes_Wah_Guitar.wav', stemType: 'guitar', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Slap Bass & Punchy Drum Groove', stemFilename: 'TRK-08_Slap_Bass_Funk_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+      { id: 1, name: 'Track 1: Check That Heart Light Swamptronica v1.0', stemFilename: 'Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Check That Heart Light Radio Cut (6s)', stemFilename: '6s Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'organ', color: '#10b981', freq: 392, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Swamptronica Instrumental Bed', stemFilename: 'Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'guitar', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Vocal Groove & Soul Percussion', stemFilename: '6s Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
     ],
     visualTitle: 'Vintage Amber Radio Dial and Glowing Tube Amp',
     sceneTitle: 'The Gospel Highway Neon Glow'
@@ -217,14 +216,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'High-Energy Pop / Romantic Soul',
     vocal: 'The Pop Prodigy / Monica',
     versions: [
-      { tag: 'v2.0', styleName: 'High-Energy Radio Pop Master', notes: 'Shimmering guitars, sparkling brass hooks, anthemic dancefloor groove.' },
-      { tag: 'v1.0', styleName: 'Romantic Soul Acoustic', notes: 'Intimate piano sketch and soft shaker rhythm.' }
+      { tag: 'v1.56', styleName: 'Electronic Pop Master Remastered', notes: 'Shimmering guitars, sparkling brass hooks, anthemic dancefloor groove.' },
+      { tag: 'v3.5', styleName: 'Country Cut v3.5', notes: 'Intimate piano sketch and soft shaker rhythm.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Shimmer Pop Lead (The Pop Prodigy / Monica)', stemFilename: 'TRK-09_Lead_Vocal_Pop_Prodigy.wav', stemType: 'vocal', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Bright Synth Hooks & Sparkling Brass', stemFilename: 'TRK-09_Synth_Brass_Hooks.wav', stemType: 'organ', color: '#10b981', freq: 440, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Electric Bass & Funk Rhythm Guitar', stemFilename: 'TRK-09_Funk_Rhythm_Guitar_Bass.wav', stemType: 'guitar', color: '#f59e0b', freq: 277.18, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Punchy 112 BPM Dance Drums & Claps', stemFilename: 'TRK-09_Punchy_Dance_Drums_112BPM.wav', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
+      { id: 1, name: 'Track 1: Glitter Electronic Pop v1.56 Remastered', stemFilename: 'Glitter-1.56-Star-Electronic-Pop-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Glitter Electronic Pop v1.55 Remastered', stemFilename: 'Glitter_-Glitter_1.55_Star_Electronic_Pop_-Remastered-d91749d7-9e9b-48ea-88f6-f60f1ab6f0ed.mp3', stemType: 'organ', color: '#10b981', freq: 440, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Glitter Country Cut v3.5', stemFilename: 'Glitter-Country-v3.5 6.5s.mp3', stemType: 'guitar', color: '#f59e0b', freq: 277.18, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Piano Solo by Ted Moyer', stemFilename: 'Glitter_-6.5s_Glitter_V8_Piano_Solo_by_Ted_Moyer_-29535ff7-ab6f-44dc-9130-6d6c205e301c.mp3', stemType: 'piano', color: '#ec4899', freq: 110, waveType: 'square' }
     ],
     visualTitle: 'Prismatic Light Refracting Through Stained Glass & Quartz',
     sceneTitle: 'Joyful Radiance in the Midst of the City'
@@ -239,14 +238,14 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Blue-Collar Heartland Rock / Acoustic',
     vocal: 'Brandon & The Architect',
     versions: [
-      { tag: 'v2.0', styleName: 'Blue-Collar Heartland Rock Master', notes: 'Telecaster riffs, gritty male harmony, pounding kick drum, working-man anthemic chorus.' },
-      { tag: 'v1.0', styleName: 'Acoustic Blueprint Sketch', notes: 'Solo acoustic guitar and gravel vocal.' }
+      { tag: 'v5.2', styleName: 'Gold Remastered Master (FLAC)', notes: 'Telecaster riffs, gritty male harmony, pounding kick drum, working-man anthemic chorus.' },
+      { tag: 'v8.0', styleName: 'Persona Upbeat Master (FLAC)', notes: 'Solo acoustic guitar and gravel vocal.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Dual Lead Vocals (Brandon & The Architect)', stemFilename: 'TRK-10_Dual_Lead_Brandon_Architect.wav', stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Telecaster Overdrive Riffs & Chords', stemFilename: 'TRK-10_Telecaster_Overdrive_Riffs.wav', stemType: 'guitar', color: '#10b981', freq: 392, waveType: 'square' },
-      { id: 3, name: 'Track 3: Acoustic Rhythm & Hammond Organ Bed', stemFilename: 'TRK-10_Acoustic_Guitar_Hammond_Bed.wav', stemType: 'organ', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Driving Heartland Drum Kit & Bass', stemFilename: 'TRK-10_Heartland_Drums_Bass_92BPM.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'triangle' }
+      { id: 1, name: 'Track 1: Blueprint & Blood v5.2 Remastered (FLAC)', stemFilename: '6.2sr_The_Blueprint_and_the_Blood_v5.2_-Remastered-_03-48.flac', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Persona Upbeat Master v8.0 (FLAC)', stemFilename: 'The_Blueprint_and_the_Blood_v8_Persona_Upbeat_05-18.flac', stemType: 'guitar', color: '#10b981', freq: 392, waveType: 'square' },
+      { id: 3, name: 'Track 3: Persona Upbeat Remaster v11.6 (MP3)', stemFilename: 'v11.6-The-Blueprint-and-the-Blood-Persona-Upbeat-Remastered.mp3', stemType: 'organ', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Persona Upbeat v10 Remastered (MP3)', stemFilename: 'The-Blueprint-and-the-Blood-v10-Remastered-_04-45.mp3', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'triangle' }
     ],
     visualTitle: 'Architect Blueprint Laid Across Weathered Wood Workshop Bench',
     sceneTitle: 'Foundations Poured in Truth'
@@ -261,14 +260,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Christian Hip Hop / Trap-Gospel Duet',
     vocal: 'Kane & Monica',
     versions: [
-      { tag: 'v2.0', styleName: 'Trap-Gospel Duet Master', notes: 'Aggressive 808 slides, blistering male/female back-and-forth cypher, choir hook.' },
-      { tag: 'v1.0', styleName: 'Raw Cypher Sketch', notes: 'Beatbox and raw room vocal exchange.' }
+      { tag: 'v3.0', styleName: 'Gold Master (FLAC)', notes: 'Aggressive 808 slides, blistering male/female back-and-forth cypher, choir hook.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: High-Velocity Rap Duet (Kane & Monica)', stemFilename: 'TRK-11_Rap_Duet_Kane_Monica.wav', stemType: 'vocal', color: '#6366f1', freq: 138.59, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Trap 808 Glides & Sub Bass', stemFilename: 'TRK-11_Sub_808_Glides.wav', stemType: 'bass', color: '#10b981', freq: 69.3, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Distorted Synth Horns & Gospel Choir', stemFilename: 'TRK-11_Synth_Horns_Choir_Hits.wav', stemType: 'choir', color: '#f59e0b', freq: 277.18, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Crisp Trap Hi-Hat Rolls & Snare Stabs', stemFilename: 'TRK-11_Trap_HiHats_Snare_128BPM.wav', stemType: 'drums', color: '#ec4899', freq: 138.59, waveType: 'square' }
+      { id: 1, name: 'Track 1: Ted Moyer Unity GOLD MASTER (FLAC)', stemFilename: 'Ted_Moyer_Unity_GOLD_MASTER.flac', stemType: 'master', color: '#6366f1', freq: 138.59, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Unity TED MOYER GOLD MASTER (WAV)', stemFilename: 'Unity_TED_MOYER_GOLD_MASTER.wav', stemType: 'bass', color: '#10b981', freq: 69.3, waveType: 'sine' },
+      { id: 3, name: 'Track 3: Unity in the Friction v3 Mastered UN30 CHH', stemFilename: 'Unity-in-the-Friction-v3MASTERED-UN30-CHH.wav', stemType: 'choir', color: '#f59e0b', freq: 277.18, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Ted Moyer Unity FINAL (MP3)', stemFilename: 'Ted_Moyer_Unity_FINAL.mp3', stemType: 'drums', color: '#ec4899', freq: 138.59, waveType: 'square' }
     ],
     visualTitle: 'Iron Sharpening Iron Sparks Flying in Blacksmith Forge',
     sceneTitle: 'Two Voices Standing in the Fire'
@@ -283,14 +281,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Cinematic Worship / Emotional Ballad',
     vocal: 'PATD',
     versions: [
-      { tag: 'v2.0', styleName: 'Cinematic Orchestral Worship Master', notes: 'Full orchestral strings, delicate grand piano intro rising into massive climactic vocal belt.' },
-      { tag: 'v1.0', styleName: 'Intimate Grand Piano Solo', notes: 'Single microphone upright piano recording with vocal breath.' }
+      { tag: 'v17a', styleName: 'BMV3 Gold Master (FLAC)', notes: 'Full orchestral strings, delicate grand piano intro rising into massive climactic vocal belt.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Emotive Resonant Lead (PATD)', stemFilename: 'TRK-12_Lead_Vocal_PATD.wav', stemType: 'vocal', color: '#6366f1', freq: 233.08, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Sweeping Symphony Strings Section', stemFilename: 'TRK-12_Symphony_Strings_Section.wav', stemType: 'organ', color: '#10b981', freq: 466.16, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Concert Steinway Grand Piano Bed', stemFilename: 'TRK-12_Steinway_Grand_Piano_Bed.wav', stemType: 'piano', color: '#f59e0b', freq: 349.23, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Orchestral Timpani & Ambient Swells', stemFilename: 'TRK-12_Orchestral_Timpani_Swells.wav', stemType: 'drums', color: '#ec4899', freq: 58.27, waveType: 'square' }
+      { id: 1, name: 'Track 1: Real Isolated Vocals Stem (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Vocals.flac', stemType: 'vocal', color: '#6366f1', freq: 233.08, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Real Isolated Drums Stem (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Drums.flac', stemType: 'drums', color: '#10b981', freq: 466.16, waveType: 'sine' },
+      { id: 3, name: 'Track 3: Real Isolated Bass Stem (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Bass.flac', stemType: 'bass', color: '#f59e0b', freq: 349.23, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Real Isolated Instrumental Bed (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Instrumental.flac', stemType: 'master', color: '#ec4899', freq: 58.27, waveType: 'square' }
     ],
     visualTitle: 'Heavy Iron Anchor Sunk Deep in Bedrock Under Crashing Waves',
     sceneTitle: 'Unshakable in the Storm'
@@ -305,14 +302,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Southern Rock / Blue-Collar Testimony',
     vocal: 'Brandon / Dual Harmony',
     versions: [
-      { tag: 'v2.0', styleName: 'Heavy Southern Rock Master', notes: 'Grit electric slide guitar, stomping rhythm, southern vocal growl.' },
-      { tag: 'v1.0', styleName: 'Stomp-Clap Acoustic Blueprint', notes: 'Resonator guitar, porch foot stomp, raw vocal.' }
+      { tag: 'v4.55a', styleName: 'Team Edit Remastered (FLAC)', notes: 'Grit electric slide guitar, stomping rhythm, southern vocal growl.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Southern Rock Growl (Brandon)', stemFilename: 'TRK-13_Lead_Vocal_Grit.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Resonator Slide Guitar & Banjo', stemFilename: 'TRK-13_Resonator_Slide_Guitar.wav', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Overdriven Southern Hammond B3', stemFilename: 'TRK-13_Southern_B3_Organ.wav', stemType: 'organ', color: '#f59e0b', freq: 220, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Heavy Stomp-Clap Rhythm & Kick', stemFilename: 'TRK-13_Stomp_Clap_Heavy_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: Calvary Grit v4.55a Remastered (FLAC)', stemFilename: 'Calvary-Grit-V4.55a-Team-Edit-Remastered.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Calvary Grit v4.55b Remastered (FLAC)', stemFilename: 'Calvary-Grit-V4.55b-Team-Edit-Remastered.flac', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Calvary Grit v4.15 Edit Remastered (MP3)', stemFilename: 'Calvary-Grit-V4.15-Edit-Remastered.mp3', stemType: 'organ', color: '#f59e0b', freq: 220, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Calvary Grit v3.6 Original (MP3)', stemFilename: 'Calvary-Grit-V3.6.mp3', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Red Clay Quarry and Weathered Cedar Timbers',
     sceneTitle: 'Truck Bed Sunset Over Cross Ridgeline'
@@ -320,21 +316,20 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
   {
     trackId: 'TRK-14',
     title: 'Venom Into Victory',
-    folderName: 'Venom-Into-Victory',
-    aliases: ['TRK-14', 'Venom-Into-Victory', 'Venom_Into_Victory', 'Venom Into Victory', 'VIV', '00-Active_Projects/Venom-Into-Victory'],
+    folderName: 'Venom-into-Victory',
+    aliases: ['TRK-14', 'Venom-Into-Victory', 'Venom_Into_Victory', 'Venom Into Victory', 'VIV', 'Venom-into-Victory', '00-Active_Projects/Venom-Into-Victory'],
     bpm: 132,
     key: 'F Minor',
     genre: 'K-Pop Fusion / Hyper-Pop CHH',
     vocal: 'The Pop Prodigy',
     versions: [
-      { tag: 'v2.0', styleName: 'K-Pop Fusion Hyper-Pop Master', notes: 'Rapid-fire vocal runs, razor synths, high-intensity rhythm, explosive bass drop.' },
-      { tag: 'v1.0', styleName: 'Cyber-Trap Blueprint', notes: 'Dark synthwave bassline and vocoded hook.' }
+      { tag: 'v2.6a', styleName: 'Identity Anthem Gold Master', notes: 'Rapid-fire vocal runs, razor synths, high-intensity rhythm, explosive bass drop.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Hyper-Pop Vocals (The Pop Prodigy)', stemFilename: 'TRK-14_Lead_Vocal_Pop_Prodigy.wav', stemType: 'vocal', color: '#6366f1', freq: 174.61, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Cyber Saws & Glitch FX Arpeggio', stemFilename: 'TRK-14_Cyber_Saws_Glitch_Arp.wav', stemType: 'organ', color: '#10b981', freq: 349.23, waveType: 'square' },
-      { id: 3, name: 'Track 3: Deep Sub 808 Bass & Distorted Synth', stemFilename: 'TRK-14_Sub_808_Distorted_Bass.wav', stemType: 'bass', color: '#f59e0b', freq: 87.31, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Syncopated K-Pop Drum Stems 132 BPM', stemFilename: 'TRK-14_KPop_Drums_Percussion_132BPM.wav', stemType: 'drums', color: '#ec4899', freq: 87.31, waveType: 'square' }
+      { id: 1, name: 'Track 1: Venom Into Victory Gold Master (FLAC)', stemFilename: 'Venom_Into_Victory.flac', stemType: 'master', color: '#6366f1', freq: 174.61, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Identity Anthem v2.6a Remastered (MP3)', stemFilename: 'Venom-Into-Victory-V2.6a-BMV-3.1-Identity-Anthem-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 349.23, waveType: 'square' },
+      { id: 3, name: 'Track 3: Boba His Work Master (MP3)', stemFilename: 'BOBA_HIS_WORK_MASTER.mp3', stemType: 'bass', color: '#f59e0b', freq: 87.31, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Venom Into Victory Radio MP3', stemFilename: 'Venom_Into_Victory.mp3', stemType: 'drums', color: '#ec4899', freq: 87.31, waveType: 'square' }
     ],
     visualTitle: 'Shattered Serpent Skull Turned to Pure Gold',
     sceneTitle: 'Triumphant Step Over the Adversary'
@@ -349,14 +344,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Cinematic Stadium Worship',
     vocal: 'Ms T',
     versions: [
-      { tag: 'v2.0', styleName: 'Cinematic Stadium Worship Master', notes: 'Thundering floor toms, soaring French horns, Ms T declaring divine sovereignty.' },
-      { tag: 'v1.0', styleName: 'Solitary Cry Piano Cut', notes: 'Vocal weeping and acoustic piano resonance.' }
+      { tag: 'v3.0b', styleName: 'BMV3 Gold Master (FLAC)', notes: 'Thundering floor toms, soaring French horns, Ms T declaring divine sovereignty.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Triumphant Alto Lead (Ms T)', stemFilename: 'TRK-15_Lead_Vocal_MsT.wav', stemType: 'vocal', color: '#6366f1', freq: 155.56, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Full Worship String Orchestra & Horns', stemFilename: 'TRK-15_Strings_Orchestra_Horns.wav', stemType: 'organ', color: '#10b981', freq: 311.13, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Grand Worship Piano Bed', stemFilename: 'TRK-15_Grand_Piano_Bed.wav', stemType: 'piano', color: '#f59e0b', freq: 233.08, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Stadium Floor Toms & Timpani Build', stemFilename: 'TRK-15_Floor_Toms_Timpani_74BPM.wav', stemType: 'drums', color: '#ec4899', freq: 77.78, waveType: 'square' }
+      { id: 1, name: 'Track 1: The Final Say v3b BMV3 Master (FLAC)', stemFilename: 'The_Final_Say_v3b_BMV3_MASTER.flac', stemType: 'master', color: '#6366f1', freq: 155.56, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: The Final Say v3ba Remastered (MP3)', stemFilename: 'The-Final-Say-ba-BMV-3-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 311.13, waveType: 'sine' },
+      { id: 3, name: 'Track 3: The Final Say BuildUP v3.2b (MP3)', stemFilename: 'The-Final-Say-BuildUP-v3.2b-BMV-2-Remastered.mp3', stemType: 'piano', color: '#f59e0b', freq: 233.08, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: The Final Say v3bb Remastered (MP3)', stemFilename: 'The-Final-Say-bb-BMV-3-Remastered.mp3', stemType: 'drums', color: '#ec4899', freq: 77.78, waveType: 'square' }
     ],
     visualTitle: 'Lion of Judah Silhouette on Ridge at Golden Twilight',
     sceneTitle: 'The Verdict from the Throne Room'
@@ -371,14 +365,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Blue-Collar Devotional / Country-Rock',
     vocal: 'Brandon',
     versions: [
-      { tag: 'v2.0', styleName: 'Truck Cab Dawn Master', notes: '5:00 AM freezing rain, amber dashboard dials, vulnerable intimate vocal.' },
-      { tag: 'v1.0', styleName: 'Acoustic Solo Sketch', notes: 'Raw acoustic guitar and diesel engine hum.' }
+      { tag: 'v2.0bZ', styleName: 'CHH Gold Remaster', notes: '5:00 AM freezing rain, amber dashboard dials, vulnerable intimate vocal.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Blue-Collar Lead Vocal (Brandon)', stemFilename: 'MMH_Lead_Vocal_Brandon_Dry.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Martin D-28 Acoustic & Fingerstyle Chords', stemFilename: 'MMH_Acoustic_Guitar_Bed.wav', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Cello & Amber Pad Atmosphere', stemFilename: 'MMH_Cello_Ambient_Pad.wav', stemType: 'organ', color: '#f59e0b', freq: 220, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Rain On Windshield Foley & Soft Kick', stemFilename: 'MMH_Rain_Foley_Sub_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: Meet Me Here CHH v2.0bZ Remastered', stemFilename: 'Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Meet Me Here CHH v2.0aZ Remastered', stemFilename: 'Meet-Me-Here-CHH-v2.0aZ-Remastered.mp3', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Meet Me Here CHH v2.0bY Remastered', stemFilename: 'Meet-Me-Here-CHH-v2.0bY-Remastered.mp3', stemType: 'organ', color: '#f59e0b', freq: 220, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Dax Reference (Can You Hear Me)', stemFilename: 'Dax-God-Can-You-Hear-me.mp3', stemType: 'vocal', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Dark Blue-Collar Truck Cab at 5 AM in Freezing Rain',
     sceneTitle: 'Steering Wheel Altar Before the Work Shift'
@@ -393,14 +386,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Heavy Tribal Worship Ballad',
     vocal: 'Kane',
     versions: [
-      { tag: 'v2.0', styleName: 'Heavy Tribal Worship Master', notes: 'Heartbeat sub kicks, massive choral swells, primal blood-covenant imagery.' },
-      { tag: 'v1.0', styleName: 'Spoken Word Meditation', notes: 'Quiet breathing, heart monitor pulse, whispered confession.' }
+      { tag: 'v3.5', styleName: 'Brandon Josiah Gold Master (FLAC)', notes: 'Heartbeat sub kicks, massive choral swells, primal blood-covenant imagery.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Sub-Sonic Steel Lead (Kane)', stemFilename: 'TRK-17_Lead_Vocal_Kane.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Deep War Horns & Cello Drone', stemFilename: 'TRK-17_War_Horns_Cello_Drone.wav', stemType: 'organ', color: '#10b981', freq: 293.66, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Anvil Hits & Foley Percussion', stemFilename: 'TRK-17_Anvil_Percussion_Bed.wav', stemType: 'guitar', color: '#f59e0b', freq: 220, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Tectonic Low-End Kick & Heartbeat', stemFilename: 'TRK-17_Heartbeat_Tectonic_Kick.wav', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: In Our Veins v3.5 Gold Master (FLAC)', stemFilename: '6.5s-In-Our-Veins-v3.5-Brandon-Josiah-Remastered-_03-28-v3.5.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Real Isolated Instrumental Bed (FLAC)', stemFilename: '1765687546_1_6.55s-In-Our-Veins-v3.1-Brandon-Josiah-Remastered-_-Instrumental-_03-38.flac', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: In Our Veins v3.7 Piano Power Ballad', stemFilename: '7s In our Veins 3.7 Piano Power Ballad.mp3', stemType: 'piano', color: '#f59e0b', freq: 220, waveType: 'sine' },
+      { id: 4, name: 'Track 4: In Our Veins v3 Brandon Josiah Remaster', stemFilename: 'In-Our-Veins-v3-Brandon-Josiah-Remastered-_03-38-6s.mp3', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Red Crimson River Flowing Through Ancient Granite Canyon',
     sceneTitle: 'Bloodline Redeemed in the Holy Place'
@@ -415,14 +407,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Modern Tribal Worship Anthem',
     vocal: 'Worship Collective',
     versions: [
-      { tag: 'v2.0', styleName: 'Modern Tribal Anthem Master', notes: 'Tribal percussion, shofar blasts, corporate worship chant, roaring guitars.' },
-      { tag: 'v1.0', styleName: 'Unplugged Sanctuary Chant', notes: 'A cappella gathering around the wooden altar.' }
+      { tag: 'v9.93', styleName: 'Modern Tribal Gold Master (FLAC)', notes: 'Tribal percussion, shofar blasts, corporate worship chant, roaring guitars.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Anthemic Collective Voices & Leads', stemFilename: 'TRK-18_Collective_Leads_Harmonies.wav', stemType: 'vocal', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Shofar & Distorted Electric Guitar', stemFilename: 'TRK-18_Shofar_Electric_Guitar.wav', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'square' },
-      { id: 3, name: 'Track 3: Cathedral Organ & Synth Drone', stemFilename: 'TRK-18_Cathedral_Organ_Synth_Bed.wav', stemType: 'organ', color: '#f59e0b', freq: 330, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Thunderous Floor Toms & War Drums', stemFilename: 'TRK-18_Thunderous_War_Drums_84BPM.wav', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'triangle' }
+      { id: 1, name: 'Track 1: We Bow We Shout v9.93 Gold Master (FLAC)', stemFilename: '1-v9.93-We-Bow-We-Shout-Remastered-FLAC00086400-2025-12-06-23_12_05-14.flac', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Real Isolated Instrumental Stem (FLAC)', stemFilename: '1765695254_1_1-v9.93-We-Bow-We-Shout-Remastered-FLAC00086400-2025-12-06-23_12_-Instrumental-_05-14.flac', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'square' },
+      { id: 3, name: 'Track 3: Noise-Reduced Intimate Worship Master', stemFilename: 'We-Bow-We-Shout-v9.93reduction-noise-Intimate-Worship-by-Ted-Moyer-Remastered-_05-15-7sr.flac', stemType: 'organ', color: '#f59e0b', freq: 330, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Banjo Rock Hick-Hop Remaster', stemFilename: 'We-Bow-We-Shout-v2ba-Banjo-Rock-Hick-Hop-Remastered.mp3', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'triangle' }
     ],
     visualTitle: 'Multitude with Raised Hands on Flagstone Courtyard',
     sceneTitle: 'Falling Low to Lift High'
@@ -437,14 +428,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Genre-Bending Battleground Roots',
     vocal: 'Brandon & Silas Thorne',
     versions: [
-      { tag: 'v2.0', styleName: 'Battleground Roots Rock Master', notes: 'Screaming harmonica, slide dobro, swamp stomp, fiery vocal duel.' },
-      { tag: 'v1.0', styleName: 'Campfire Dual-Acoustic', notes: 'Two battered dreadnought guitars and gravel whispers.' }
+      { tag: 'v2.0', styleName: 'Country Battleground Master', notes: 'Screaming harmonica, slide dobro, swamp stomp, fiery vocal duel.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Weathered Dual Lead (Brandon & Silas)', stemFilename: 'TRK-19_Dual_Lead_Brandon_Silas.wav', stemType: 'vocal', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Blues Harmonica & Resonator Dobro', stemFilename: 'TRK-19_Harmonica_Slide_Dobro.wav', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Overdriven Swamp Bassline', stemFilename: 'TRK-19_Swamp_Overdriven_Bass.wav', stemType: 'bass', color: '#f59e0b', freq: 82.41, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Heavy Mud-Stomp Drums & Chains', stemFilename: 'TRK-19_Mud_Stomp_Chains_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'square' }
+      { id: 1, name: 'Track 1: Through the Valley Country Master', stemFilename: 'Remastered-412568Db-E312-402A-92Ff-9D416B1Df3A7-Christian-Country-7s-Through-the-Valley-Or-The-Flame.mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Resonator & Slide Dobro Bed', stemFilename: 'Remastered-412568Db-E312-402A-92Ff-9D416B1Df3A7-Christian-Country-7s-Through-the-Valley-Or-The-Flame.mp3', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Overdriven Swamp Bassline', stemFilename: 'Remastered-412568Db-E312-402A-92Ff-9D416B1Df3A7-Christian-Country-7s-Through-the-Valley-Or-The-Flame.mp3', stemType: 'bass', color: '#f59e0b', freq: 82.41, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Heavy Mud-Stomp Drums', stemFilename: 'Remastered-412568Db-E312-402A-92Ff-9D416B1Df3A7-Christian-Country-7s-Through-the-Valley-Or-The-Flame.mp3', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'square' }
     ],
     visualTitle: 'Fourth Man in the Fiery Furnace Unbound and Glowing',
     sceneTitle: 'Walking Through the Furnace Unharmed'
@@ -459,14 +449,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Industrial CHH / K-Pop Fusion Dual-Cut',
     vocal: 'The Architect & Kane',
     versions: [
-      { tag: 'v2.0', styleName: 'Industrial CHH Cyber-Master', notes: 'Dark electro-industrial basslines, heavy mechanical beats, razor lyric delivery.' },
-      { tag: 'v1.0', styleName: 'Analog Synthesizer Jam', notes: 'Vintage Moog analog synth improvisations.' }
+      { tag: 'v2.5bv2', styleName: 'Industrial CHH Cyber-Master (WAV)', notes: 'Dark electro-industrial basslines, heavy mechanical beats, razor lyric delivery.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Dual Cyber Rap (The Architect & Kane)', stemFilename: 'TRK-20_Cyber_Rap_Architect_Kane.wav', stemType: 'vocal', color: '#6366f1', freq: 155.56, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Modular Acid Bassline & Saws', stemFilename: 'TRK-20_Acid_Modular_Bassline.wav', stemType: 'bass', color: '#10b981', freq: 77.78, waveType: 'square' },
-      { id: 3, name: 'Track 3: Distorted Industrial FX & Synth Pad', stemFilename: 'TRK-20_Industrial_FX_Pads.wav', stemType: 'organ', color: '#f59e0b', freq: 311.13, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Hard Industrial Drum Machine 130 BPM', stemFilename: 'TRK-20_Industrial_Drums_130BPM.wav', stemType: 'drums', color: '#ec4899', freq: 77.78, waveType: 'square' }
+      { id: 1, name: 'Track 1: Ghost In The Machine v2.5bv2 Master (WAV)', stemFilename: 'Ghost-In-The-Machine-CHH-v2.5bv2-Remastered.wav', stemType: 'master', color: '#6366f1', freq: 155.56, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Ghost In The Machine v2.5bv1 Master (WAV)', stemFilename: 'Ghost-In-The-Machine-CHH-v2.5bv1-Remastered.wav', stemType: 'bass', color: '#10b981', freq: 77.78, waveType: 'square' },
+      { id: 3, name: 'Track 3: Ghost In The Machine Radio Master (MP3)', stemFilename: 'Ghost In The Machine CHH v2.5bv2 (Remastered).mp3', stemType: 'organ', color: '#f59e0b', freq: 311.13, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Industrial Beats & Cyber Saws', stemFilename: 'Ghost-In-The-Machine-CHH-v2.5bv2-Remastered.wav', stemType: 'drums', color: '#ec4899', freq: 77.78, waveType: 'square' }
     ],
     visualTitle: 'Digital Circuit Board Dissolving into Living Cedar Bark',
     sceneTitle: 'Unmasking the Hologram of Deception'
@@ -481,13 +470,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Driving Praise Pop / Resurrection Anthem',
     vocal: 'Mrs T / Full Choir',
     versions: [
-      { tag: 'v2.0', styleName: 'Resurrection Dawn Full Choir', notes: 'Full Ms T choir crescendo, triumphant brass, soaring synthesizer hooks.' }
+      { tag: 'v1.0', styleName: 'The Milestone Universal Master (WAV)', notes: 'Full Ms T choir crescendo, triumphant brass, soaring synthesizer hooks.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Lead Praise Vocal (Mrs T)', stemFilename: 'TRK-21_Lead_Vocal_MrsT_Clean.wav', stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Ruach Choir Harmonies & Ad-libs', stemFilename: 'TRK-21_Choir_Harmonies_UVR5.wav', stemType: 'choir', color: '#10b981', freq: 293.66, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Modern Brass & Synth Arp Bed', stemFilename: 'TRK-21_Brass_Synth_Bed.wav', stemType: 'organ', color: '#f59e0b', freq: 392, waveType: 'sawtooth' },
-      { id: 4, name: 'Track 4: 128 BPM Four-on-the-Floor Drums & Bass', stemFilename: 'TRK-21_Driving_Drums_Bass.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+      { id: 1, name: 'Track 1: The Milestone Uni50 Mastered (WAV)', stemFilename: 'The Milestone-Uni50-Mastered.wav', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Ted Moyer - The Milestone (M4A)', stemFilename: 'Ted Moyer - The Milestone.m4a', stemType: 'vocal', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Milestone Instrumental Core (WAV)', stemFilename: 'The Milestone-Uni50-Mastered.wav', stemType: 'organ', color: '#f59e0b', freq: 392, waveType: 'sawtooth' },
+      { id: 4, name: 'Track 4: Four-on-the-Floor Rhythm (WAV)', stemFilename: 'The Milestone-Uni50-Mastered.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
     ],
     visualTitle: 'Sunburst Breaking Through Ancient Limestone Archway',
     sceneTitle: 'Resurrection Dawn Flagstone Celebration'
@@ -502,14 +491,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Cinematic Worship / Resurrected Life',
     vocal: 'Brandon & Ms T',
     versions: [
-      { tag: 'v2.0', styleName: 'Valley of Dry Bones Cinematic Master', notes: 'Ezekiel 37 vision, wind foley, swelling cellos, explosive resurrection chorus.' },
-      { tag: 'v1.0', styleName: 'Acoustic Awakening', notes: 'Intimate guitar sketch at daybreak.' }
+      { tag: 'v3.6r', styleName: 'Breath & Bone Male Remastered (FLAC)', notes: 'Ezekiel 37 vision, wind foley, swelling cellos, explosive resurrection chorus.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Dual Sacred Lead (Brandon & Ms T)', stemFilename: 'TRK-22_Dual_Lead_Brandon_MsT.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Soaring Cello & French Horn Section', stemFilename: 'TRK-22_Cello_French_Horn_Swell.wav', stemType: 'organ', color: '#10b981', freq: 293.66, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Acoustic 12-String Guitar Bed', stemFilename: 'TRK-22_Acoustic_12String_Guitar.wav', stemType: 'guitar', color: '#f59e0b', freq: 220, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Rolling Orchestral Percussion & Timpani', stemFilename: 'TRK-22_Rolling_Timpani_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: Breath & Bone v3.6r Master (FLAC)', stemFilename: 'v3.6r-Breath-&-Bone-Male-Remastered.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Breath & Bone v3.6r Remastered (MP3)', stemFilename: 'v3.6r-Breath-&-Bone-Male-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 293.66, waveType: 'sine' },
+      { id: 3, name: 'Track 3: Breath and Bone Gospel Anthem Remix v11.5', stemFilename: 'V11.5-Breath-and-Bone-Gospel-Anthem-Remix.mp3', stemType: 'guitar', color: '#f59e0b', freq: 220, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Breath & Bone Intimate Acoustic v3.6', stemFilename: 'V3.6-Breath-&-Bone-Remastered-_04-52-6s.mp3', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Dry Bones Clothed in Tendons and Golden Sunlight',
     sceneTitle: 'Breathe on the Slayed that They May Live'
@@ -524,14 +512,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Country Duet / Progressive CEDM Dual-Cut',
     vocal: 'Monica & Silas Thorne',
     versions: [
-      { tag: 'v2.0', styleName: 'Country EDM Dancefloor Cut', notes: 'Banjo and fiddle meets 128 BPM supersaws, dance drop, triumphant vocal hook.' },
-      { tag: 'v1.0', styleName: 'Porch Acoustic Duet', notes: 'Front porch picking with acoustic bass and foot tap.' }
+      { tag: 'v2.0', styleName: 'CEDM Punch Master', notes: 'Banjo and fiddle meets 128 BPM supersaws, dance drop, triumphant vocal hook.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Harmonized Duet (Monica & Silas)', stemFilename: 'TRK-23_Lead_Duet_Monica_Silas.wav', stemType: 'vocal', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Country Fiddle & Electric Banjo Riffs', stemFilename: 'TRK-23_Fiddle_Electric_Banjo.wav', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Progressive CEDM Supersaws & Pads', stemFilename: 'TRK-23_CEDM_Supersaws_Pads.wav', stemType: 'organ', color: '#f59e0b', freq: 330, waveType: 'sine' },
-      { id: 4, name: 'Track 4: High-Energy Country Dance Drums 128 BPM', stemFilename: 'TRK-23_Country_Dance_Drums_128BPM.wav', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
+      { id: 1, name: 'Track 1: Blindfold Blessing CEDM Punch Master', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Progressive CEDM Drop Accent', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Lead Synth & Duet Vocal', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'organ', color: '#f59e0b', freq: 330, waveType: 'sine' },
+      { id: 4, name: 'Track 4: High-Energy Dance Floor Groove', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
     ],
     visualTitle: 'Silk Blindfold Falling Away Revealing Golden Horizon',
     sceneTitle: 'Trusting What the Eye Cannot See'
@@ -546,14 +533,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'A Cappella Spoken Word to Explosive Gospel',
     vocal: 'Silas Thorne',
     versions: [
-      { tag: 'v2.0', styleName: 'A Cappella to Full Gospel Eruption', notes: 'Quiet confession turning into massive gospel choir and screaming Hammond B3.' },
-      { tag: 'v1.0', styleName: 'Stripped Confession', notes: 'Pure spoken word with ambient church echo.' }
+      { tag: 'v5.5b2', styleName: '24-Bit Studio Master (WAV)', notes: 'Quiet confession turning into massive gospel choir and screaming Hammond B3.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Vulnerable Spoken Word to Belt (Silas)', stemFilename: 'TRK-24_Lead_Vocal_Silas.wav', stemType: 'vocal', color: '#6366f1', freq: 155.56, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: 4-Part Gospel Harmony Choir', stemFilename: 'TRK-24_Gospel_Harmony_Choir.wav', stemType: 'choir', color: '#10b981', freq: 311.13, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: B3 Organ Crescendo (Leslie Fast)', stemFilename: 'TRK-24_Hammond_B3_Crescendo.wav', stemType: 'organ', color: '#f59e0b', freq: 233.08, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Slow-Burn Gospel Groove & Bass', stemFilename: 'TRK-24_Gospel_Groove_Bass_82BPM.wav', stemType: 'drums', color: '#ec4899', freq: 77.78, waveType: 'square' }
+      { id: 1, name: 'Track 1: Trading In The Mask v5.5b2 Master (WAV)', stemFilename: 'Trading-In-The-Mask-v5.5b2-Remastered.wav', stemType: 'master', color: '#6366f1', freq: 155.56, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Trading In The Mask v5.5b1 Master (WAV)', stemFilename: 'Trading-In-The-Mask-v5.5b1-Remastered.wav', stemType: 'choir', color: '#10b981', freq: 311.13, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Trading In The Mask v5.5b Mix (MP3)', stemFilename: 'Trading-In-The-Mask-v5.5b.mp3', stemType: 'organ', color: '#f59e0b', freq: 233.08, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Trading In The Mask v5.5a Mix (MP3)', stemFilename: 'Trading-In-The-Mask-v5.5a.mp3', stemType: 'drums', color: '#ec4899', freq: 77.78, waveType: 'square' }
     ],
     visualTitle: 'Ceramic Mask Shattering on Cold Flagstone Altar',
     sceneTitle: 'Unveiled Faces Before the Lord'
@@ -568,14 +554,13 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     genre: 'Spoken Word / Deep Soulful Alto Anthem',
     vocal: 'Ms T',
     versions: [
-      { tag: 'v2.0', styleName: 'Deep Soulful Alto Anthem', notes: 'Warm Wurlitzer electric piano, upright bass, tender brushed drums, soulful sanctuary reflection.' },
-      { tag: 'v1.0', styleName: 'Intimate Midnight Piano', notes: 'Late-night devotional keys and gentle humming.' }
+      { tag: 'v1.0ab', styleName: 'Spoken Intro Edit Master (FLAC)', notes: 'Warm Wurlitzer electric piano, upright bass, tender brushed drums, soulful sanctuary reflection.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Majestic Alto Lead (Ms T)', stemFilename: 'TRK-25_Lead_Vocal_MsT.wav', stemType: 'vocal', color: '#6366f1', freq: 174.61, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Wurlitzer Electric Piano & Rhodes Bed', stemFilename: 'TRK-25_Wurlitzer_Rhodes_Bed.wav', stemType: 'piano', color: '#10b981', freq: 349.23, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Upright Acoustic Bassline', stemFilename: 'TRK-25_Upright_Acoustic_Bass.wav', stemType: 'bass', color: '#f59e0b', freq: 87.31, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Brushed Snare & Ambient Room Foley', stemFilename: 'TRK-25_Brushed_Snare_Foley_70BPM.wav', stemType: 'drums', color: '#ec4899', freq: 87.31, waveType: 'square' }
+      { id: 1, name: 'Track 1: NWN v1.0ab Spoken Intro Master (FLAC)', stemFilename: 'NWN-v1.0ab-Spoken-Intro-Edit-Remastered.flac', stemType: 'master', color: '#6366f1', freq: 174.61, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: NWN v1.0aa Spoken Intro Master (WAV)', stemFilename: 'NWN-v1.0aa Spoken Intro (Edit) (Remastered).wav', stemType: 'piano', color: '#10b981', freq: 349.23, waveType: 'sine' },
+      { id: 3, name: 'Track 3: Ted Moyer - Neverending Whats Next BMV3', stemFilename: 'Ted Moyer - Neverending Whats Next BMV3.m4a', stemType: 'bass', color: '#f59e0b', freq: 87.31, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: NWN v1.0ab Alternate Take (WAV)', stemFilename: 'NWN-v1.0ab Spoken Intro (Edit) (Remastered).wav', stemType: 'drums', color: '#ec4899', freq: 87.31, waveType: 'square' }
     ],
     visualTitle: 'Open Door into Endless Green Pastures at Dawn',
     sceneTitle: 'Resting in the Sufficiency of Christ'
@@ -583,46 +568,23 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
   {
     trackId: 'TRK-26',
     title: 'Meet Me Here (Harder Scream)',
-    folderName: 'Meet-Me-Here-Scream',
+    folderName: 'Meet_Me_Here',
     aliases: ['TRK-26', 'Meet-Me-Here-Scream', 'MMH_Harder_Scream', 'Meet Me Here (Harder Scream)', 'MMH-Scream', '00-Active_Projects/Meet-Me-Here-Scream'],
     bpm: 76,
     key: 'D Minor',
     genre: 'Heavy Screamo / Post-Hardcore Devotional',
     vocal: 'Brandon (Raw Scream & Growl)',
     versions: [
-      { tag: 'v2.0', styleName: 'Full Post-Hardcore Cut', notes: 'Wall of distorted guitars, double-bass drum breakdown, visceral screams.' }
+      { tag: 'v2.0bZ', styleName: 'Full Post-Hardcore Cut', notes: 'Wall of distorted guitars, double-bass drum breakdown, visceral screams.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Visceral Screamo Lead (Brandon)', stemFilename: 'TRK-26_Lead_Scream_Vocal_Clean.wav', stemType: 'vocal', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Dual High-Gain Distorted Guitars', stemFilename: 'TRK-26_Distorted_Guitars_Wall.wav', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'square' },
-      { id: 3, name: 'Track 3: Distorted Overdriven Bass Guitar', stemFilename: 'TRK-26_Overdriven_Bass_Guitar.wav', stemType: 'bass', color: '#f59e0b', freq: 73.42, waveType: 'sawtooth' },
-      { id: 4, name: 'Track 4: Double-Kick Drum Breakdown', stemFilename: 'TRK-26_Double_Kick_Heavy_Drums.wav', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: Meet Me Here CHH v2.0bZ Master (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Meet Me Here CHH v2.0aZ Alternate (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0aZ-Remastered.mp3', stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'square' },
+      { id: 3, name: 'Track 3: Meet Me Here CHH v2.0bY Remaster (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0bY-Remastered.mp3', stemType: 'bass', color: '#f59e0b', freq: 73.42, waveType: 'sawtooth' },
+      { id: 4, name: 'Track 4: Dax Reference (Can You Hear Me)', stemFilename: 'Dax-God-Can-You-Hear-me.mp3', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Screaming Steel Foundry and Smoldering Sparks',
     sceneTitle: 'Gethsemane Agony Under Heavy Rain'
-  },
-  {
-    trackId: 'TRK-27',
-    title: "The Work Ain't Done",
-    folderName: 'The-Work-Aint-Done',
-    aliases: ['TWAD', 'The-Work-Aint-Done', 'The_Work_Aint_Done', "The Work Ain't Done", 'TRK-27', 'WorkAintDone', '00-Active_Projects/The-Work-Aint-Done'],
-    bpm: 102,
-    key: 'G Minor',
-    genre: 'Folk-Hop / Boom-Bap CHH / K-Pop Ministry Hybrid',
-    vocal: 'The Pop Prodigy / Kane / Ms T',
-    versions: [
-      { tag: 'v8.0', styleName: 'Male K-Pop Remix (128 BPM)', notes: 'Male K-Pop Remix, future bass drop, supersaws, choreography break.' },
-      { tag: 'v3.0', styleName: 'Nashville Folk-Hop Radio Master (102 BPM)', notes: 'Acoustic Martin guitar, banjo licks, warm upright bass, soulful chorus.' },
-      { tag: 'v1.0', styleName: 'Acoustic Nightshift Blueprint (72 BPM)', notes: 'Intimate 3:00 AM hospital acoustic guitar and raw vocal prayer.' }
-    ],
-    stems: [
-      { id: 1, name: 'Track 1: Lead Vocal (The Pop Prodigy / Kane / Ms T) [BS-Roformer]', stemFilename: 'TWAD_Lead_Vocal_Clean_BS-Roformer.wav', stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Martin D-28 Acoustic & Banjo Riffs', stemFilename: 'TWAD_Acoustic_Martin_Banjo_Bed.wav', stemType: 'guitar', color: '#10b981', freq: 392, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Upright Acoustic Bass & 808 Bed', stemFilename: 'TWAD_Upright_Bass_808_Sub.wav', stemType: 'bass', color: '#f59e0b', freq: 98, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Boom-Bap & Stomp Rhythm Groove (102 BPM)', stemFilename: 'TWAD_BoomBap_Stomp_Drums_102BPM.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
-    ],
-    visualTitle: 'Hospital Emergency Bay Glass Reflecting Sunrise and Stethoscope',
-    sceneTitle: 'Standing in the Gap at Discharge'
   }
 ];
 
@@ -667,17 +629,19 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
 
   // 1. Masters for all versions/styles
   def.versions.forEach((ver, idx) => {
-    const webdavPath = `${folderPath}/${def.folderName}_Master_${ver.tag}_24bit48k.wav`;
+    const masterStem = def.stems.find(s => s.stemType === 'master') || def.stems[idx % def.stems.length] || def.stems[0];
+    const realAudioFilename = masterStem ? masterStem.stemFilename : `${def.folderName}_Master_${ver.tag}.wav`;
+    const webdavPath = realAudioFilename.startsWith('/') ? realAudioFilename : `${folderPath}/${realAudioFilename}`;
     const audioUrl = buildNextcloudStreamUrl(webdavPath);
     assets.push({
       id: `NC-${def.trackId}-M${idx + 1}`,
       name: `${def.title} - ${ver.tag} (${ver.styleName})`,
-      filename: `${def.folderName}_Master_${ver.tag}_${ver.styleName.replace(/\s+/g, '_')}_24bit48k.wav`,
+      filename: realAudioFilename,
       folderId: def.folderName,
       category: 'MASTER_AUDIO',
       fileSizeBytes: 52428800 + idx * 2000000,
       fileSizeFormatted: `${(50 + idx * 2.5).toFixed(1)} MB`,
-      mimeType: 'audio/wav',
+      mimeType: realAudioFilename.endsWith('.flac') ? 'audio/flac' : realAudioFilename.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
       webdavPath,
       audioUrl,
       shareUrl,
@@ -694,15 +658,15 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
       previewAudioType: 'instrumental',
       freq: def.stems[0]?.freq || 196,
       waveType: 'sawtooth',
-      notes: `${ver.tag} (${ver.styleName}): ${ver.notes} 24-bit/48kHz Master Print. Nashville LUFS -14.1 compliant.`,
+      notes: `${ver.tag} (${ver.styleName}): ${ver.notes} Master Audio. Nashville LUFS -14.1 compliant.`,
       lastSyncedAt: new Date().toISOString(),
-      tags: [def.folderName, def.title, def.trackId, ver.tag, 'Master WAV', 'Fiber Synced']
+      tags: [def.folderName, def.title, def.trackId, ver.tag, 'Master Audio', 'Fiber Synced']
     });
   });
 
   // 2. Stems
   def.stems.forEach((stem) => {
-    const webdavPath = `${folderPath}/stems/${stem.stemFilename}`;
+    const webdavPath = stem.stemFilename.startsWith('/') ? stem.stemFilename : `${folderPath}/${stem.stemFilename}`;
     const audioUrl = buildNextcloudStreamUrl(webdavPath);
     const category: NextcloudAssetCategory =
       stem.stemType === 'drums'
@@ -972,7 +936,7 @@ export function getTrackStems(track: Track): MixerTrack[] {
   const folderPath = `/remote.php/dav/files/ncted/Music-Production/${def.folderName}`;
 
   return def.stems.map((s, index) => {
-    const webdavPath = `${folderPath}/stems/${s.stemFilename}`;
+    const webdavPath = s.stemFilename.startsWith('/') ? s.stemFilename : `${folderPath}/${s.stemFilename}`;
     const audioUrl = buildNextcloudStreamUrl(webdavPath);
 
     return {
