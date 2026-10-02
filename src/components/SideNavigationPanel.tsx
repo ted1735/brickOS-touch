@@ -1782,6 +1782,17 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 <div className="space-y-1.5 pt-1">
                   <button
                     type="button"
+                    onClick={() => onNavigateToTab('nextcloud_sync')}
+                    className="w-full py-1.5 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-[10px] transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    title="Open full interactive Nextcloud WebDAV File Explorer with audio auditioning, stem upload & folder management"
+                  >
+                    <Folder className="w-3 h-3 text-cyan-200" />
+                    <span>Open WebDAV File Explorer</span>
+                    <ArrowRight className="w-3 h-3 text-cyan-200" />
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleSyncNcAssets}
                     disabled={isSyncingNcAssets}
                     className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold text-[10px] transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"

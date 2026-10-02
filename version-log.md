@@ -315,6 +315,31 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Instantly cycles between Sun ➔ Moon ➔ Stars anywhere in the studio with live toast notification confirmation (`☀️ Switched to Sun`, `🌙 Switched to Moon`, `✨ Switched to Stars`).
     - Documented shortcut in the interactive `KeyboardShortcutsOverlay.tsx` cheat sheet.
 
+---
+
+## [v2.7] — Interactive Nextcloud WebDAV File Explorer & Asset Management Engine
+- **Date**: 2026-10-02
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.7`**.
+  - **Full-Featured Nextcloud WebDAV File Explorer (`NextcloudWebDavFileExplorer.tsx`)**:
+    - Complete hierarchical directory navigation through remote Nextcloud WebDAV storage with breadcrumb navigation and up-one-level controls.
+    - Quick-jump Song Project bookmarks sidebar automatically indexing canonical studio tracks (`Meet_Me_Here`, `Brick-by-Brick`, `Calvary-Grit`, `Every-Candles-Victory`, `00-Active_Projects`, etc.).
+    - Dual display modes: **Grid View** with visual cards and media badges, and **List View** with sortable columns (Name, Size, Type, Date Modified).
+    - Media-specific recognition: 24-bit PCM Master WAVs, Stems, MP3 references, Visual Artwork (with live image previews), Videos (MP4), and Lyric Sheets (Markdown).
+    - Built-in sticky **Audio Audition Player** with playback scrubber, elapsed/total time, volume slider, mute, and loop toggles.
+  - **WebDAV Remote File Operations**:
+    - **`POST /api/nextcloud/browse`**: Remote directory introspection using WebDAV `PROPFIND` (Depth 1) with automatic categorization, breadcrumbs, and track association.
+    - **`POST /api/nextcloud/create-folder`**: Native directory creation using WebDAV `MKCOL`.
+    - **`POST /api/nextcloud/delete-item`**: Safe deletion of remote files or directories using WebDAV `DELETE` with safety guards against root deletion.
+    - **`POST /api/nextcloud/move-item`**: Renaming and file relocation using WebDAV `MOVE`.
+    - **`POST /api/nextcloud/upload-file`**: Direct file upload supporting base64 data encoding for audio stems, artwork, and documentation.
+  - **Seamless Studio Integration**:
+    - Integrated directly into `NextcloudBentoSyncTab.tsx` with a 1-click view switcher between the Live WebDAV File Explorer and Bento Catalog Matcher.
+    - Added quick-access shortcut inside `SideNavigationPanel.tsx` under the Assets tab.
+    - Added command shortcut in `StudioCommandPalette.tsx` for instant navigation.
+
+
 
 
 

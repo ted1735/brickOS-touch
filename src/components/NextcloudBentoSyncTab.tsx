@@ -54,6 +54,7 @@ import {
 import { audioMiniDaw } from '../utils/audioEngine';
 import { HelpCircle } from 'lucide-react';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
+import { NextcloudWebDavFileExplorer } from './NextcloudWebDavFileExplorer';
 
 interface NextcloudBentoSyncTabProps {
   tracks: Track[];
@@ -93,6 +94,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   } | null>(null);
 
   // Assets strictly inside /Music-Production (Folder ID: 207332)
+  const [viewModeTab, setViewModeTab] = useState<'explorer' | 'bento'>('explorer');
   const [assets, setAssets] = useState<NextcloudFolderAsset[]>(() => getSavedNextcloudAssets(tracks));
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'MASTERS' | 'STEMS' | 'VISUALS' | 'DOCS' | 'MATCHED' | 'UNMATCHED'>('ALL');
   const [activeSubfolder, setActiveSubfolder] = useState<string>('ALL');
@@ -592,6 +594,59 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         isDarkMode={isDarkMode}
       />
 
+      {/* VIEW MODE SWITCHER: LIVE WEBDAV FILE EXPLORER vs BENTO CATALOG MATCHER */}
+      <div className={`p-2 rounded-2xl border flex items-center justify-between gap-3 flex-wrap ${
+        isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200 shadow-2xs'
+      }`}>
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setViewModeTab('explorer')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              viewModeTab === 'explorer'
+                ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Folder className="w-3.5 h-3.5 text-cyan-300" />
+            <span>Nextcloud WebDAV File Explorer</span>
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-cyan-400/20 text-cyan-200 font-normal">Live</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewModeTab('bento')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              viewModeTab === 'bento'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-indigo-300" />
+            <span>Bento Catalog Matcher (207332)</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+          <span>Server: <strong className="text-cyan-400">https://nextcloud.moyercloud.com</strong></span>
+          <span>·</span>
+          <span>User: <strong className="text-indigo-400">{config.username}</strong></span>
+        </div>
+      </div>
+
+      {viewModeTab === 'explorer' ? (
+        <NextcloudWebDavFileExplorer
+          tracks={tracks}
+          selectedTrack={selectedTrack}
+          onSelectTrack={onSelectTrack}
+          onSendToMixer={(file) => {
+            if (onNavigateToTab) onNavigateToTab('mixer');
+          }}
+          isDarkMode={isDarkMode}
+          className="min-h-[750px]"
+        />
+      ) : (
+        <>
       {/* COMPACT BREADCRUMB & FOLDER BANNER: ZERO WASTED SPACE */}
       <div
         className={`p-4 rounded-2xl border transition-all ${
@@ -1560,6 +1615,8 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* UNIVERSAL ASSET EDITOR MODAL: ADD, EDIT, ASK GEMINI, REASSIGN, LINK TO OTHER PROJECTS, DELETE */}
       <UniversalAssetEditorModal

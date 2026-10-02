@@ -468,6 +468,57 @@ export interface NextcloudSyncConfig {
   lastSyncTimestamp?: string;
 }
 
+export interface WebDavFolderItem {
+  name: string;
+  path: string;
+  href: string;
+  lastModified?: string;
+  isProjectFolder?: boolean;
+  trackMatch?: string;
+  itemCount?: number;
+}
+
+export interface WebDavFileItem {
+  name: string;
+  path: string;
+  href: string;
+  size: number;
+  mimeType: string;
+  lastModified: string;
+  streamUrl: string;
+  category: string;
+  extension: string;
+  isAudio: boolean;
+  isImage: boolean;
+  isVideo: boolean;
+  isDocument: boolean;
+  trackMatch?: string;
+  matchedTrackId?: string;
+  matchedTrackTitle?: string;
+}
+
+export interface WebDavBreadcrumb {
+  name: string;
+  path: string;
+}
+
+export interface WebDavBrowseResponse {
+  success: boolean;
+  serverUrl: string;
+  username: string;
+  currentPath: string;
+  displayPath: string;
+  parentPath: string | null;
+  breadcrumbs: WebDavBreadcrumb[];
+  folders: WebDavFolderItem[];
+  files: WebDavFileItem[];
+  totalFolders: number;
+  totalFiles: number;
+  latencyMs?: number;
+  isAuthRequired?: boolean;
+  message?: string;
+}
+
 export interface VideoExpressSceneClip {
   sceneNumber: number;
   sceneTitle: string;

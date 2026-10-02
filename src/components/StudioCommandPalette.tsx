@@ -22,7 +22,8 @@ import {
   Maximize2,
   Grid,
   Columns,
-  MessageSquare
+  MessageSquare,
+  Shield
 } from 'lucide-react';
 import { Track, StudioTheme } from '../types';
 import { ALL_STUDIO_NAV_ITEMS } from '../data/studioNavigationData';
@@ -42,6 +43,7 @@ interface StudioCommandPaletteProps {
   onToggleFocusMode?: () => void;
   onOpenCopilotDrawer?: () => void;
   onOpenSectionGuide?: (sectionId: string) => void;
+  onOpenTailscaleModal?: () => void;
 }
 
 interface PaletteAction {
@@ -69,7 +71,8 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
   onSelectTheme,
   onToggleFocusMode,
   onOpenCopilotDrawer,
-  onOpenSectionGuide
+  onOpenSectionGuide,
+  onOpenTailscaleModal
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -136,6 +139,18 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
       badge: 'Ctrl+J',
       onSelect: () => {
         if (onOpenCopilotDrawer) onOpenCopilotDrawer();
+        onClose();
+      }
+    },
+    {
+      id: 'action-nextcloud-explorer',
+      title: 'Open Nextcloud WebDAV File Explorer',
+      category: 'SOP & Quick Actions',
+      subtitle: 'Browse, audition, upload, and organize 24-bit WAV stems and project files',
+      icon: HardDrive,
+      accentColor: 'text-cyan-400',
+      onSelect: () => {
+        onNavigateToTab('nextcloud_sync');
         onClose();
       }
     },
@@ -259,6 +274,23 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
       accentColor: 'text-emerald-400',
       onSelect: () => {
         onNavigateToTab('mastering');
+        onClose();
+      }
+    },
+    {
+      id: 'action-tailscale-vpn',
+      title: 'Tailscale Mesh VPN Manager',
+      category: 'SOP & Quick Actions',
+      subtitle: 'Connect to private Nextcloud node via encrypted Tailscale network mesh',
+      icon: Shield,
+      accentColor: 'text-cyan-400',
+      badge: 'VPN',
+      onSelect: () => {
+        if (onOpenTailscaleModal) {
+          onOpenTailscaleModal();
+        } else {
+          onNavigateToTab('nextcloud_sync');
+        }
         onClose();
       }
     }

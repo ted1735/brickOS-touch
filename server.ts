@@ -5,6 +5,8 @@ import { Readable } from 'stream';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
 import dotenv from 'dotenv';
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
+import { exec, execSync, spawn } from 'child_process';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, CATALOG_TRACK_DEFINITIONS } from './src/data/nextcloudAssetIndex';
 
 dotenv.config();
@@ -881,6 +883,241 @@ app.post('/api/nextcloud/save-credentials', (req, res) => {
   });
 });
 
+// ============================================================================
+// TAILSCALE NETWORK VPN INTEGRATION (Userspace Networking & SOCKS5/HTTP Proxy)
+// ============================================================================
+const TAILSCALE_PROXY_PORT = 1055;
+const TAILSCALE_PROXY_URL = `http://127.0.0.1:${TAILSCALE_PROXY_PORT}`;
+const tailscaleProxyAgent = new ProxyAgent(TAILSCALE_PROXY_URL);
+
+function isTailscaleAddress(hostOrUrl: string): boolean {
+  try {
+    let hostname = hostOrUrl;
+    if (hostOrUrl.includes('://')) {
+      hostname = new URL(hostOrUrl).hostname;
+    }
+    const cleanHost = hostname.toLowerCase();
+    if (cleanHost.endsWith('.ts.net') || cleanHost.endsWith('.tailscale.net')) return true;
+    if (/^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./.test(cleanHost)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function ensureTailscaledRunning(): boolean {
+  try {
+    try {
+      execSync('pgrep -x tailscaled', { stdio: 'ignore' });
+      return true;
+    } catch {
+      // Not running, proceed to spawn
+    }
+
+    if (fs.existsSync('/usr/local/bin/tailscaled')) {
+      fs.mkdirSync('/var/lib/tailscale', { recursive: true });
+      fs.mkdirSync('/var/run/tailscale', { recursive: true });
+
+      const logStream = fs.createWriteStream('/tmp/tailscaled.log', { flags: 'a' });
+      const child = spawn('/usr/local/bin/tailscaled', [
+        '--tun=userspace-networking',
+        `--socks5-server=127.0.0.1:${TAILSCALE_PROXY_PORT}`,
+        `--outbound-http-proxy-listen=127.0.0.1:${TAILSCALE_PROXY_PORT}`
+      ], {
+        detached: true,
+        stdio: ['ignore', logStream, logStream]
+      });
+      child.unref();
+      console.log(`[Tailscale] Daemon spawned (PID: ${child.pid}) on proxy port ${TAILSCALE_PROXY_PORT}`);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.warn('[Tailscale] Failed to ensure tailscaled running:', err);
+    return false;
+  }
+}
+
+// Ensure daemon is active
+ensureTailscaledRunning();
+
+async function smartFetch(urlStr: string, options: any = {}, forceTailscale = false): Promise<any> {
+  const isTs = forceTailscale || isTailscaleAddress(urlStr);
+  if (isTs) {
+    ensureTailscaledRunning();
+    return undiciFetch(urlStr, {
+      ...options,
+      dispatcher: tailscaleProxyAgent
+    });
+  }
+  return fetch(urlStr, options);
+}
+
+// Tailscale Status API
+app.get('/api/tailscale/status', async (req, res) => {
+  const isDaemonRunning = ensureTailscaledRunning();
+  try {
+    const rawJson = execSync('tailscale status --peers=true --json', { timeout: 6000 }).toString();
+    const data = JSON.parse(rawJson);
+
+    const peersList: Array<{
+      id: string;
+      hostname: string;
+      dnsName: string;
+      tailscaleIPs: string[];
+      online: boolean;
+      os: string;
+      isNextcloudCandidate: boolean;
+    }> = [];
+
+    if (data.Peer && typeof data.Peer === 'object') {
+      for (const [key, peer] of Object.entries(data.Peer as Record<string, any>)) {
+        const hostname = peer.HostName || '';
+        const dnsName = peer.DNSName || '';
+        const lowerName = (hostname + ' ' + dnsName).toLowerCase();
+        const isNextcloudCandidate = lowerName.includes('nextcloud') || lowerName.includes('cloud') || lowerName.includes('moyer') || lowerName.includes('nas') || lowerName.includes('storage');
+
+        peersList.push({
+          id: key,
+          hostname: peer.HostName,
+          dnsName: peer.DNSName?.replace(/\.$/, '') || '',
+          tailscaleIPs: peer.TailscaleIPs || [],
+          online: peer.Online || false,
+          os: peer.OS || 'linux',
+          isNextcloudCandidate
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      isInstalled: true,
+      isDaemonRunning,
+      backendState: data.BackendState || 'Unknown',
+      authUrl: data.AuthURL || null,
+      tailscaleIPs: data.TailscaleIPs || (data.Self?.TailscaleIPs || []),
+      selfNode: {
+        hostname: data.Self?.HostName || 'brickos-studio',
+        dnsName: data.Self?.DNSName?.replace(/\.$/, '') || '',
+        online: data.Self?.Online || false,
+        tailscaleIPs: data.Self?.TailscaleIPs || []
+      },
+      peers: peersList,
+      proxy: {
+        http: TAILSCALE_PROXY_URL,
+        socks5: `socks5://127.0.0.1:${TAILSCALE_PROXY_PORT}`,
+        active: true
+      },
+      currentTailnet: data.CurrentTailnet?.Name || null
+    });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      isInstalled: fs.existsSync('/usr/local/bin/tailscale'),
+      isDaemonRunning,
+      backendState: 'Stopped',
+      authUrl: null,
+      tailscaleIPs: [],
+      peers: [],
+      error: err.message
+    });
+  }
+});
+
+// Tailscale Up / Login API
+app.post('/api/tailscale/up', async (req, res) => {
+  ensureTailscaledRunning();
+  const { authKey = '', hostname = 'brickos-studio' } = req.body;
+
+  try {
+    if (authKey && authKey.trim().length > 0) {
+      const cleanKey = authKey.trim();
+      execSync(`tailscale up --auth-key="${cleanKey}" --hostname="${hostname}" --reset --timeout=15s`, { timeout: 20000 });
+      const rawJson = execSync('tailscale status --json', { timeout: 5000 }).toString();
+      const statusData = JSON.parse(rawJson);
+
+      return res.json({
+        success: true,
+        message: 'Successfully authenticated to Tailnet via Auth Key!',
+        backendState: statusData.BackendState,
+        tailscaleIPs: statusData.TailscaleIPs || statusData.Self?.TailscaleIPs || [],
+        selfNode: statusData.Self
+      });
+    } else {
+      // Trigger interactive login to generate URL
+      try {
+        execSync(`tailscale up --hostname="${hostname}" --reset --timeout=3s`, { timeout: 5000 });
+      } catch {
+        // Expected timeout while waiting for web auth
+      }
+
+      const rawJson = execSync('tailscale status --json', { timeout: 5000 }).toString();
+      const statusData = JSON.parse(rawJson);
+
+      return res.json({
+        success: true,
+        message: statusData.AuthURL ? 'Please visit the auth URL in your browser to approve this device' : 'Tailscale is running',
+        authUrl: statusData.AuthURL || null,
+        backendState: statusData.BackendState
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to execute tailscale up'
+    });
+  }
+});
+
+// Tailscale Logout / Down API
+app.post('/api/tailscale/logout', async (req, res) => {
+  try {
+    execSync('tailscale logout', { timeout: 10000 });
+    res.json({ success: true, message: 'Logged out of Tailscale' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to logout' });
+  }
+});
+
+// Tailscale Ping / WebDAV Host Probe
+app.post('/api/tailscale/ping', async (req, res) => {
+  const { targetHost = '' } = req.body;
+  if (!targetHost) {
+    return res.status(400).json({ success: false, error: 'targetHost is required' });
+  }
+
+  const startTime = Date.now();
+  try {
+    let testUrl = targetHost;
+    if (!testUrl.startsWith('http://') && !testUrl.startsWith('https://')) {
+      testUrl = `http://${targetHost}`;
+    }
+
+    const response = await smartFetch(testUrl, {
+      method: 'GET',
+      headers: { 'User-Agent': 'brickOS-Studio-Tailscale-Probe/1.0' },
+      signal: AbortSignal.timeout(8000)
+    }, true);
+
+    const latencyMs = Date.now() - startTime;
+    res.json({
+      success: response.status < 500,
+      status: response.status,
+      latencyMs,
+      targetHost,
+      message: `Pinged ${targetHost} over Tailscale proxy in ${latencyMs}ms (HTTP ${response.status})`
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    res.json({
+      success: false,
+      latencyMs,
+      targetHost,
+      error: err.message || 'Cannot reach host over Tailscale'
+    });
+  }
+});
+
 // 11. Nextcloud Live WebDAV Connection Test with Deep Multi-Stage Diagnostics
 app.post('/api/nextcloud/test-connection', async (req, res) => {
   const startTime = Date.now();
@@ -933,7 +1170,7 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
     let cfRay = '';
 
     try {
-      const pingRes = await fetch(cleanServerUrl, {
+      const pingRes = await smartFetch(cleanServerUrl, {
         method: 'HEAD',
         headers: { 'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5' },
         signal: AbortSignal.timeout(6000)
@@ -1003,7 +1240,7 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
     let methodUsed = 'PROPFIND';
 
     try {
-      response = await fetch(targetUrl, {
+      response = await smartFetch(targetUrl, {
         method: 'PROPFIND',
         headers: davHeaders,
         signal: AbortSignal.timeout(8000)
@@ -1017,7 +1254,7 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
         details: { error: methodErr.message }
       });
       methodUsed = 'GET';
-      response = await fetch(targetUrl, {
+      response = await smartFetch(targetUrl, {
         method: 'GET',
         headers: davHeaders,
         signal: AbortSignal.timeout(8000)
@@ -1196,7 +1433,7 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
     let authErrorDetail = '';
 
     try {
-      const davRes = await fetch(targetUrl, {
+      const davRes = await smartFetch(targetUrl, {
         method: 'PROPFIND',
         headers,
         signal: AbortSignal.timeout(10000)
@@ -1328,9 +1565,11 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
       password = '',
       filePath = '/remote.php/dav/files/ncted/Music-Production/brainstorming/canvas_backup.md',
       content = '',
+      base64Data = '',
       contentType = 'text/markdown; charset=utf-8'
     } = req.body;
 
+    const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
     const cleanPath = filePath.startsWith('/') ? filePath : '/' + filePath;
     const targetUrl = `${serverUrl.replace(/\/$/, '')}${cleanPath}`;
 
@@ -1339,15 +1578,17 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
       'Content-Type': contentType,
     };
 
-    if (password) {
-      const authString = Buffer.from(`${username}:${password}`).toString('base64');
+    if (effectivePassword) {
+      const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
       headers['Authorization'] = `Basic ${authString}`;
     }
 
-    const response = await fetch(targetUrl, {
+    const bodyPayload = base64Data ? Buffer.from(base64Data, 'base64') : content;
+
+    const response = await smartFetch(targetUrl, {
       method: 'PUT',
       headers,
-      body: content,
+      body: bodyPayload,
     });
 
     const latencyMs = Date.now() - startTime;
@@ -1375,6 +1616,449 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
       latencyMs,
       error: err.message || 'Nextcloud upload failed'
     });
+  }
+});
+
+// 13a. Nextcloud WebDAV Interactive File Explorer Browse Endpoint (PROPFIND Depth 1)
+app.post('/api/nextcloud/browse', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      path = '/remote.php/dav/files/ncted/Music-Production',
+      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      username = cachedWebdavCredentials.username || 'ncted',
+      password = '',
+      search = '',
+      filter = 'ALL'
+    } = req.body;
+
+    const cleanServerUrl = serverUrl.replace(/\/$/, '');
+    const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
+    const hasPassword = Boolean(effectivePassword && effectivePassword.length > 0);
+
+    // Normalize path
+    let targetPath = path ? path.trim() : '/remote.php/dav/files/ncted/Music-Production';
+    if (!targetPath.startsWith('/remote.php/dav/files/')) {
+      const trimmed = targetPath.replace(/^\/+/, '');
+      targetPath = `/remote.php/dav/files/${username}/${trimmed}`;
+    }
+    // Clean redundant trailing slashes
+    targetPath = targetPath.replace(/\/+$/, '');
+    if (!targetPath) targetPath = `/remote.php/dav/files/${username}/Music-Production`;
+
+    const targetUrl = `${cleanServerUrl}${targetPath}`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+      'Depth': '1',
+    };
+
+    if (hasPassword) {
+      const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    const davRes = await smartFetch(targetUrl, {
+      method: 'PROPFIND',
+      headers,
+      signal: AbortSignal.timeout(12000)
+    });
+
+    if (davRes.status === 401) {
+      return res.status(401).json({
+        success: false,
+        isAuthRequired: true,
+        status: 401,
+        message: 'Nextcloud WebDAV authentication required (HTTP 401). Please configure your App Password in Settings.',
+        currentPath: targetPath,
+        folders: [],
+        files: []
+      });
+    }
+
+    if (!davRes.ok && davRes.status !== 207) {
+      return res.status(davRes.status).json({
+        success: false,
+        status: davRes.status,
+        message: `WebDAV PROPFIND failed with HTTP ${davRes.status}: ${davRes.statusText}`,
+        currentPath: targetPath,
+        folders: [],
+        files: []
+      });
+    }
+
+    // Update credential validity if successful
+    if (hasPassword && !cachedWebdavCredentials.hasValidAuth) {
+      cachedWebdavCredentials.hasValidAuth = true;
+      cachedWebdavCredentials.lastValidatedAt = new Date().toISOString();
+      saveNextcloudSessionToDisk();
+    }
+
+    const xml = await davRes.text();
+    const responseBlocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+
+    const folders: Array<{
+      name: string;
+      path: string;
+      href: string;
+      lastModified: string;
+      isProjectFolder: boolean;
+      trackMatch?: string;
+    }> = [];
+
+    const files: Array<{
+      name: string;
+      path: string;
+      href: string;
+      size: number;
+      mimeType: string;
+      lastModified: string;
+      streamUrl: string;
+      category: string;
+      extension: string;
+      isAudio: boolean;
+      isImage: boolean;
+      isVideo: boolean;
+      isDocument: boolean;
+      trackMatch?: string;
+    }> = [];
+
+    // Base root prefix for display calculations
+    const musicProdPrefix = `/remote.php/dav/files/${username}/Music-Production`;
+    const normalizedTarget = decodeURIComponent(targetPath).toLowerCase();
+
+    for (const block of responseBlocks) {
+      const blockXml = block[1];
+      const hrefMatch = blockXml.match(/<d:href>([^<]+)<\/d:href>/i);
+      if (!hrefMatch) continue;
+
+      const rawHref = decodeURIComponent(hrefMatch[1]);
+      const cleanHref = rawHref.replace(/\/+$/, '');
+      const cleanHrefLower = cleanHref.toLowerCase();
+
+      // Check if this response block is the current directory itself
+      if (cleanHrefLower === normalizedTarget || `${cleanHrefLower}/` === normalizedTarget) {
+        continue;
+      }
+
+      const name = cleanHref.split('/').filter(Boolean).pop() || '';
+      if (!name || name.startsWith('.')) continue;
+
+      const isCollection = /<d:collection\s*\/?>/i.test(blockXml) ||
+        /<d:resourcetype>[\s\S]*?<d:collection[\s\S]*?<\/d:resourcetype>/i.test(blockXml);
+
+      const modifiedMatch = blockXml.match(/<d:getlastmodified>([^<]+)<\/d:getlastmodified>/i);
+      const lastModified = modifiedMatch ? modifiedMatch[1] : '';
+
+      if (isCollection) {
+        // Detect if this folder corresponds to a known music project/song
+        const isProjectFolder = !name.startsWith('_') && !['CAD-3D', 'Apps-Scripts', 'SEO-Reports', 'Marketing-Socials'].includes(name);
+
+        folders.push({
+          name,
+          path: cleanHref,
+          href: rawHref,
+          lastModified,
+          isProjectFolder,
+          trackMatch: isProjectFolder ? name.replace(/[-_]/g, ' ') : undefined
+        });
+      } else {
+        const lengthMatch = blockXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+        const size = lengthMatch ? parseInt(lengthMatch[1], 10) : 0;
+        const lower = name.toLowerCase();
+        const extension = lower.includes('.') ? lower.split('.').pop() || '' : '';
+
+        let mimeType = 'application/octet-stream';
+        let category = 'Other Asset';
+        const isAudio = ['wav', 'mp3', 'flac', 'm4a', 'ogg', 'aac', 'aiff', 'wma'].includes(extension);
+        const isImage = ['jpg', 'jpeg', 'png', 'webp', 'svg', 'gif', 'bmp'].includes(extension);
+        const isVideo = ['mp4', 'mov', 'mkv', 'webm', 'avi'].includes(extension);
+        const isDocument = ['md', 'txt', 'pdf', 'doc', 'docx', 'json', 'csv', 'xspf'].includes(extension);
+
+        if (isAudio) {
+          if (lower.endsWith('.wav')) mimeType = 'audio/wav';
+          else if (lower.endsWith('.mp3')) mimeType = 'audio/mpeg';
+          else if (lower.endsWith('.flac')) mimeType = 'audio/flac';
+          else mimeType = 'audio/*';
+
+          if (lower.includes('master') || lower.includes('remaster') || lower.includes('final')) {
+            category = 'Master Audio';
+          } else if (lower.includes('stem') || lower.includes('lead') || lower.includes('vox') || lower.includes('bass') || lower.includes('drum')) {
+            category = 'Stem Track';
+          } else {
+            category = 'Audio Mix / Reference';
+          }
+        } else if (isImage) {
+          if (lower.endsWith('.png')) mimeType = 'image/png';
+          else if (lower.endsWith('.svg')) mimeType = 'image/svg+xml';
+          else mimeType = 'image/jpeg';
+          category = lower.includes('thumb') || lower.includes('cover') ? 'Cover Art / Thumbnail' : 'Visual Asset';
+        } else if (isVideo) {
+          mimeType = 'video/mp4';
+          category = 'Video Asset / Render';
+        } else if (isDocument) {
+          if (lower.endsWith('.md')) { mimeType = 'text/markdown'; category = 'Lyrics / Notes'; }
+          else if (lower.endsWith('.pdf')) { mimeType = 'application/pdf'; category = 'SOP / Document'; }
+          else { mimeType = 'text/plain'; category = 'Document'; }
+        }
+
+        files.push({
+          name,
+          path: cleanHref,
+          href: rawHref,
+          size,
+          mimeType,
+          lastModified,
+          streamUrl: `/api/nextcloud/stream?path=${encodeURIComponent(cleanHref)}`,
+          category,
+          extension,
+          isAudio,
+          isImage,
+          isVideo,
+          isDocument
+        });
+      }
+    }
+
+    // Sort folders alphabetically, files by name
+    folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    files.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+    // Generate breadcrumbs from targetPath
+    const breadcrumbs: Array<{ name: string; path: string }> = [];
+    const rootPath = `/remote.php/dav/files/${username}/Music-Production`;
+    breadcrumbs.push({ name: 'Music-Production', path: rootPath });
+
+    if (targetPath.startsWith(rootPath) && targetPath.length > rootPath.length) {
+      const subSegments = targetPath.slice(rootPath.length).split('/').filter(Boolean);
+      let cumulativePath = rootPath;
+      for (const seg of subSegments) {
+        cumulativePath += `/${seg}`;
+        breadcrumbs.push({
+          name: decodeURIComponent(seg),
+          path: cumulativePath
+        });
+      }
+    }
+
+    // Calculate parent path for "Up one level"
+    let parentPath: string | null = null;
+    if (targetPath !== rootPath && targetPath.startsWith(rootPath)) {
+      const parts = targetPath.split('/').filter(Boolean);
+      parts.pop();
+      parentPath = '/' + parts.join('/');
+    }
+
+    const displayPath = targetPath.replace(`/remote.php/dav/files/${username}/`, '');
+    const latencyMs = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      serverUrl,
+      username,
+      currentPath: targetPath,
+      displayPath,
+      parentPath,
+      breadcrumbs,
+      folders,
+      files,
+      totalFolders: folders.length,
+      totalFiles: files.length,
+      latencyMs
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('Nextcloud browse error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Nextcloud browse failed',
+      latencyMs
+    });
+  }
+});
+
+// 13b. Nextcloud WebDAV Create Folder Endpoint (MKCOL)
+app.post('/api/nextcloud/create-folder', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      parentPath = '/remote.php/dav/files/ncted/Music-Production',
+      folderName = '',
+      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      username = cachedWebdavCredentials.username || 'ncted',
+      password = ''
+    } = req.body;
+
+    const trimmedName = folderName ? folderName.trim().replace(/[\/\\]/g, '-') : '';
+    if (!trimmedName) {
+      return res.status(400).json({ success: false, error: 'Folder name is required' });
+    }
+
+    const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
+    const cleanParent = parentPath.replace(/\/+$/, '');
+    const cleanServerUrl = serverUrl.replace(/\/$/, '');
+    const newFolderPath = `${cleanParent}/${trimmedName}`;
+    const targetUrl = `${cleanServerUrl}${newFolderPath}`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+    };
+
+    if (effectivePassword) {
+      const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    const response = await smartFetch(targetUrl, {
+      method: 'MKCOL',
+      headers,
+      signal: AbortSignal.timeout(10000)
+    });
+
+    const latencyMs = Date.now() - startTime;
+    const isSuccess = response.status === 201 || response.status === 200;
+
+    res.json({
+      success: isSuccess,
+      status: response.status,
+      statusText: response.statusText,
+      folderPath: newFolderPath,
+      folderName: trimmedName,
+      latencyMs,
+      message: isSuccess
+        ? `Successfully created folder "${trimmedName}" on Nextcloud WebDAV`
+        : response.status === 405
+        ? `Folder "${trimmedName}" already exists on Nextcloud WebDAV`
+        : `Nextcloud returned HTTP ${response.status}: ${response.statusText}`
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('Nextcloud create-folder error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Create folder failed', latencyMs });
+  }
+});
+
+// 13c. Nextcloud WebDAV Delete Item Endpoint (DELETE)
+app.post('/api/nextcloud/delete-item', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      path = '',
+      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      username = cachedWebdavCredentials.username || 'ncted',
+      password = ''
+    } = req.body;
+
+    if (!path || !path.trim()) {
+      return res.status(400).json({ success: false, error: 'Path is required for deletion' });
+    }
+
+    const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
+    const cleanServerUrl = serverUrl.replace(/\/$/, '');
+    const cleanPath = path.trim().startsWith('/') ? path.trim() : '/' + path.trim();
+    const targetUrl = `${cleanServerUrl}${cleanPath}`;
+
+    // Safety guard: prevent accidental deletion of top-level Music-Production or system roots
+    if (cleanPath.toLowerCase() === `/remote.php/dav/files/${username.toLowerCase()}/music-production` ||
+        cleanPath.toLowerCase() === `/remote.php/dav/files/${username.toLowerCase()}`) {
+      return res.status(403).json({ success: false, error: 'Cannot delete top-level Music-Production root folder.' });
+    }
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+    };
+
+    if (effectivePassword) {
+      const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    const response = await smartFetch(targetUrl, {
+      method: 'DELETE',
+      headers,
+      signal: AbortSignal.timeout(10000)
+    });
+
+    const latencyMs = Date.now() - startTime;
+    const isSuccess = response.status === 204 || response.status === 200;
+
+    res.json({
+      success: isSuccess,
+      status: response.status,
+      statusText: response.statusText,
+      path: cleanPath,
+      latencyMs,
+      message: isSuccess
+        ? `Successfully deleted item from Nextcloud WebDAV`
+        : `Nextcloud returned HTTP ${response.status}: ${response.statusText}`
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('Nextcloud delete-item error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Delete item failed', latencyMs });
+  }
+});
+
+// 13d. Nextcloud WebDAV Move / Rename Item Endpoint (MOVE)
+app.post('/api/nextcloud/move-item', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      sourcePath = '',
+      destinationPath = '',
+      overwrite = false,
+      serverUrl = cachedWebdavCredentials.serverUrl || 'https://nextcloud.moyercloud.com',
+      username = cachedWebdavCredentials.username || 'ncted',
+      password = ''
+    } = req.body;
+
+    if (!sourcePath || !destinationPath) {
+      return res.status(400).json({ success: false, error: 'sourcePath and destinationPath are required' });
+    }
+
+    const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
+    const cleanServerUrl = serverUrl.replace(/\/$/, '');
+    const cleanSource = sourcePath.trim().startsWith('/') ? sourcePath.trim() : '/' + sourcePath.trim();
+    const cleanDestination = destinationPath.trim().startsWith('/') ? destinationPath.trim() : '/' + destinationPath.trim();
+
+    const targetUrl = `${cleanServerUrl}${cleanSource}`;
+    const destinationUrl = `${cleanServerUrl}${cleanDestination}`;
+
+    const headers: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+      'Destination': destinationUrl,
+      'Overwrite': overwrite ? 'T' : 'F'
+    };
+
+    if (effectivePassword) {
+      const authString = Buffer.from(`${username}:${effectivePassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${authString}`;
+    }
+
+    const response = await smartFetch(targetUrl, {
+      method: 'MOVE',
+      headers,
+      signal: AbortSignal.timeout(10000)
+    });
+
+    const latencyMs = Date.now() - startTime;
+    const isSuccess = response.status === 201 || response.status === 204 || response.status === 200;
+
+    res.json({
+      success: isSuccess,
+      status: response.status,
+      statusText: response.statusText,
+      sourcePath: cleanSource,
+      destinationPath: cleanDestination,
+      latencyMs,
+      message: isSuccess
+        ? `Successfully moved/renamed item on Nextcloud WebDAV`
+        : `Nextcloud returned HTTP ${response.status}: ${response.statusText}`
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('Nextcloud move-item error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Move item failed', latencyMs });
   }
 });
 
@@ -1752,7 +2436,7 @@ app.get('/api/nextcloud/stream', async (req, res) => {
     else if (lower.endsWith('.md')) contentType = 'text/markdown; charset=utf-8';
 
     try {
-      const upstream = await fetch(targetUrl, { headers });
+      const upstream = await smartFetch(targetUrl, { headers });
 
       if (upstream.status === 200 || upstream.status === 206) {
         res.status(upstream.status);

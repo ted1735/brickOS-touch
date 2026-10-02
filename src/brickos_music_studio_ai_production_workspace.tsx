@@ -101,6 +101,7 @@ import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
 import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
 import type { StudioWorkspace } from './components/StudioHome';
+import { TailscaleVpnModal } from './components/TailscaleVpnModal';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -167,6 +168,7 @@ export default function BrickOSMusicStudioWorkspace() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCopilotDrawerOpen, setIsCopilotDrawerOpen] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState(false);
   const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
 
   const [studioTheme, setStudioTheme] = useState<StudioTheme>(() => {
@@ -2976,6 +2978,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onToggleFocusMode={handleToggleFocusMode}
         onOpenSectionGuide={(sec) => sec && handleOpenSectionGuide(sec as any)}
         onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}
+        onOpenTailscaleModal={() => setIsTailscaleModalOpen(true)}
         isDarkMode={isDarkMode}
       />
 
@@ -3020,6 +3023,13 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onClose={() => setIsThemeModalOpen(false)}
         currentTheme={studioTheme}
         onSelectTheme={handleSelectTheme}
+      />
+
+      {/* TAILSCALE MESH VPN MODAL */}
+      <TailscaleVpnModal
+        isOpen={isTailscaleModalOpen}
+        onClose={() => setIsTailscaleModalOpen(false)}
+        isDarkMode={isDarkMode}
       />
 
     </div>
