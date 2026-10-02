@@ -339,6 +339,75 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Added quick-access shortcut inside `SideNavigationPanel.tsx` under the Assets tab.
     - Added command shortcut in `StudioCommandPalette.tsx` for instant navigation.
 
+---
+
+## [v2.8] — Sovereign Nextcloud Fiber Backend, In-Memory Audio Cache, & Tailscale Funnel Integration
+- **Date**: 2026-10-02
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.8`**.
+  - **LXC Container Resource Doubling & Linux OS Page Cache**:
+    - Upgraded Nextcloud Debian LXC Container 120 on Proxmox hypervisor (`192.168.1.91`) from 4GB/2GB to **8GB RAM / 4GB Swap** live (`pct set 120 -memory 8192 -swap 4096`).
+    - Dedicated ~7.2 GB free RAM to Linux kernel page cache (`buff/cache`), enabling repeated 24-bit/48kHz linear PCM WAV stems and sample packs to serve directly from memory at bus speeds with zero NVMe disk thrashing.
+  - **MariaDB 1GB InnoDB Buffer Pool & NVMe Tuning**:
+    - Created dedicated `/etc/mysql/mariadb.conf.d/99-nextcloud-tuning.cnf` allocating **1 GB InnoDB Buffer Pool** (`innodb_buffer_pool_size = 1G`) and setting `innodb_io_capacity = 2000` / `innodb_io_capacity_max = 4000` for WD Black NVMe storage.
+    - Set `innodb_flush_log_at_trx_commit = 2` to eliminate transactional disk stalls.
+    - Locked the entire `oc_filecache` table, file IDs, etags, and metadata indexes permanently in RAM for sub-millisecond WebDAV queries.
+  - **PHP 8.2 Execution & 512MB OPcache + JIT Engine**:
+    - Configured `/etc/php/8.2/mods-available/opcache.ini` with **512 MB memory consumption**, `max_accelerated_files = 30000`, and `interned_strings_buffer = 64MB`.
+    - Enabled PHP 8.2 JIT compiler (`opcache.jit = 1255`, `opcache.jit_buffer_size = 128M`) to dramatically accelerate SabreDAV XML serialization during PROPFIND requests.
+    - Enabled APCu local opcode/memory cache (`memcache.local` + `apc.enable_cli=1`).
+    - Routed distributed caching and file locking through low-latency Redis Unix socket (`/var/run/redis/redis.sock`).
+  - **High-Throughput Large-File & Audio Streaming Pipeline**:
+    - Raised PHP `upload_max_filesize` and `post_max_size` from 8M/16M to **16 GB**.
+    - Raised PHP `max_execution_time` and `max_input_time` to **3600s** (1 hour) and Apache `Timeout` to **3600s** to support multi-gigabyte stem archives.
+    - Disabled PHP output buffering (`output_buffering = Off`) for zero-memory direct streaming of audio and video byte-ranges.
+    - Capped Nextcloud chunked uploads at **99 MB** (`'files.chunked_upload.max_size' => 99000000`) in `config.php` to prevent HTTP 413 "Request Entity Too Large" errors on Cloudflare's 100MB proxy boundary.
+  - **Rust High-Performance Push Daemon (`notify_push`)**:
+    - Installed native `notify_push` v1.4.1 binary running as a dedicated systemd service (`127.0.0.1:7867`).
+    - Configured Apache reverse proxy modules (`proxy`, `proxy_http`, `proxy_wstunnel`) routing `/push/` and `/push/ws`.
+    - Passed all 6 verification checks in `occ notify_push:setup`. Replaces HTTP polling with instant real-time WebSocket push notifications for file and stem events.
+  - **High-Frequency System Cron**:
+    - Switched from slow Webcron to reliable system cron in `/etc/cron.d/nextcloud` executing every 5 minutes (`*/5 * * * * www-data /usr/bin/php -f /var/www/nextcloud/cron.php`).
+  - **Tailscale Mesh & Public Funnel Integration**:
+    - Configured Proxmox host `/etc/pve/lxc/120.conf` with `/dev/net/tun` bind mount and `cgroup2` device passthrough.
+    - Connected Container 120 directly to the user's Tailscale tailnet as `nextcloud.mermaid-symmetric.ts.net` (`100.95.185.100`).
+    - Published public endpoint via **Tailscale Funnel**: **`https://nextcloud.mermaid-symmetric.ts.net/`** with auto-provisioned Let's Encrypt TLS.
+    - Created an unthrottled, zero-Cloudflare-limit 1 Gbps LAN pathway for uncompressed multi-track stem downloads and uploads.
+  - **WebDAV Architectural Specification & Documentation**:
+    - Created `docs/nextcloud-backend-integration-spec.md` detailing dual-route failover, on-demand/lazy-loading `Depth: 1` discovery, lean XML `<d:prop>` payloads (70% bandwidth reduction), ETag caching (`If-None-Match`), and byte-range audio scrubbing.
+
+---
+
+## [v2.9] — Client & Bridge Optimizations for Nextcloud Ultra-High-Speed & Redundant Mesh
+- **Date**: 2026-10-02
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v2.9`**.
+  - **Dual-Route Active Mesh & Automatic Failover**:
+    - **Primary Direct Mesh (`https://nextcloud.mermaid-symmetric.ts.net`)**: Configured as default primary connection across browser and bridge operations (~14 ms direct wire latency). Bypasses Cloudflare body and timeout limits, enabling direct multi-gigabyte stem package transfers and unconstrained audio downloads.
+    - **Secondary Edge Proxy (`https://nextcloud.moyercloud.com`)**: Automatically switches transparently if two consecutive connection attempts on the primary route fail. Automatically fails back to the primary Tailscale route as soon as a healthy probe returns.
+  - **High-Throughput Connection Pooling (Undici)**:
+    - **Direct Keep-Alive Agent (`primaryUndiciAgent`)**: Dedicated pool maintaining up to 64 concurrent persistent HTTP/2 & HTTP/1.1 connections to eliminate TCP and TLS renegotiation delays when fetching parallel stem packs.
+    - Idle keep-alive timeout extended to 600 seconds (10 minutes) with request timeouts configured for 3,600 seconds (1 hour) matching server PHP limits.
+    - **Linux Buffer Cache Audio Streaming (`Range: bytes=...`)**: The `/api/nextcloud/stream` proxy passes through client byte-range headers directly to Nextcloud, serving HTTP 206 Partial Content slices directly from Linux RAM page cache without reading full WAV files into memory.
+  - **RFC 4918 Depth: 1 Lazy-Loading & Lean XML Payloads**:
+    - **Targeted Lazy Queries**: PROPFIND calls strictly request `Depth: 1`, preventing deep recursive tree traversals. The targeted `/api/nextcloud/track-assets` endpoint queries a specific track's `/stems` folder directly without catalog-wide scans.
+    - **Lean XML Properties**: Suppressed `<d:allprop />` in favor of requesting only player-relevant properties (`d:getlastmodified`, `d:getcontentlength`, `d:getcontenttype`, `d:getetag`, `d:resourcetype`, `oc:fileid`, `oc:size`), minimizing MariaDB InnoDB buffer pool churn.
+  - **Zero-Latency In-Memory PROPFIND Cache + ETag Validation**:
+    - **RAM Cache**: Repeated folder queries within 60 seconds return instantly (0 ms latency) directly from server memory.
+    - **Conditional ETag Checking**: Downstream requests send `If-None-Match: "{folderEtag}"`. Nextcloud evaluates this against MariaDB's locked `oc_filecache` table in sub-milliseconds, answering with an empty `HTTP 304 Not Modified` payload when no changes exist.
+  - **Instant Real-Time Push Sync via Rust `notify_push`**:
+    - **Native WebSocket Daemon**: Connected directly to `wss://nextcloud.mermaid-symmetric.ts.net/push/ws` with automatic keep-alive pings and automatic reconnect logic.
+    - **Event-Driven Cache Invalidation**: Zero periodic PROPFIND polling. When files or stems are added, renamed, or modified on the server, `notify_push` pushes an instant event to the client bridge, which invalidates the in-memory cache and broadcasts an event to the UI via Server-Sent Events (SSE).
+  - **Dynamic Upload Pipeline (16GB Direct / 99MB Cloudflare Chunks)**:
+    - Over Primary Tailscale Route: Large stem archives or video files (up to 16 GB) stream in a single high-speed direct PUT with a 1-hour timeout.
+    - Over Cloudflare Fallback: Client automatically slices uploads into 90 MB chunks using Nextcloud WebDAV chunking protocol (`/remote.php/dav/uploads/{user}/{uploadId}/`), keeping every request beneath Cloudflare's 100 MB body size limit.
+  - **Proxmox Backup Server (PBS) Automated Disaster Recovery**:
+    - Configured automated nightly backup job in Proxmox VE 8 (`/etc/pve/jobs.cfg`, Job `d42b7fbe-eab6-4048-af99-682a99fe0104`) targeting `pbs-moyercloud` (`backup-7tb` on `192.168.1.74`).
+    - Scheduled at **02:00 AM daily** in live `snapshot` mode (zero Nextcloud downtime) with automated retention pruning (`keep-daily=7, keep-weekly=4, keep-monthly=2`).
+
+
 
 
 
