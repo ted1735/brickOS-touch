@@ -807,7 +807,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       `- **Engineering Notes:** ${winner.notes}\n`,
       `## 📊 Comparison Matrix & Scorecards`,
       ...slots.map(s => {
-        const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
+        const total = (Object.values(s.scores) as number[]).reduce((a, b) => a + b, 0);
         return [
           `### ${s.label}: ${s.title} (${s.versionTag})`,
           `- **Total Score:** ${total} / 50 pts`,
@@ -1356,7 +1356,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                       <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" /> Evaluation Rubric
                     </span>
                     <span className="font-mono font-bold text-amber-400 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded text-[11px]">
-                      {Object.values(displaySlot.scores).reduce((a, b) => a + b, 0)} / 50 pts
+                      {(Object.values(displaySlot.scores) as number[]).reduce((a, b) => a + b, 0)} / 50 pts
                     </span>
                   </div>
 
