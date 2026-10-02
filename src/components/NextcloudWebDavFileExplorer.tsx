@@ -494,6 +494,55 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     }
   };
 
+  // Format Helpers
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const formatSeconds = (sec: number): string => {
+    if (!sec || isNaN(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  // Filtered & Sorted Lists
+  const filteredFolders = useMemo(() => {
+    return folders.filter(f => {
+      if (!searchQuery) return true;
+      return f.name.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+  }, [folders, searchQuery]);
+
+  const filteredFiles = useMemo(() => {
+    return files.filter(f => {
+      // Type Filter
+      if (filterType === 'AUDIO' && !f.isAudio) return false;
+      if (filterType === 'STEMS' && (!f.isAudio || (!f.name.toLowerCase().includes('stem') && !f.path.toLowerCase().includes('stem') && !f.name.toLowerCase().includes('vox') && !f.name.toLowerCase().includes('drum') && !f.name.toLowerCase().includes('bass')))) return false;
+      if (filterType === 'VISUALS' && !f.isImage) return false;
+      if (filterType === 'VIDEOS' && !f.isVideo) return false;
+      if (filterType === 'DOCS' && !f.isDocument) return false;
+
+      // Search Query
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q);
+      }
+      return true;
+    }).sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'name') cmp = a.name.localeCompare(b.name);
+      else if (sortBy === 'size') cmp = a.size - b.size;
+      else if (sortBy === 'date') cmp = new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
+      else if (sortBy === 'type') cmp = a.category.localeCompare(b.category);
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+  }, [files, filterType, searchQuery, sortBy, sortOrder]);
+
   // Previewable files list for current directory (Images, Documents, Videos)
   const previewableFiles = useMemo(() => {
     return filteredFiles.filter(f => f.isImage || f.isDocument || f.isVideo);
@@ -562,55 +611,6 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewFile, currentPreviewIndex, previewableFiles]);
-
-  // Format Helpers
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  const formatSeconds = (sec: number): string => {
-    if (!sec || isNaN(sec)) return '0:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
-  // Filtered & Sorted Lists
-  const filteredFolders = useMemo(() => {
-    return folders.filter(f => {
-      if (!searchQuery) return true;
-      return f.name.toLowerCase().includes(searchQuery.toLowerCase());
-    });
-  }, [folders, searchQuery]);
-
-  const filteredFiles = useMemo(() => {
-    return files.filter(f => {
-      // Type Filter
-      if (filterType === 'AUDIO' && !f.isAudio) return false;
-      if (filterType === 'STEMS' && (!f.isAudio || (!f.name.toLowerCase().includes('stem') && !f.path.toLowerCase().includes('stem') && !f.name.toLowerCase().includes('vox') && !f.name.toLowerCase().includes('drum') && !f.name.toLowerCase().includes('bass')))) return false;
-      if (filterType === 'VISUALS' && !f.isImage) return false;
-      if (filterType === 'VIDEOS' && !f.isVideo) return false;
-      if (filterType === 'DOCS' && !f.isDocument) return false;
-
-      // Search Query
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q);
-      }
-      return true;
-    }).sort((a, b) => {
-      let cmp = 0;
-      if (sortBy === 'name') cmp = a.name.localeCompare(b.name);
-      else if (sortBy === 'size') cmp = a.size - b.size;
-      else if (sortBy === 'date') cmp = new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
-      else if (sortBy === 'type') cmp = a.category.localeCompare(b.category);
-      return sortOrder === 'asc' ? cmp : -cmp;
-    });
-  }, [files, filterType, searchQuery, sortBy, sortOrder]);
 
   // Detected Song Projects from root folders
   const songProjectShortcuts = useMemo(() => {
