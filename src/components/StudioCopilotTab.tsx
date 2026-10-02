@@ -1,8 +1,7 @@
 import React from 'react';
-import { MessageSquare, RefreshCw, Send, HelpCircle, Bot, User, Sparkles, Palette } from 'lucide-react';
+import { MessageSquare, RefreshCw, Send, HelpCircle, Bot, User, Sparkles } from 'lucide-react';
 import { Track, ChatMessage, StudioTheme } from '../types';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
-import { StudioThemeSelector } from './StudioThemeSelector';
 
 interface StudioCopilotTabProps {
   selectedTrack: Track;
@@ -18,8 +17,6 @@ interface StudioCopilotTabProps {
   onOpenSectionGuide?: (sectionId: string) => void;
   isDarkMode?: boolean;
   studioTheme?: StudioTheme;
-  onSelectTheme?: (theme: StudioTheme) => void;
-  onOpenThemeModal?: () => void;
 }
 
 export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
@@ -35,9 +32,7 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
   setChatModel,
   onOpenSectionGuide,
   isDarkMode = true,
-  studioTheme = 'moon',
-  onSelectTheme,
-  onOpenThemeModal
+  studioTheme = 'moon'
 }) => {
   return (
     <div className="space-y-4">
@@ -75,28 +70,6 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
 
           {/* Role, Model Selectors, Theme Switcher, and Guide button */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Inline Theme Switcher inside Co-Producer */}
-            {onSelectTheme && (
-              <div className="flex items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
-                <StudioThemeSelector
-                  currentTheme={studioTheme}
-                  onSelectTheme={onSelectTheme}
-                  variant="header"
-                  showLabels={false}
-                />
-                {onOpenThemeModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenThemeModal}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                    title="Open Studio Theme Architecture Details & Swatches"
-                  >
-                    <Palette className="w-3.5 h-3.5 text-indigo-400" />
-                  </button>
-                )}
-              </div>
-            )}
-
             {onOpenSectionGuide && (
               <button
                 type="button"

@@ -158,13 +158,12 @@ export default function BrickOSMusicStudioWorkspace() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCopilotDrawerOpen, setIsCopilotDrawerOpen] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
-  const [isZenMode, setIsZenMode] = useState(false);
   const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
 
   const [studioTheme, setStudioTheme] = useState<StudioTheme>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('brickos_studio_theme') as StudioTheme;
-      if (saved && (saved === 'sun' || saved === 'moon' || saved === 'stars')) return saved;
+      if (saved && ['sun', 'moon', 'stars', 'graphite', 'console', 'clean'].includes(saved)) return saved;
       const legacy = localStorage.getItem('brickos_theme');
       if (legacy === 'light') return 'sun';
       return 'moon'; // Default pro-DAW dark studio aesthetic
@@ -172,29 +171,31 @@ export default function BrickOSMusicStudioWorkspace() {
     return 'moon';
   });
 
-  const isDarkMode = studioTheme !== 'sun';
+  const isDarkMode = studioTheme !== 'sun' && studioTheme !== 'clean';
   const [focusMode, setFocusMode] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
       const root = document.documentElement;
-      root.classList.remove('sun', 'moon', 'stars', 'light', 'dark');
+      root.classList.remove('sun', 'moon', 'stars', 'graphite', 'console', 'clean', 'light', 'dark');
       root.removeAttribute('data-theme');
 
-      if (studioTheme === 'sun') {
+      if (studioTheme === 'sun' || studioTheme === 'clean') {
         root.classList.add('light', 'sun');
-        root.setAttribute('data-theme', 'sun');
+        root.classList.add(studioTheme);
+        root.setAttribute('data-theme', studioTheme);
       } else if (studioTheme === 'stars') {
         root.classList.add('dark', 'stars');
         root.setAttribute('data-theme', 'stars');
       } else {
-        root.classList.add('dark', 'moon');
-        root.setAttribute('data-theme', 'moon');
+        root.classList.add('dark', studioTheme);
+        if (studioTheme === 'moon') root.classList.add('moon');
+        root.setAttribute('data-theme', studioTheme);
       }
     }
     if (typeof window !== 'undefined') {
       localStorage.setItem('brickos_studio_theme', studioTheme);
-      localStorage.setItem('brickos_theme', studioTheme === 'sun' ? 'light' : 'dark');
+      localStorage.setItem('brickos_theme', studioTheme === 'sun' || studioTheme === 'clean' ? 'light' : 'dark');
     }
   }, [studioTheme]);
 
@@ -204,17 +205,24 @@ export default function BrickOSMusicStudioWorkspace() {
       showToast('☀️ Switched to Sun (Daylight Nashville) Mode — High Clarity', 'info');
     } else if (theme === 'stars') {
       showToast('✨ Switched to Stars (Muted Twilight) Mode — Low Fatigue', 'info');
+    } else if (theme === 'graphite') {
+      showToast('Graphite Studio theme enabled', 'info');
+    } else if (theme === 'console') {
+      showToast('Warm Console theme enabled', 'info');
+    } else if (theme === 'clean') {
+      showToast('Clean Studio theme enabled', 'info');
     } else {
       showToast('🌙 Switched to Moon (Pro-DAW Obsidian Dark) Mode', 'info');
     }
   };
 
   const handleToggleTheme = () => {
-    const next: StudioTheme = studioTheme === 'moon' ? 'stars' : studioTheme === 'stars' ? 'sun' : 'moon';
+    const themeOrder: StudioTheme[] = ['sun', 'moon', 'stars', 'graphite', 'console', 'clean'];
+    const next = themeOrder[(themeOrder.indexOf(studioTheme) + 1) % themeOrder.length];
     handleSelectTheme(next);
   };
 
-  // Global Keyboard Shortcuts for Command Palette (Ctrl+K), Copilot Drawer (Ctrl+J), Theme (Shift+T), and Zen Mode (Z)
+  // Global Keyboard Shortcuts for Command Palette (Ctrl+K), Copilot Drawer (Ctrl+J), Theme (Shift+T), and Focus Mode (Z)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -230,15 +238,15 @@ export default function BrickOSMusicStudioWorkspace() {
         e.preventDefault();
         setIsCopilotDrawerOpen(prev => !prev);
       }
-      // Shift+T or Alt+T: Cycle Themes (Sun -> Moon -> Stars)
+      // Shift+T or Alt+T: Cycle through available studio themes
       else if (!isInput && ((e.shiftKey && (e.key === 'T' || e.key === 't')) || (e.altKey && (e.key === 't' || e.key === 'T')))) {
         e.preventDefault();
         handleToggleTheme();
       }
-      // Z / z (only when not typing in input/textarea): Toggle Zen Mode
+      // Z / z (only when not typing in input/textarea): Toggle Focus Mode
       else if (!isInput && (e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        setIsZenMode(prev => !prev);
+        handleToggleFocusMode();
       }
       // ESC: Close overlays if open
       else if (e.key === 'Escape') {
@@ -250,7 +258,7 @@ export default function BrickOSMusicStudioWorkspace() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCommandPaletteOpen, isCopilotDrawerOpen, isThemeModalOpen, studioTheme]);
+  }, [isCommandPaletteOpen, isCopilotDrawerOpen, isThemeModalOpen, studioTheme, focusMode]);
 
   // Firestore persistent cloud database synchronization state
   const [isDbConnected, setIsDbConnected] = useState<boolean>(isFirebaseConfigured());
@@ -269,6 +277,21 @@ export default function BrickOSMusicStudioWorkspace() {
   const [isSideNavOpen, setIsSideNavOpen] = useState<boolean>(true);
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState<boolean>(false);
   const [sideNavTab, setSideNavTab] = useState<'projects' | 'sessions' | 'assets'>('projects');
+  const sideNavWasOpenBeforeFocus = useRef(false);
+  const isSideNavOpenRef = useRef(isSideNavOpen);
+  isSideNavOpenRef.current = isSideNavOpen;
+
+  function handleToggleFocusMode() {
+    if (focusMode) {
+      setFocusMode(false);
+      setIsSideNavOpen(sideNavWasOpenBeforeFocus.current);
+      return;
+    }
+
+    sideNavWasOpenBeforeFocus.current = isSideNavOpenRef.current;
+    setFocusMode(true);
+    setIsSideNavOpen(false);
+  }
 
   // Initialize and synchronize with Firestore Database
   useEffect(() => {
@@ -1609,7 +1632,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
   });
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'} ${focusMode ? 'focus-mode' : ''}`}>
       
       {/* GLOBAL NOTIFICATION TOAST */}
       {copiedNotification && (
@@ -1712,7 +1735,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         </div>
 
         {/* Global Nav Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+        <div className="workspace-header-actions flex items-center gap-2 sm:gap-2.5 flex-wrap">
           <button
             onClick={() => setActiveTab('kanban')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
@@ -1769,80 +1792,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <span className="hidden md:inline">Co-Producer</span>
           </button>
 
-          {/* Side Navigation Panel Toggle: Projects */}
-          <button
-            onClick={() => {
-              if (isSideNavOpen && sideNavTab === 'projects') {
-                setIsSideNavOpen(false);
-              } else {
-                setSideNavTab('projects');
-                setIsSideNavOpen(true);
-                setIsSideNavCollapsed(false);
-              }
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isSideNavOpen && sideNavTab === 'projects'
-                ? 'bg-indigo-600 border-indigo-400 text-white shadow-indigo-950/60 shadow-md'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-            title="Open Projects & Catalog Navigation Panel"
-          >
-            <Disc className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Projects ({tracks.length})</span>
-            <span className="sm:hidden">Projects</span>
-          </button>
-
-          {/* Side Navigation Panel Toggle: Sessions */}
-          <button
-            onClick={() => {
-              if (isSideNavOpen && sideNavTab === 'sessions') {
-                setIsSideNavOpen(false);
-              } else {
-                setSideNavTab('sessions');
-                setIsSideNavOpen(true);
-                setIsSideNavCollapsed(false);
-              }
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isSideNavOpen && sideNavTab === 'sessions'
-                ? 'bg-purple-600 border-purple-400 text-white shadow-purple-950/60 shadow-md'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 hover:text-white border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-            title="Open Project Composition Sessions Manager"
-          >
-            <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Sessions ({sessions.length})</span>
-            <span className="sm:hidden">Sessions</span>
-          </button>
-
-          {/* Side Navigation Panel Toggle: Assets */}
-          <button
-            onClick={() => {
-              if (isSideNavOpen && sideNavTab === 'assets') {
-                setIsSideNavOpen(false);
-              } else {
-                setSideNavTab('assets');
-                setIsSideNavOpen(true);
-                setIsSideNavCollapsed(false);
-              }
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isSideNavOpen && sideNavTab === 'assets'
-                ? 'bg-cyan-600 border-cyan-400 text-white shadow-cyan-950/60 shadow-md'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-            title="Manage Studio Stems, Checkpoints & Media Assets"
-          >
-            <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden lg:inline">Assets</span>
-          </button>
-
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
@@ -1858,21 +1807,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           >
             <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
             <span className="hidden sm:inline">⚡ Suno Bridge</span>
-          </button>
-
-          {/* SECTION GUIDE & SOP BUTTON */}
-          <button
-            onClick={() => handleOpenSectionGuide(activeTab as StudioSectionId)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isDarkMode
-                ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50 shadow-amber-950/40'
-                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-            }`}
-            title="Open Interactive Section Guide & Nashville SOP Rules"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Guide & SOP</span>
-            <span className="sm:hidden">Guide</span>
           </button>
 
           {/* KEYBOARD SHORTCUTS CHEAT SHEET BUTTON */}
@@ -1895,19 +1829,19 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             </kbd>
           </button>
 
-          {/* 3-THEME SELECTOR: SUN / MOON / STARS */}
+          {/* Global Studio Theme Selector */}
           <div className="flex items-center gap-1 bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-xs flex-shrink-0">
             <StudioThemeSelector
               currentTheme={studioTheme}
               onSelectTheme={handleSelectTheme}
               variant="header"
-              showLabels={true}
+              showLabels={false}
             />
             <button
               type="button"
               onClick={() => setIsThemeModalOpen(true)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer"
-              title="Studio Theme Architecture: Compare Sun, Moon, and Stars (Shift+T)"
+              title="Studio Theme Architecture: Six palettes (Shift+T to cycle)"
               aria-label="Studio Theme Customizer"
             >
               <Palette className="w-3.5 h-3.5 text-amber-400" />
@@ -1917,24 +1851,18 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           {/* FOCUS MODE TOGGLE */}
           <button
             type="button"
-            onClick={() => {
-              setFocusMode(prev => {
-                const next = !prev;
-                if (next) setIsSideNavOpen(false);
-                return next;
-              });
-            }}
-            className={`p-2 rounded-xl border flex items-center gap-1 transition cursor-pointer ${
+            onClick={handleToggleFocusMode}
+            className={`focus-mode-toggle p-2 rounded-xl border flex items-center gap-1 transition cursor-pointer ${
               focusMode
                 ? 'bg-purple-900/60 text-purple-200 border-purple-500/50 shadow-xs'
                 : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'
             }`}
-            title="Focus Mode: Hides secondary sidebars to reduce visual clutter and fatigue"
-            aria-label="Toggle Focus Mode"
+            title={focusMode ? 'Exit Focus Mode and restore the previous sidebar state' : 'Focus Mode hides secondary navigation and utility controls'}
+            aria-label={focusMode ? 'Exit Focus Mode' : 'Enter Focus Mode'}
           >
             <Eye className="w-3.5 h-3.5 text-purple-400" />
             <span className="text-xs font-bold font-mono hidden xl:inline">
-              {focusMode ? 'Zen ON' : 'Focus'}
+              {focusMode ? 'Exit Focus' : 'Focus'}
             </span>
           </button>
         </div>
@@ -1988,8 +1916,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 onToggleCollapse={() => setIsSideNavCollapsed(!isSideNavCollapsed)}
                 onClose={() => setIsSideNavOpen(false)}
                 isDarkMode={isDarkMode}
-                studioTheme={studioTheme}
-                onSelectTheme={handleSelectTheme}
               />
             </div>
           </>
@@ -2003,17 +1929,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             <StudioWorkflowGuide
               activeTab={activeTab}
               onSelectTab={(tabKey) => setActiveTab(tabKey as any)}
-              theme={studioTheme}
-              onSelectTheme={handleSelectTheme}
               isDarkMode={isDarkMode}
-              focusMode={focusMode}
-              onToggleFocusMode={() => {
-                setFocusMode(prev => {
-                  const next = !prev;
-                  if (next) setIsSideNavOpen(false);
-                  return next;
-                });
-              }}
             />
           </div>
 
@@ -2027,7 +1943,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               }`}
             >
               <div className="space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="track-header-actions flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 rounded bg-indigo-900 text-indigo-300 font-mono text-xs font-bold">
                     {selectedTrack.id}
                   </span>
@@ -2222,7 +2138,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           )}
 
           {/* SOP TRACK LIFECYCLE STEPPER (NASHVILLE WORKFLOW PIPELINE) */}
-          {activeTab !== 'kanban' && (
+          {activeTab !== 'kanban' && !focusMode && (
             <TrackLifecycleStepper
               selectedTrack={selectedTrack}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
@@ -2274,25 +2190,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Studio Theme Selector (Sun • Moon • Stars) */}
-              <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
-                <StudioThemeSelector
-                  currentTheme={studioTheme}
-                  onSelectTheme={handleSelectTheme}
-                  variant="inline"
-                  showLabels={true}
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsThemeModalOpen(true)}
-                  className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer"
-                  title="Studio Theme Architecture & Swatches"
-                >
-                  <Palette className="w-3 h-3 text-amber-400" />
-                </button>
-              </div>
-
+            <div className="section-utility-actions flex items-center gap-2 flex-wrap">
               {/* Command Palette Button */}
               <button
                 type="button"
@@ -2306,37 +2204,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               >
                 <Terminal className="w-3 h-3 text-indigo-400" />
                 <span>Cmd+K</span>
-              </button>
-
-              {/* Shortcuts Cheat Sheet Button */}
-              <button
-                type="button"
-                onClick={openCheatSheet}
-                className={`p-1.5 rounded-lg text-xs transition cursor-pointer border ${
-                  isDarkMode
-                    ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                }`}
-                title="Keyboard Shortcuts Cheat Sheet (?)"
-              >
-                <Keyboard className="w-3.5 h-3.5" />
-              </button>
-
-              {/* Zen Mode Button */}
-              <button
-                type="button"
-                onClick={() => setIsZenMode(prev => !prev)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono transition flex items-center gap-1.5 cursor-pointer border ${
-                  isZenMode
-                    ? 'bg-amber-600 text-slate-950 font-bold border-amber-400'
-                    : isDarkMode
-                    ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                }`}
-                title="Toggle Zen Mode (Fullscreen Focus)"
-              >
-                <Eye className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">{isZenMode ? 'Zen Active' : 'Zen Focus'}</span>
               </button>
 
               {/* How To Use This Section & SOP */}
@@ -2385,9 +2252,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onOpenSectionGuide={handleOpenSectionGuide}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               isDarkMode={isDarkMode}
-              studioTheme={studioTheme}
-              onSelectTheme={handleSelectTheme}
-              onOpenThemeModal={() => setIsThemeModalOpen(true)}
             />
           )}
 
@@ -2556,8 +2420,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onOpenSectionGuide={handleOpenSectionGuide}
               isDarkMode={isDarkMode}
               studioTheme={studioTheme}
-              onSelectTheme={handleSelectTheme}
-              onOpenThemeModal={() => setIsThemeModalOpen(true)}
             />
           )}
 
@@ -3010,9 +2872,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         }}
         activeTab={activeTab}
         onToggleTheme={handleToggleTheme}
-        studioTheme={studioTheme}
-        onSelectTheme={handleSelectTheme}
-        onToggleZenMode={() => setIsZenMode(prev => !prev)}
+        onToggleFocusMode={handleToggleFocusMode}
         onOpenSectionGuide={(sec) => sec && handleOpenSectionGuide(sec as any)}
         onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}
         isDarkMode={isDarkMode}
@@ -3038,9 +2898,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         isSearching={isSearching}
         searchResult={searchResult}
         isDarkMode={isDarkMode}
-        studioTheme={studioTheme}
-        onSelectTheme={handleSelectTheme}
-        onOpenThemeModal={() => setIsThemeModalOpen(true)}
       />
 
       {/* 24-HOUR SELAH PRAYER GATE MODAL (NASHVILLE SOP RULE 1) */}

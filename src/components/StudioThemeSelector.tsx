@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Sparkles, Check } from 'lucide-react';
+import { Sun, Moon, Sparkles, Layers3, SlidersHorizontal, PanelsTopLeft } from 'lucide-react';
 import { StudioTheme } from '../types';
 
 export interface StudioThemeDefinition {
@@ -14,6 +14,7 @@ export interface StudioThemeDefinition {
   activeText: string;
   activeBorder: string;
   badge: string;
+  preview: { surface: string; panel: string; accent: string; text: string };
 }
 
 export const STUDIO_THEMES: StudioThemeDefinition[] = [
@@ -28,7 +29,8 @@ export const STUDIO_THEMES: StudioThemeDefinition[] = [
     activeBg: 'bg-amber-500',
     activeText: 'text-slate-950 font-black',
     activeBorder: 'border-amber-400',
-    badge: '☀️ Day'
+    badge: 'DAYLIGHT',
+    preview: { surface: '#f8fafc', panel: '#ffffff', accent: '#d97706', text: '#0f172a' }
   },
   {
     id: 'moon',
@@ -41,7 +43,8 @@ export const STUDIO_THEMES: StudioThemeDefinition[] = [
     activeBg: 'bg-indigo-600',
     activeText: 'text-white font-black',
     activeBorder: 'border-indigo-400',
-    badge: '🌙 Dark'
+    badge: 'OBSIDIAN',
+    preview: { surface: '#020617', panel: '#0f172a', accent: '#6366f1', text: '#f1f5f9' }
   },
   {
     id: 'stars',
@@ -54,7 +57,29 @@ export const STUDIO_THEMES: StudioThemeDefinition[] = [
     activeBg: 'bg-gradient-to-r from-purple-900 to-indigo-950',
     activeText: 'text-purple-200 font-black',
     activeBorder: 'border-purple-500/60',
-    badge: '✨ Twilight'
+    badge: 'TWILIGHT',
+    preview: { surface: '#0a0e1a', panel: '#141a2e', accent: '#a78bfa', text: '#cbd5e1' }
+  },
+  {
+    id: 'graphite', name: 'Graphite Studio', shortName: 'Graphite', tagline: 'Neutral Control Room',
+    description: 'A restrained charcoal interface with cool blue accents and clear separation between work surfaces.',
+    icon: Layers3, accentColor: 'text-sky-400', activeBg: 'bg-sky-700', activeText: 'text-white font-black',
+    activeBorder: 'border-sky-400', badge: 'GRAPHITE',
+    preview: { surface: '#171b22', panel: '#222832', accent: '#38bdf8', text: '#e5e7eb' }
+  },
+  {
+    id: 'console', name: 'Warm Console', shortName: 'Console', tagline: 'Warm Analog Desk',
+    description: 'A deep neutral console palette with subtle brass highlights for a calmer, hardware-inspired studio.',
+    icon: SlidersHorizontal, accentColor: 'text-amber-400', activeBg: 'bg-amber-600', activeText: 'text-white font-black',
+    activeBorder: 'border-amber-400', badge: 'WARM CONSOLE',
+    preview: { surface: '#191816', panel: '#28251f', accent: '#d6a75d', text: '#e7e2d8' }
+  },
+  {
+    id: 'clean', name: 'Clean Studio', shortName: 'Clean', tagline: 'Warm Neutral Light',
+    description: 'A professional light workspace with soft ivory surfaces, quiet borders, and crisp slate typography.',
+    icon: PanelsTopLeft, accentColor: 'text-blue-700', activeBg: 'bg-blue-700', activeText: 'text-white font-black',
+    activeBorder: 'border-blue-500', badge: 'CLEAN STUDIO',
+    preview: { surface: '#f3f1ec', panel: '#fffefa', accent: '#2563eb', text: '#1f2937' }
   }
 ];
 

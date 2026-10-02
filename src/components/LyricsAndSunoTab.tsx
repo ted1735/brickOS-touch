@@ -40,7 +40,6 @@ import {
   Grid,
   Trophy,
   Code,
-  Palette,
   Edit3,
   FolderEdit,
   Disc,
@@ -48,7 +47,7 @@ import {
   Undo2,
   Music
 } from 'lucide-react';
-import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset, StudioTheme, TrackTitleChangeHistoryRecord } from '../types';
+import { Track, AuditFeedbackRecord, TrackVersion, SOPRulesPackage, SoundPreset, TrackTitleChangeHistoryRecord } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { getLocalCachedSOPRules, saveSOPRulesToCloud, loadSOPRulesFromCloud } from '../lib/sopRulesStore';
 import { SOPRulesEditorModal } from './SOPRulesEditorModal';
@@ -57,7 +56,6 @@ import { SUNO_USERSCRIPT_CODE } from '../data/automationUserscripts';
 import { loadPresetsFromFirestore, subscribeToFirestorePresets, getLocalCachedPresets, isFirebaseConfigured } from '../lib/firebase';
 import { getNextVersionString } from '../utils/versioning';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
-import { StudioThemeSelector } from './StudioThemeSelector';
 
 interface LyricsAndSunoTabProps {
   track: Track;
@@ -66,9 +64,6 @@ interface LyricsAndSunoTabProps {
   onOpenSectionGuide?: (sectionId?: any) => void;
   onNavigateToTab?: (tab: string) => void;
   isDarkMode?: boolean;
-  studioTheme?: StudioTheme;
-  onSelectTheme?: (theme: StudioTheme) => void;
-  onOpenThemeModal?: () => void;
 }
 
 export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
@@ -78,9 +73,6 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   onOpenSectionGuide,
   onNavigateToTab,
   isDarkMode = true,
-  studioTheme = 'moon',
-  onSelectTheme,
-  onOpenThemeModal
 }) => {
   // Multi-pane comparison layout state (up to 3 panes side-by-side)
   const [paneCount, setPaneCount] = useState<1 | 2 | 3>(1);
@@ -783,28 +775,6 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Studio Theme Switcher in Lyrics Master Vault */}
-          {onSelectTheme && (
-            <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-              <StudioThemeSelector
-                currentTheme={studioTheme}
-                onSelectTheme={onSelectTheme}
-                variant="header"
-                showLabels={true}
-              />
-              {onOpenThemeModal && (
-                <button
-                  type="button"
-                  onClick={onOpenThemeModal}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                  title="Open Theme Architecture Details & Swatches"
-                >
-                  <Palette className="w-3.5 h-3.5 text-indigo-400" />
-                </button>
-              )}
-            </div>
-          )}
-
           <button
             type="button"
             onClick={() => setIsPresetLibraryOpen(true)}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Sparkles, Check, X, Palette, Eye, Keyboard, ShieldCheck } from 'lucide-react';
+import { Check, X, Palette, Keyboard, ShieldCheck } from 'lucide-react';
 import { StudioTheme } from '../types';
 import { STUDIO_THEMES, StudioThemeDefinition } from './StudioThemeSelector';
 
@@ -41,7 +41,7 @@ export const StudioThemeModal: React.FC<StudioThemeModalProps> = ({
                   Studio Theme Architecture
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-700/50">
-                  Universal 3-Theme Engine
+                  Six Studio Palettes
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -87,68 +87,32 @@ export const StudioThemeModal: React.FC<StudioThemeModalProps> = ({
                   <div className="space-y-3">
                     {/* Visual Swatch Preview Box */}
                     <div
-                      className={`h-24 rounded-xl border flex flex-col justify-between p-2.5 transition-all ${
-                        theme.id === 'sun'
-                          ? 'bg-slate-100 border-amber-300/80 text-slate-900 shadow-inner'
-                          : theme.id === 'stars'
-                          ? 'bg-[#0c1020] border-purple-500/50 text-slate-200 shadow-inner'
-                          : 'bg-[#020617] border-indigo-500/40 text-slate-100 shadow-inner'
-                      }`}
+                      className="h-24 rounded-xl border flex flex-col justify-between p-2.5 transition-all shadow-inner"
+                      style={{ backgroundColor: theme.preview.surface, borderColor: theme.preview.accent, color: theme.preview.text }}
                     >
                       <div className="flex items-center justify-between">
                         <span
-                          className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                            theme.id === 'sun'
-                              ? 'bg-amber-500/20 text-amber-800'
-                              : theme.id === 'stars'
-                              ? 'bg-purple-900/40 text-purple-300'
-                              : 'bg-indigo-900/40 text-indigo-300'
-                          }`}
+                          className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded"
+                          style={{ backgroundColor: `${theme.preview.accent}22`, color: theme.preview.accent }}
                         >
                           {theme.badge}
                         </span>
                         <div className="flex items-center gap-1">
                           <span
-                            className={`w-2 h-2 rounded-full ${
-                              theme.id === 'sun'
-                                ? 'bg-amber-500'
-                                : theme.id === 'stars'
-                                ? 'bg-purple-400'
-                                : 'bg-indigo-500'
-                            }`}
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: theme.preview.accent }}
                           />
                           <span
-                            className={`w-2 h-2 rounded-full ${
-                              theme.id === 'sun'
-                                ? 'bg-indigo-600'
-                                : theme.id === 'stars'
-                                ? 'bg-indigo-400'
-                                : 'bg-emerald-400'
-                            }`}
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: theme.preview.text }}
                           />
                         </div>
                       </div>
 
                       {/* Mini Mock UI representation */}
                       <div className="space-y-1">
-                        <div
-                          className={`h-2 rounded w-3/4 ${
-                            theme.id === 'sun'
-                              ? 'bg-slate-300'
-                              : theme.id === 'stars'
-                              ? 'bg-slate-700'
-                              : 'bg-slate-800'
-                          }`}
-                        />
-                        <div
-                          className={`h-2 rounded w-1/2 ${
-                            theme.id === 'sun'
-                              ? 'bg-amber-400/50'
-                              : theme.id === 'stars'
-                              ? 'bg-purple-500/40'
-                              : 'bg-indigo-500/40'
-                          }`}
-                        />
+                        <div className="h-2 rounded w-3/4" style={{ backgroundColor: theme.preview.panel }} />
+                        <div className="h-2 rounded w-1/2" style={{ backgroundColor: theme.preview.accent, opacity: 0.65 }} />
                       </div>
                     </div>
 

@@ -1,4 +1,4 @@
-export type StudioTheme = 'sun' | 'moon' | 'stars';
+export type StudioTheme = 'sun' | 'moon' | 'stars' | 'graphite' | 'console' | 'clean';
 
 export type TrackStatus = 
   | 'Idea / Concept' 
@@ -753,4 +753,3 @@ export interface WhiteboardCanvasDoc {
   createdAt: string;
   updatedAt: string;
 }
-

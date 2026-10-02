@@ -11,11 +11,8 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Eye,
   Info
 } from 'lucide-react';
-import { StudioTheme } from '../types';
-import { StudioThemeSelector } from './StudioThemeSelector';
 
 export interface WorkflowStage {
   step: number;
@@ -90,21 +87,13 @@ export const STUDIO_WORKFLOW_STAGES: WorkflowStage[] = [
 interface StudioWorkflowGuideProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
-  theme?: StudioTheme;
-  onSelectTheme?: (theme: StudioTheme) => void;
   isDarkMode?: boolean;
-  focusMode: boolean;
-  onToggleFocusMode: () => void;
 }
 
 export const StudioWorkflowGuide: React.FC<StudioWorkflowGuideProps> = ({
   activeTab,
   onSelectTab,
-  theme = 'moon',
-  onSelectTheme,
   isDarkMode = true,
-  focusMode,
-  onToggleFocusMode
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
@@ -166,18 +155,8 @@ export const StudioWorkflowGuide: React.FC<StudioWorkflowGuideProps> = ({
           </div>
         </div>
 
-        {/* Right Actions: Theme Selector, Next Step recommendation, Focus Mode, & Expand/Collapse */}
+        {/* Next step recommendation and workflow details */}
         <div className="flex items-center gap-2 ml-auto flex-wrap">
-          {/* Universal 3-Theme Selector */}
-          {onSelectTheme && (
-            <StudioThemeSelector
-              currentTheme={theme}
-              onSelectTheme={onSelectTheme}
-              variant="workflow"
-              showLabels={true}
-            />
-          )}
-
           {/* Quick "Next Recommended Step" Button */}
           {currentStage.step < 5 && (
             <button
@@ -189,20 +168,6 @@ export const StudioWorkflowGuide: React.FC<StudioWorkflowGuideProps> = ({
               <ArrowRight className="w-3 h-3 text-emerald-400" />
             </button>
           )}
-
-          {/* Focus Mode Toggle */}
-          <button
-            onClick={onToggleFocusMode}
-            className={`px-2 py-1 rounded-md text-[11px] font-mono transition flex items-center gap-1 cursor-pointer ${
-              focusMode
-                ? 'bg-purple-900/60 text-purple-200 border border-purple-600/50'
-                : 'text-slate-400 hover:text-slate-200 bg-slate-800/60'
-            }`}
-            title="Focus Mode hides extra secondary panels so you can work distraction-free"
-          >
-            <Eye className="w-3 h-3" />
-            <span className="hidden md:inline">{focusMode ? 'Focus: ON' : 'Focus Mode'}</span>
-          </button>
 
           {/* Expand/Collapse Toggle */}
           <button

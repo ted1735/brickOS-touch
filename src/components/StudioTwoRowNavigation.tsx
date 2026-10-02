@@ -78,8 +78,8 @@ interface StudioTwoRowNavigationProps {
   onOpenShortcutsCheatSheet?: () => void;
   onOpenCommandPalette?: () => void;
   onOpenCopilotDrawer?: () => void;
-  isZenMode?: boolean;
-  onToggleZenMode?: () => void;
+  isFocusMode?: boolean;
+  onToggleFocusMode?: () => void;
 }
 
 export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
@@ -90,8 +90,8 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
   onOpenShortcutsCheatSheet,
   onOpenCommandPalette,
   onOpenCopilotDrawer,
-  isZenMode = false,
-  onToggleZenMode
+  isFocusMode = false,
+  onToggleFocusMode
 }) => {
   // Phase Workflow Lens State
   const [activePhase, setActivePhase] = useState<StudioPhase>(() => {
@@ -300,21 +300,21 @@ export const StudioTwoRowNavigation: React.FC<StudioTwoRowNavigationProps> = ({
           )}
 
           {/* Zen / Focus Mode Toggle */}
-          {onToggleZenMode && (
+          {onToggleFocusMode && (
             <button
               type="button"
-              onClick={onToggleZenMode}
+              onClick={onToggleFocusMode}
               className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer shadow-xs ${
-                isZenMode
+                isFocusMode
                   ? 'bg-purple-600 text-white border-purple-400 shadow-purple-500/30'
                   : isDarkMode
                   ? 'bg-slate-900 hover:bg-slate-800 text-purple-300 border-slate-700'
                   : 'bg-white hover:bg-slate-100 text-purple-700 border-slate-300'
               }`}
-              title="Toggle Zen / Fullscreen Creative Focus Mode (Z)"
+              title="Toggle Focus Mode (Z)"
             >
               <Maximize2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isZenMode ? 'Exit Zen' : 'Zen'}</span>
+              <span className="hidden sm:inline">{isFocusMode ? 'Exit Focus' : 'Focus'}</span>
               <kbd className="px-1 py-0.2 rounded text-[9px] font-mono bg-purple-950/80 border border-purple-800 text-purple-300">
                 Z
               </kbd>

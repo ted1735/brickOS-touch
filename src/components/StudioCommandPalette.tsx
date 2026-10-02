@@ -16,6 +16,9 @@ import {
   HelpCircle,
   Sun,
   Moon,
+  Layers3,
+  SlidersHorizontal,
+  PanelsTopLeft,
   Maximize2,
   Grid,
   Columns,
@@ -36,7 +39,7 @@ interface StudioCommandPaletteProps {
   isDarkMode: boolean;
   studioTheme?: StudioTheme;
   onSelectTheme?: (theme: StudioTheme) => void;
-  onToggleZenMode?: () => void;
+  onToggleFocusMode?: () => void;
   onOpenCopilotDrawer?: () => void;
   onOpenSectionGuide?: (sectionId: string) => void;
 }
@@ -64,7 +67,7 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
   isDarkMode,
   studioTheme = 'moon',
   onSelectTheme,
-  onToggleZenMode,
+  onToggleFocusMode,
   onOpenCopilotDrawer,
   onOpenSectionGuide
 }) => {
@@ -138,14 +141,14 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
     },
     {
       id: 'action-zen',
-      title: 'Toggle Focus / Zen Workspace Mode',
+      title: 'Toggle Focus Mode',
       category: 'SOP & Quick Actions',
-      subtitle: 'Hide navigation and sidebars for 100% fullscreen creative focus',
+      subtitle: 'Hide secondary navigation and utility controls; press Z again to exit',
       icon: Maximize2,
       accentColor: 'text-purple-400',
       badge: 'Z',
       onSelect: () => {
-        if (onToggleZenMode) onToggleZenMode();
+        if (onToggleFocusMode) onToggleFocusMode();
         onClose();
       }
     },
@@ -192,13 +195,31 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
       }
     },
     {
+      id: 'action-theme-graphite', title: 'Theme: Graphite Studio', category: 'SOP & Quick Actions',
+      subtitle: 'Neutral charcoal surfaces with restrained cool blue accents', icon: Layers3,
+      accentColor: 'text-sky-400', badge: studioTheme === 'graphite' ? 'ACTIVE' : undefined,
+      onSelect: () => { onSelectTheme?.('graphite'); onClose(); }
+    },
+    {
+      id: 'action-theme-console', title: 'Theme: Warm Console', category: 'SOP & Quick Actions',
+      subtitle: 'Warm, hardware-inspired surfaces with muted brass accents', icon: SlidersHorizontal,
+      accentColor: 'text-amber-400', badge: studioTheme === 'console' ? 'ACTIVE' : undefined,
+      onSelect: () => { onSelectTheme?.('console'); onClose(); }
+    },
+    {
+      id: 'action-theme-clean', title: 'Theme: Clean Studio', category: 'SOP & Quick Actions',
+      subtitle: 'Warm neutral light surfaces with crisp slate typography', icon: PanelsTopLeft,
+      accentColor: 'text-blue-400', badge: studioTheme === 'clean' ? 'ACTIVE' : undefined,
+      onSelect: () => { onSelectTheme?.('clean'); onClose(); }
+    },
+    {
       id: 'action-theme-cycle',
-      title: `Cycle Theme (Sun ➔ Moon ➔ Stars)`,
+      title: 'Cycle Studio Theme',
       category: 'SOP & Quick Actions',
-      subtitle: `Current theme: ${studioTheme.toUpperCase()} • Press Alt+D to toggle`,
+      subtitle: `Current theme: ${studioTheme.toUpperCase()} • Press Shift+T to cycle`,
       icon: studioTheme === 'sun' ? Sun : studioTheme === 'stars' ? Sparkles : Moon,
       accentColor: 'text-amber-400',
-      badge: 'Alt+D',
+      badge: 'Shift+T',
       onSelect: () => {
         onToggleTheme();
         onClose();

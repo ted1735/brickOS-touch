@@ -46,12 +46,11 @@ import {
   AlertTriangle,
   Zap
 } from 'lucide-react';
-import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo, UniversalAssetItem, StudioTheme, NextcloudLogEntry, NextcloudFolderAsset, NextcloudSyncConfig, NextcloudAssetCategory } from '../types';
+import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo, UniversalAssetItem, NextcloudLogEntry, NextcloudFolderAsset, NextcloudSyncConfig, NextcloudAssetCategory } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studioNavigationData';
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
-import { StudioThemeSelector } from './StudioThemeSelector';
 import { getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { getSavedNextcloudConfig, saveNextcloudConfig, saveNextcloudAssets, autoMatchAssetToCatalog, buildNextcloudStreamUrl } from '../data/nextcloudFolderAssets';
 import { BrickOsBrandLogo } from './BrickOsBrandLogo';
@@ -86,8 +85,6 @@ interface SideNavigationPanelProps {
   onToggleCollapse: () => void;
   onClose?: () => void;
   isDarkMode?: boolean;
-  studioTheme?: StudioTheme;
-  onSelectTheme?: (theme: StudioTheme) => void;
 }
 
 export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
@@ -120,8 +117,6 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   onToggleCollapse,
   onClose,
   isDarkMode = true,
-  studioTheme = 'moon',
-  onSelectTheme
 }) => {
   // Search & Filter state for Projects
   const [projectSearch, setProjectSearch] = useState('');
@@ -2622,17 +2617,6 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 </span>
               </button>
             </div>
-
-            {/* Studio Universal 3-Theme Selector */}
-            {onSelectTheme && (
-              <div className="pt-2">
-                <StudioThemeSelector
-                  currentTheme={studioTheme}
-                  onSelectTheme={onSelectTheme}
-                  variant="sidebar"
-                />
-              </div>
-            )}
 
             {/* Nashville SOP Rules & Markdown Editor Shortcut */}
             <div className={`pt-2 border-t ${
