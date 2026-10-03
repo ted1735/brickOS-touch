@@ -431,6 +431,28 @@ All major milestones, song creations, and revision checkpoints in the studio inc
   - **System-Wide & Workspace Skills**:
     - Created `vite-react-click-audit` system-wide skill and custom `brickos-ui-ux-click-audit` workspace skill.
 
+---
+
+## [v3.1] — Real Nextcloud Audio Stems, Low-Pass Filter Treble Restoration, Solo Bus Routing & Audio Integrity
+- **Date**: 2026-10-02
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v3.1`**.
+  - **Full High-Frequency Treble Restoration (Removal of 350 Hz Low-Pass Filter)**:
+    - Fixed critical Web Audio bug in `audioEngine.ts` where default `BiquadFilterNode` instances defaulted to 350 Hz low-pass, causing audio to sound muffled and flat with no treble.
+    - Routed `mediaSource` directly into stereo panners and master gain stages, restoring full 20 Hz to 20,000+ Hz high-fidelity studio air, crisp transients, and crystal-clear vocal presence.
+    - Re-calibrated default master DSP chain (Parametric EQ, Tape Drive, VCA Compressor) to transparent flat initial states.
+  - **Complete Elimination of Synthetic Beep Oscillators**:
+    - Removed synthetic oscillator fallback blocks from `audioEngine.ts` and `SectionCriticalComparator.tsx`.
+    - Wired all 26+ catalog tracks directly to scanned FLAC/MP3/WAV assets from Nextcloud WebDAV (`/Music-Production/`).
+  - **Accurate Solo Stem Bus Routing & Live UI Indicators**:
+    - Overhauled `updateBusRouting` in `audioEngine.ts` to dynamically isolate stems by semantic type (`master`, `vocal`, `instrumental`, `suno`, `ref`) and explicitly mute deselected audio elements.
+    - Added live `SOLO ROUTED: [Filename]` status badge in `MasteringLufsSuite.tsx` displaying the exact 24-bit/48kHz WebDAV stream file being auditioned.
+    - Updated Mini-DAW 4-track mixer to preserve multi-track 4-channel sum mixing (`daw` / `all` mode).
+  - **Fast Refresh & Build Compliance**:
+    - Cleaned up React Fast Refresh module exports in `MiniDawMixerTab.tsx`.
+    - Verified production bundle passing with `npm run build` (0 errors).
+
 
 
 
