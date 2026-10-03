@@ -56,7 +56,7 @@ class MiniDawEngine {
     audioEl?: HTMLAudioElement;
     gain: GainNode;
     panner: StereoPannerNode;
-    filter: BiquadFilterNode;
+    filter?: BiquadFilterNode;
   }> = new Map();
   private audioBufferCache: Map<string, AudioBuffer> = new Map();
   private isMono: boolean = false;
@@ -86,38 +86,41 @@ class MiniDawEngine {
 
     // 1. Master Input Gain
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 0.85;
+    this.masterGain.gain.value = 0.95;
 
-    // 2. 3-Band Parametric EQ
+    // 2. 3-Band Parametric EQ (Crisp High-Fidelity Studio Curve)
     this.eqLowNode = this.ctx.createBiquadFilter();
     this.eqLowNode.type = 'lowshelf';
-    this.eqLowNode.frequency.value = 80; // 80 Hz Low Shelf
+    this.eqLowNode.frequency.value = 80;
+    this.eqLowNode.gain.value = 0;
 
     this.eqMidNode = this.ctx.createBiquadFilter();
     this.eqMidNode.type = 'peaking';
-    this.eqMidNode.frequency.value = 1000; // 1 kHz Bell
+    this.eqMidNode.frequency.value = 1000;
     this.eqMidNode.Q.value = 1.0;
+    this.eqMidNode.gain.value = 0;
 
     this.eqHighNode = this.ctx.createBiquadFilter();
     this.eqHighNode.type = 'highshelf';
-    this.eqHighNode.frequency.value = 10000; // 10 kHz High Shelf
+    this.eqHighNode.frequency.value = 10000; // 10 kHz High Air / Sparkle
+    this.eqHighNode.gain.value = 0;
 
-    // 3. Analog Tape Drive (Soft saturation wave shaper)
+    // 3. Analog Tape Drive (Transparent clean linear response unless engaged)
     this.tapeDriveNode = this.ctx.createWaveShaper();
-    this.tapeDriveNode.curve = this.makeDistortionCurve(15);
-    this.tapeDriveNode.oversample = '2x';
+    this.tapeDriveNode.curve = null;
+    this.tapeDriveNode.oversample = '4x';
 
-    // 4. Master Dynamics VCA Compressor
+    // 4. Master Dynamics VCA Compressor (Transparent by default)
     this.compressorNode = this.ctx.createDynamicsCompressor();
-    this.compressorNode.threshold.value = -18;
+    this.compressorNode.threshold.value = 0;
     this.compressorNode.knee.value = 6;
-    this.compressorNode.ratio.value = 2.5;
+    this.compressorNode.ratio.value = 1.0;
     this.compressorNode.attack.value = 0.02;
     this.compressorNode.release.value = 0.25;
 
     // 5. Makeup Gain
     this.makeupGainNode = this.ctx.createGain();
-    this.makeupGainNode.gain.value = 1.25;
+    this.makeupGainNode.gain.value = 1.0;
 
     // 5b. Correction Gain Node (for instant LUFS normalization & trimming)
     this.correctionGainNode = this.ctx.createGain();
@@ -125,27 +128,27 @@ class MiniDawEngine {
 
     // 5c. Precision Mastering Limiter (Brickwall Dynamics & Ceiling Guard)
     this.limiterNode = this.ctx.createDynamicsCompressor();
-    this.limiterNode.threshold.value = -1.0;
+    this.limiterNode.threshold.value = 0;
     this.limiterNode.knee.value = 0.0;
-    this.limiterNode.ratio.value = 20.0;
-    this.limiterNode.attack.value = 0.001; // 1ms brickwall attack
-    this.limiterNode.release.value = 0.05;  // 50ms transparent release
+    this.limiterNode.ratio.value = 1.0;
+    this.limiterNode.attack.value = 0.001;
+    this.limiterNode.release.value = 0.05;
 
     this.limiterCeilingGain = this.ctx.createGain();
-    this.limiterCeilingGain.gain.value = Math.pow(10, -1.0 / 20);
+    this.limiterCeilingGain.gain.value = 1.0;
 
-    // 6. Plate Reverb Simulation (Delay + Feedback + Lowpass filter matrix)
+    // 6. Plate Reverb Simulation (Dry by default unless mix is dialed up)
     this.reverbSendGain = this.ctx.createGain();
-    this.reverbSendGain.gain.value = 0.20;
+    this.reverbSendGain.gain.value = 0.0;
 
     this.reverbDelayNode = this.ctx.createDelay();
-    this.reverbDelayNode.delayTime.value = 0.045; // 45ms early reflections
+    this.reverbDelayNode.delayTime.value = 0.045;
 
     this.reverbFeedbackGain = this.ctx.createGain();
     this.reverbFeedbackGain.gain.value = 0.45;
 
     this.reverbReturnGain = this.ctx.createGain();
-    this.reverbReturnGain.gain.value = 0.35;
+    this.reverbReturnGain.gain.value = 0.0;
 
     // Connect Reverb loop
     this.reverbSendGain.connect(this.reverbDelayNode);
@@ -158,6 +161,7 @@ class MiniDawEngine {
     this.analyser.fftSize = 1024;
     this.analyser.minDecibels = -90;
     this.analyser.maxDecibels = -10;
+    this.analyser.smoothingTimeConstant = 0.82;
     this.analyser.smoothingTimeConstant = 0.82;
 
     // 8. ITU-R BS.1770 K-Weighting Loudness Filter Subgraph
@@ -1050,11 +1054,6 @@ class MiniDawEngine {
 
       const gain = this.ctx.createGain();
       const panner = this.ctx.createStereoPanner();
-      const filter = this.ctx.createBiquadFilter();
-      const extraOscs: OscillatorNode[] = [];
-      let lfoNode: OscillatorNode | undefined;
-      let primaryOsc: OscillatorNode | undefined;
-      let sourceNode: AudioBufferSourceNode | undefined;
 
       // Check if track has an audioUrl or webdavPath to stream real audio from Nextcloud
       let streamUrl = '';
@@ -1104,8 +1103,7 @@ class MiniDawEngine {
 
           try {
             const mediaSource = this.ctx.createMediaElementSource(audioEl);
-            mediaSource.connect(filter);
-            filter.connect(panner);
+            mediaSource.connect(panner);
             panner.connect(gain);
             gain.connect(this.masterGain);
             gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
@@ -1131,7 +1129,7 @@ class MiniDawEngine {
             });
           }
 
-          this.trackNodes.set(t.id, { audioEl, gain, panner, filter });
+          this.trackNodes.set(t.id, { audioEl, gain, panner });
           return;
         } catch (streamErr) {
           console.warn('[AudioEngine] Failed to stream audio directly:', streamErr);
@@ -1143,14 +1141,12 @@ class MiniDawEngine {
       gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
       panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
 
-      filter.connect(panner);
       panner.connect(gain);
       gain.connect(this.masterGain);
 
       this.trackNodes.set(t.id, {
         gain,
-        panner,
-        filter
+        panner
       });
     });
 
