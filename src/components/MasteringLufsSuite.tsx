@@ -98,7 +98,9 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
     autoMatchActive: false
   });
 
-  // UI Drawer / Modal Toggles
+  // UI Drawer / Modal / Sub-view Toggles
+  type MasteringSubView = 'metering' | 'targets' | 'presets' | 'all';
+  const [masteringSubView, setMasteringSubView] = useState<MasteringSubView>('metering');
   const [showSavePresetModal, setShowSavePresetModal] = useState<boolean>(false);
   const [newPresetName, setNewPresetName] = useState<string>('');
   const [newPresetCategory, setNewPresetCategory] = useState<MasteringCategory>('Streaming');
@@ -455,17 +457,57 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
         isDarkMode={isDarkMode}
       />
 
-      {/* A/B AUDITION BUS SELECTOR */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
-          <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Level-Matched Monitoring & A/B Bus Routing:</span>
-          </span>
-          <span className="text-[10px] font-mono text-slate-500">
-            Active: <strong className="text-indigo-300 uppercase">{activeBus}</strong> • Latency: 0ms (Web Audio Native)
-          </span>
+      {/* MASTERING WORKFLOW SUB-VIEW SELECTOR TABS */}
+      <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-900/90 border border-slate-800/80 p-1.5 rounded-2xl shadow-sm">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { id: 'metering', label: 'Live Meters & A/B Bus', icon: Activity, desc: 'Waveform, solo stems, real-time BS.1770 meters & phase' },
+            { id: 'targets', label: 'Streaming Targets & Trim', icon: Sliders, desc: 'Target LUFS profiles, 1-click auto-match & manual trim dB' },
+            { id: 'presets', label: 'Preset Chains & Quality Gate', icon: Sparkles, desc: '12-preset catalog, DSP parameters & Nashville checklist' },
+            { id: 'all', label: 'Full Console', icon: Layers, desc: 'View all mastering sections simultaneously' }
+          ].map((tab) => {
+            const isActive = masteringSubView === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setMasteringSubView(tab.id as any)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition cursor-pointer border ${
+                  isActive
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-950/60 ring-1 ring-indigo-400/40'
+                    : 'bg-slate-800/60 hover:bg-slate-800 text-slate-300 border-slate-700/60 hover:border-slate-600 hover:text-white'
+                }`}
+                title={tab.desc}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-indigo-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
+
+        <div className="text-[11px] font-mono text-slate-400 px-2 hidden md:flex items-center gap-2">
+          <span>Target: <strong className="text-emerald-400">{targetLufs} LUFS</strong></span>
+          <span>•</span>
+          <span>Ceiling: <strong className="text-indigo-300">{targetCeiling} dBTP</strong></span>
+        </div>
+      </div>
+
+      {/* A/B AUDITION BUS & REAL-TIME METERS SUB-VIEW */}
+      {(masteringSubView === 'metering' || masteringSubView === 'all') && (
+        <div className="space-y-4">
+          {/* A/B AUDITION BUS SELECTOR */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+              <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Radio className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Level-Matched Monitoring & A/B Bus Routing:</span>
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">
+                Active: <strong className="text-indigo-300 uppercase">{activeBus}</strong> • Latency: 0ms (Web Audio Native)
+              </span>
+            </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
           {[
@@ -790,125 +832,136 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+      </div>
+      )}
 
-          {/* LUFS TARGET PRESETS & 1-CLICK CORRECTION CONSOLE */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-                Target Standard Normalization & Correction:
-              </span>
+      {/* STREAMING TARGETS & CORRECTION CONSOLE SUB-VIEW */}
+      {(masteringSubView === 'targets' || masteringSubView === 'all') && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                Loudness Normalization Standards & Gain Matching
+              </h3>
+            </div>
 
-              {/* 1-Click Auto-Correct Button */}
+            {/* 1-Click Auto-Correct Button */}
+            <button
+              onClick={handleAutoCorrectLufs}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono transition flex items-center gap-1.5 shadow-md shadow-emerald-950 cursor-pointer"
+              title="Automatically compute gain delta and match to target LUFS"
+            >
+              <Zap className="w-3.5 h-3.5 fill-current" />
+              <span>Auto-Correct to {targetLufs} LUFS</span>
+            </button>
+          </div>
+
+          {/* Target Profile Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
+            {TARGET_LUFS_PROFILES.map((p) => (
               <button
-                onClick={handleAutoCorrectLufs}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono transition flex items-center gap-1.5 shadow-md shadow-emerald-950 cursor-pointer"
-                title="Automatically compute gain delta and match to target LUFS"
+                key={p.id}
+                onClick={() => handleSelectTargetProfile(p)}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  targetLufs === p.targetLufs && targetCeiling === p.ceiling
+                    ? 'bg-indigo-600/30 border-indigo-400 text-white shadow-xs ring-1 ring-indigo-400/40'
+                    : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:text-white hover:border-slate-600 hover:bg-slate-800/90'
+                }`}
               >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Auto-Correct to {targetLufs} LUFS</span>
+                <div className="font-bold truncate text-[12px]">{p.label}</div>
+                <div className="text-[11px] text-emerald-400 mt-1">
+                  {p.targetLufs} LUFS • {p.ceiling} dBTP
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Manual Gain Trim & Live AGC Strip */}
+          <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+            <div className="sm:col-span-8 flex items-center gap-3">
+              <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                Correction Gain:
+              </span>
+              <input
+                type="range"
+                min="-12"
+                max="12"
+                step="0.2"
+                value={manualTrimDb}
+                onChange={(e) => handleManualTrimChange(parseFloat(e.target.value))}
+                className="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <span className={`text-xs font-mono font-bold w-16 text-right ${
+                manualTrimDb > 0 ? 'text-emerald-400' : manualTrimDb < 0 ? 'text-rose-400' : 'text-slate-300'
+              }`}>
+                {manualTrimDb > 0 ? `+${manualTrimDb.toFixed(1)}` : manualTrimDb.toFixed(1)} dB
+              </span>
+              <button
+                onClick={handleResetCorrection}
+                className="text-[10px] font-mono text-slate-400 hover:text-amber-400 underline cursor-pointer shrink-0"
+              >
+                Reset
               </button>
             </div>
 
-            {/* Target Profile Pills */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-              {TARGET_LUFS_PROFILES.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleSelectTargetProfile(p)}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    targetLufs === p.targetLufs && targetCeiling === p.ceiling
-                      ? 'bg-indigo-600/30 border-indigo-400 text-white shadow-xs'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-                  }`}
-                >
-                  <div className="font-bold truncate text-[11px]">{p.label}</div>
-                  <div className="text-[10px] text-emerald-400 mt-0.5">
-                    {p.targetLufs} LUFS • {p.ceiling} dBTP
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Manual Gain Trim & Live AGC Strip */}
-            <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-              <div className="sm:col-span-8 flex items-center gap-3">
-                <span className="text-[11px] font-mono text-slate-400 shrink-0">
-                  Correction Gain:
-                </span>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  step="0.2"
-                  value={manualTrimDb}
-                  onChange={(e) => handleManualTrimChange(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-                <span className={`text-xs font-mono font-bold w-16 text-right ${
-                  manualTrimDb > 0 ? 'text-emerald-400' : manualTrimDb < 0 ? 'text-rose-400' : 'text-slate-300'
-                }`}>
-                  {manualTrimDb > 0 ? `+${manualTrimDb.toFixed(1)}` : manualTrimDb.toFixed(1)} dB
-                </span>
-                <button
-                  onClick={handleResetCorrection}
-                  className="text-[10px] font-mono text-slate-400 hover:text-amber-400 underline cursor-pointer shrink-0"
-                >
-                  Reset
-                </button>
-              </div>
-
-              {/* Live AGC Auto-Match Toggle */}
-              <div className="sm:col-span-4 flex justify-end">
-                <button
-                  onClick={handleToggleAutoMatch}
-                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1.5 border cursor-pointer ${
-                    autoMatchEnabled
-                      ? 'bg-emerald-950 text-emerald-300 border-emerald-600 shadow-xs'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                  }`}
-                  title="Continuously adjust gain in real-time to track target LUFS"
-                >
-                  <Activity className="w-3 h-3" />
-                  <span>{autoMatchEnabled ? 'Live AGC: ACTIVE' : 'Enable Live AGC Match'}</span>
-                </button>
-              </div>
+            {/* Live AGC Auto-Match Toggle */}
+            <div className="sm:col-span-4 flex justify-end">
+              <button
+                onClick={handleToggleAutoMatch}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                  autoMatchEnabled
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-600 shadow-xs'
+                    : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+                title="Continuously adjust gain in real-time to track target LUFS"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>{autoMatchEnabled ? 'Live AGC: ACTIVE' : 'Enable Live AGC Match'}</span>
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* MASTERING PRESETS RACK */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <Sparkles className="w-5 h-5 text-amber-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-              Professional Mastering Presets Catalog ({filteredPresets.length} Loaded)
-            </h3>
-            <span className="text-xs text-slate-400">
-              One-click studio caliber chains calibrated with specific EQ curves, VCA compression, and target LUFS.
-            </span>
-          </div>
+      {/* MASTERING PRESETS & QUALITY GATE SUB-VIEW */}
+      {(masteringSubView === 'presets' || masteringSubView === 'all') && (
+        <div className="space-y-5">
+          {/* MASTERING PRESETS RACK */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                    Professional Mastering Presets Catalog ({filteredPresets.length} Loaded)
+                  </h3>
+                </div>
+                <span className="text-xs text-slate-400 mt-0.5 block">
+                  One-click studio caliber chains calibrated with specific EQ curves, VCA compression, and target LUFS.
+                </span>
+              </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setShowSavePresetModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Save Current as Preset</span>
-            </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setShowSavePresetModal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Save Current as Preset</span>
+                </button>
 
-            <button
-              onClick={() => setShowDspDetails(!showDspDetails)}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700 cursor-pointer"
-            >
-              <span>{showDspDetails ? 'Hide DSP Parameters' : 'Show DSP Parameters'}</span>
-              {showDspDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-          </div>
-        </div>
+                <button
+                  onClick={() => setShowDspDetails(!showDspDetails)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                >
+                  <span>{showDspDetails ? 'Hide DSP Parameters' : 'Show DSP Parameters'}</span>
+                  {showDspDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+            </div>
 
         {/* Category Filter Pills & Search */}
         <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1092,6 +1145,8 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
           ))}
         </div>
       </div>
+      </div>
+      )}
 
       {/* SAVE CUSTOM PRESET MODAL */}
       {showSavePresetModal && (
