@@ -453,6 +453,23 @@ All major milestones, song creations, and revision checkpoints in the studio inc
     - Cleaned up React Fast Refresh module exports in `MiniDawMixerTab.tsx`.
     - Verified production bundle passing with `npm run build` (0 errors).
 
+---
+
+## [v3.2] — UI/UX Audit & Visual Fatigue Reduction: Header Decluttering & Softer Contrast
+- **Date**: 2026-10-02
+- **Author**: Ted Moyer / BRICK Records
+- **Milestone**:
+  - Incremented studio version to **`v3.2`**.
+  - **Header Decluttering & Dropdown Popover Theme Selector**:
+    - Converted 6-button horizontal theme bar into a sleek single-click popover dropdown with active icon indicator, reducing header footprint by 400px and eliminating top-bar visual noise.
+    - Added floating theme preview drawer with color swatch indicators, badges, and quick 1-click theme switching.
+  - **Softer Visual Contrast & Eye Strain Elimination**:
+    - Softened pitch-black cards (`#020617`) across Mastering Suite A/B bus selector and Mini-DAW mixer into comfortable midnight slate (`#0f172a` / `#1e293b`).
+    - Reduced harsh neon border glow to subtle 15-20% opacity borders (`border-slate-800/60`), eliminating visual glare during long critical listening and mixing sessions.
+  - **Click-Efficiency & Asset Navigation**:
+    - Preserved single-click icon auditioning for all audio assets and keyboard-driven lightbox navigation (`ArrowLeft` / `ArrowRight` / `Escape`).
+    - Verified build passes with 0 errors (`npm run build`).
+
 
 
 

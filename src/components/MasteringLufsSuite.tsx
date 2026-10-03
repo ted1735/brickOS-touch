@@ -478,17 +478,17 @@ export const MasteringLufsSuite: React.FC<MasteringLufsSuiteProps> = ({
             <button
               key={bus.id}
               onClick={() => handleSelectBus(bus.id as any)}
-              className={`p-3 rounded-xl border text-xs font-bold transition flex flex-col items-center gap-1 text-center cursor-pointer ${
+              className={`p-3 rounded-xl border text-xs font-bold transition-all duration-150 flex flex-col items-center gap-1 text-center cursor-pointer ${
                 activeBus === bus.id
-                  ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-950 ring-1 ring-indigo-400/50'
-                  : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/50'
+                  ? 'bg-indigo-600/90 border-indigo-400 text-white shadow-md shadow-indigo-950/50 ring-1 ring-indigo-400/40'
+                  : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:border-slate-600 hover:bg-slate-800/90'
               }`}
             >
               <div className="flex items-center gap-1.5">
                 <bus.icon className={`w-3.5 h-3.5 ${activeBus === bus.id ? 'text-white' : bus.color}`} />
                 <span>{bus.label}</span>
               </div>
-              <span className={`text-[10px] font-normal ${activeBus === bus.id ? 'text-indigo-100' : 'text-slate-500'}`}>
+              <span className={`text-[10px] font-normal ${activeBus === bus.id ? 'text-indigo-100' : 'text-slate-400'}`}>
                 {bus.sub}
               </span>
             </button>
