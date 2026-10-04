@@ -38,7 +38,8 @@ import {
   Trash2,
   Plus,
   ChevronLeft,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { Track, NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig, UniversalAssetItem } from '../types';
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
@@ -114,7 +115,13 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
 
   // Audio Stem Preview
   const [playingAssetId, setPlayingAssetId] = useState<string | null>(null);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [copiedPill, setCopiedPill] = useState('');
+
+  // Subscribe to audio engine loading / buffering states
+  useEffect(() => {
+    return audioMiniDaw.addLoadingListener(setIsAudioLoading);
+  }, []);
 
   // Persist config changes
   useEffect(() => {
@@ -478,7 +485,11 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         stemType = 'master';
       }
 
-      const matchedStem = getTrackStems(selectedTrack).find(s =>
+      const assetTrack = (asset.matchedTrackId && tracks.find(t => t.id === asset.matchedTrackId)) ||
+        (asset.linkedTrackIds && asset.linkedTrackIds.length > 0 && tracks.find(t => asset.linkedTrackIds!.includes(t.id))) ||
+        selectedTrack;
+
+      const matchedStem = getTrackStems(assetTrack).find(s =>
         s.name.toLowerCase().includes(fn) ||
         (s.webdavPath && s.webdavPath.toLowerCase().includes(fn))
       );
@@ -506,7 +517,9 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
           }
         ],
         bpm,
-        key
+        key,
+        assetTrack.id,
+        assetTrack.title
       );
       setPlayingAssetId(asset.id);
     }
@@ -1169,15 +1182,21 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                           }}
                           className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition group cursor-pointer border ${
                             playingAssetId === asset.id
-                              ? 'bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/40 shadow-sm'
+                              ? isAudioLoading
+                                ? 'bg-amber-500/30 text-amber-300 border-amber-400 ring-2 ring-amber-400/40 cursor-wait'
+                                : 'bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/40 shadow-sm'
                               : isDarkMode
                               ? 'bg-cyan-950/80 hover:bg-cyan-900 border-cyan-800/40 text-cyan-300'
                               : 'bg-cyan-50 hover:bg-cyan-100 border-cyan-200 text-cyan-700'
                           }`}
-                          title={playingAssetId === asset.id ? 'Pause Preview' : `Audition ${asset.filename} [Click icon]`}
+                          title={playingAssetId === asset.id ? (isAudioLoading ? 'Buffering Nextcloud audio...' : 'Pause Preview') : `Audition ${asset.filename} [Click icon]`}
                         >
                           {playingAssetId === asset.id ? (
-                            <Pause className="w-3.5 h-3.5 fill-current" />
+                            isAudioLoading ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Pause className="w-3.5 h-3.5 fill-current" />
+                            )
                           ) : (
                             <>
                               <Music className="w-3.5 h-3.5 group-hover:hidden" />

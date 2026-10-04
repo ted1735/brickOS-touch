@@ -45,7 +45,8 @@ import {
   Activity,
   AlertTriangle,
   Zap,
-  Eye
+  Eye,
+  Loader2
 } from 'lucide-react';
 import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo, UniversalAssetItem, NextcloudLogEntry, NextcloudFolderAsset, NextcloudSyncConfig, NextcloudAssetCategory } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
@@ -171,6 +172,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
     getTrackNextcloudAssets(selectedTrack.id, selectedTrack.title)
   );
   const [playingNcAssetId, setPlayingNcAssetId] = useState<string | null>(null);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+
+  // Subscribe to audio engine streaming loading state
+  useEffect(() => {
+    return audioMiniDaw.addLoadingListener(setIsAudioLoading);
+  }, []);
 
   // Sync ncAssets whenever track changes
   useEffect(() => {
@@ -2166,15 +2173,21 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           onClick={() => handleTogglePlayStem(stem.id)}
                           className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition group cursor-pointer border ${
                             playingStemId === stem.id
-                              ? 'bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/40 shadow-sm'
+                              ? isAudioLoading
+                                ? 'bg-amber-500/30 text-amber-300 border-amber-400 ring-2 ring-amber-400/40 cursor-wait'
+                                : 'bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/40 shadow-sm'
                               : isDarkMode
                               ? 'bg-slate-900 hover:bg-cyan-950/60 border-slate-800 hover:border-cyan-700/60 text-cyan-400'
                               : 'bg-slate-100 hover:bg-cyan-50 border-slate-200 text-cyan-600'
                           }`}
-                          title={playingStemId === stem.id ? 'Pause Stem' : `Audition ${stem.name} [Click icon]`}
+                          title={playingStemId === stem.id ? (isAudioLoading ? 'Buffering Nextcloud audio...' : 'Pause Stem') : `Audition ${stem.name} [Click icon]`}
                         >
                           {playingStemId === stem.id ? (
-                            <Pause className="w-3.5 h-3.5 fill-current" />
+                            isAudioLoading ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Pause className="w-3.5 h-3.5 fill-current" />
+                            )
                           ) : (
                             <>
                               <Music className="w-3.5 h-3.5 group-hover:hidden" />
@@ -2295,15 +2308,21 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                               onClick={() => handleTogglePlayNcAsset(asset)}
                               className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition group cursor-pointer border ${
                                 isPlayingThis
-                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 ring-2 ring-emerald-400/40 shadow-sm'
+                                  ? isAudioLoading
+                                    ? 'bg-amber-500/30 text-amber-300 border-amber-400 ring-2 ring-amber-400/40 cursor-wait'
+                                    : 'bg-emerald-500 text-slate-950 border-emerald-400 ring-2 ring-emerald-400/40 shadow-sm'
                                   : isDarkMode
                                   ? 'bg-slate-900 hover:bg-emerald-950/60 border-slate-800 hover:border-emerald-700/60 text-emerald-400'
                                   : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
                               }`}
-                              title={isPlayingThis ? 'Pause Audio Preview' : `Audition ${asset.filename} [Click icon]`}
+                              title={isPlayingThis ? (isAudioLoading ? 'Buffering Nextcloud audio...' : 'Pause Audio Preview') : `Audition ${asset.filename} [Click icon]`}
                             >
                               {isPlayingThis ? (
-                                <Pause className="w-3.5 h-3.5 fill-current" />
+                                isAudioLoading ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Pause className="w-3.5 h-3.5 fill-current" />
+                                )
                               ) : (
                                 <>
                                   <Music className="w-3.5 h-3.5 group-hover:hidden" />

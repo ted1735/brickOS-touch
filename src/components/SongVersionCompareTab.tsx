@@ -30,6 +30,7 @@ import { VisionBoardCanvas } from './VisionBoardCanvas';
 import { SectionCriticalComparator } from './SectionCriticalComparator';
 import { AudioComparisonABC } from './AudioComparisonABC';
 import { songVersionsCatalog } from '../data/songVersionsCatalog';
+import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
 import { Track } from '../types';
 
 export interface SongVersion {
@@ -41,6 +42,7 @@ export interface SongVersion {
 
 interface SongVersionCompareTabProps {
   activeTrack?: Track;
+  onSelectTrack?: (track: Track) => void;
   onUpdateTrackLyrics?: (lyrics: string, versionTag: string) => void;
   onNavigateToTab?: (tab: string) => void;
   isDarkMode?: boolean;
@@ -80,6 +82,7 @@ function computeLineDiff(currentText: string, referenceText: string): DiffLine[]
 
 export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   activeTrack,
+  onSelectTrack,
   onUpdateTrackLyrics,
   onNavigateToTab,
   isDarkMode = true,
@@ -91,6 +94,16 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   const [viewMode, setViewMode] = useState<'audio' | 'sections' | 'edit' | 'cards' | 'diff' | 'board'>('audio');
   const [syncScroll, setSyncScroll] = useState<boolean>(true);
   const [copiedCol, setCopiedCol] = useState<number | null>(null);
+
+  // Derive the active Track object for the currently selected song in the matrix
+  const effectiveTrack: Track = React.useMemo(() => {
+    if (activeTrack && activeTrack.id === selectedSongId) {
+      return activeTrack;
+    }
+    const foundInCanonical = CANONICAL_TRACKS.find(t => t.id === selectedSongId);
+    if (foundInCanonical) return foundInCanonical;
+    return activeTrack || CANONICAL_TRACKS[0];
+  }, [activeTrack, selectedSongId]);
 
   // AI Audit state
   const [isAiAuditOpen, setIsAiAuditOpen] = useState<boolean>(false);
@@ -134,9 +147,9 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
 
   // Synchronize with activeTrack if it matches one of the catalog IDs
   useEffect(() => {
-    if (activeTrack) {
+    if (activeTrack && activeTrack.id !== selectedSongId) {
+      setSelectedSongId(activeTrack.id);
       if (songVersionsCatalog && songVersionsCatalog[activeTrack.id]) {
-        setSelectedSongId(activeTrack.id);
         const catVersions = songVersionsCatalog[activeTrack.id].versions;
         if (catVersions && catVersions.length > 0) {
           setVersions(catVersions.slice(0, 3));
@@ -145,7 +158,7 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
     }
   }, [activeTrack?.id]);
 
-  // Handle switching songs from the catalog
+  // Handle switching songs from the catalog and immediately notify parent
   const handleSelectSong = (songId: string) => {
     setSelectedSongId(songId);
     if (songVersionsCatalog && songVersionsCatalog[songId]) {
@@ -153,6 +166,10 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
       if (catVersions && catVersions.length > 0) {
         setVersions(catVersions.slice(0, 3));
       }
+    }
+    const matchedTrack = CANONICAL_TRACKS.find(t => t.id === songId);
+    if (matchedTrack && onSelectTrack) {
+      onSelectTrack(matchedTrack);
     }
   };
 
@@ -458,7 +475,7 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
       {viewMode === 'audio' ? (
         <div className="flex-1 min-h-[660px] overflow-hidden">
           <AudioComparisonABC
-            activeTrack={activeTrack}
+            activeTrack={effectiveTrack}
             onNavigateToTab={onNavigateToTab}
             showToast={showToast}
             isDarkMode={isDarkMode}
@@ -467,22 +484,7 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
       ) : viewMode === 'sections' ? (
         <div className="flex-1 min-h-[620px] overflow-hidden">
           <SectionCriticalComparator
-            activeTrack={activeTrack || (songVersionsCatalog[selectedSongId] ? {
-              id: selectedSongId,
-              title: songVersionsCatalog[selectedSongId].title,
-              bpm: 120,
-              key: 'D Minor',
-              genre: 'Sovereign Production',
-              vocal: 'Studio Roster',
-              ep: 'EP 1: Restoration',
-              thesis: 'Sovereign Catalog Production',
-              status: 'Audio Master',
-              vocalCast: 'Studio Cast',
-              sunoPrompt: '',
-              negativePrompt: '',
-              engineSliders: { weirdness: 10, styleInfluence: 70, voiceAudio: 100 },
-              lyrics: versions[0]?.content || ''
-            } as any : undefined)}
+            activeTrack={effectiveTrack}
             versions={versions}
             onApplyCompositeMaster={(compositeLyrics, summary) => {
               // Apply composite master to column 3
@@ -512,10 +514,10 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
       ) : viewMode === 'board' ? (
         <VisionBoardCanvas
           initialLyrics={versions[2]?.content || versions[0]?.content || ''}
-          trackTitle={songVersionsCatalog[selectedSongId]?.title || activeTrack?.title}
-          bpm={activeTrack?.bpm || 128}
-          musicalKey={activeTrack?.key || 'Abm'}
-          genre={activeTrack?.genre || 'Christian Hip Hop / Worship'}
+          trackTitle={effectiveTrack.title}
+          bpm={effectiveTrack.bpm || 128}
+          musicalKey={effectiveTrack.key || 'Abm'}
+          genre={effectiveTrack.genre || 'Christian Hip Hop / Worship'}
           vocal={activeTrack?.vocal || 'Primary Vocal'}
           onCompileToLyrics={(compiled) => {
             setVersions(prev => {

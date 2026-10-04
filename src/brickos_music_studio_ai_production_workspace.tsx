@@ -789,11 +789,22 @@ export default function BrickOSMusicStudioWorkspace() {
 
   // Mini-DAW Mixer State
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [masterVolume, setMasterVolume] = useState(85);
   const [trackStates, setTrackStates] = useState<MixerTrack[]>(() => getTrackStems(selectedTrack));
 
+  // Listen for audio loading/buffering states from the audio engine
   useEffect(() => {
-    setTrackStates(getTrackStems(selectedTrack));
+    return audioMiniDaw.addLoadingListener(setIsLoadingAudio);
+  }, []);
+
+  useEffect(() => {
+    const stems = getTrackStems(selectedTrack);
+    setTrackStates(stems);
+    if (isPlaying) {
+      // Re-synchronize playback with the newly selected track's stems immediately
+      audioMiniDaw.startPlayback(stems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+    }
   }, [selectedTrack.id, selectedTrack.title]);
 
   // A/B Master Switcher State
@@ -811,7 +822,7 @@ export default function BrickOSMusicStudioWorkspace() {
     } else {
       audioMiniDaw.init();
       const currentStems = getTrackStems(selectedTrack);
-      audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key);
+      audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
       setIsPlaying(true);
       showToast(`Playing stem preview: "${selectedTrack.title}" (${selectedTrack.bpm} BPM) [Space]`, 'success');
     }
@@ -1338,7 +1349,7 @@ export default function BrickOSMusicStudioWorkspace() {
       setIsPlaying(false);
     } else {
       const stems = trackStates.length > 0 && trackStates[0].audioUrl ? trackStates : getTrackStems(selectedTrack);
-      audioMiniDaw.startPlayback(stems, selectedTrack.bpm, selectedTrack.key);
+      audioMiniDaw.startPlayback(stems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
       setIsPlaying(true);
     }
   };
@@ -2033,7 +2044,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                       const found = tracks.find(t => t.id === e.target.value);
                       if (found) {
                         setSelectedTrack(found);
-                        setActiveTab('lyrics');
                       }
                     }}
                     className={`border hover:border-indigo-500 rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-indigo-500 max-w-[220px] truncate cursor-pointer shadow-xs transition ${
@@ -2368,6 +2378,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
           {activeTab === 'version-matrix' && (
             <SongVersionCompareTab
               activeTrack={selectedTrack}
+              onSelectTrack={(t) => setSelectedTrack(t)}
               onUpdateTrackLyrics={(lyrics, versionTag) => {
                 handleTrackUpdate('lyrics', lyrics);
                 showToast(`Loaded ${versionTag || 'version'} into Lyric & Suno Studio!`, 'success');
@@ -2925,6 +2936,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       {/* PERSISTENT FLOATING AUDIO TRANSPORT */}
       <GlobalAudioTransport
         isPlaying={isPlaying}
+        isLoadingAudio={isLoadingAudio}
         onTogglePlayPause={handleTogglePlayPauseAudio}
         isMuted={isMutedAudio}
         onToggleMute={handleToggleMuteAudio}

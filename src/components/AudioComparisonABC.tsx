@@ -35,7 +35,8 @@ import {
   Plus,
   Minus,
   AlertCircle,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import { Track } from '../types';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -191,7 +192,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
 
   // Available Nextcloud audio assets for the active track
   const availableNextcloudAudioAssets = useMemo(() => {
-    const targetTrackId = activeTrack?.id || 'TRK-27';
+    const targetTrackId = activeTrack?.id || CANONICAL_TRACKS[0]?.id || 'TRK-01';
     const all = getTrackNextcloudAssets(targetTrackId, activeTrack?.title);
     return all.filter(a => Boolean(a.audioUrl) && (
       a.category.includes('AUDIO') ||
@@ -208,9 +209,9 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     // Attempt to pull versions from canonical track
     const targetTrack: Track = activeTrack || CANONICAL_TRACKS[0];
     const catVersions = songVersionsCatalog[targetTrack.id]?.versions || [];
-    const baseTitle = targetTrack.title || "The Work Ain't Done";
-    const bpm = targetTrack.bpm || 128;
-    const key = targetTrack.key || 'D Minor';
+    const baseTitle = targetTrack.title || targetTrack.id || "Master Comparison";
+    const bpm = targetTrack.bpm || 110;
+    const key = targetTrack.key || 'E Minor';
 
     const stems = getTrackStems(targetTrack);
     const audioAssets = availableNextcloudAudioAssets;
@@ -382,6 +383,53 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
   // Real Audio Elements Map for seamless streaming
   const audioElementsRef = useRef<{ [slotId: string]: HTMLAudioElement }>({});
 
+  // Real-time audio loading / buffering indicators to prevent impatient multi-clicks
+  const [loadingSlots, setLoadingSlots] = useState<{ [slotId: string]: boolean }>({});
+  const isAnySlotLoading = useMemo(() => Object.values(loadingSlots).some(Boolean), [loadingSlots]);
+
+  // When activeTrack?.id changes, halt and dispose old audio elements so old track NEVER keeps playing in background
+  useEffect(() => {
+    Object.values(audioElementsRef.current).forEach(el => {
+      try {
+        el.pause();
+        el.currentTime = 0;
+        el.src = '';
+        try { el.load(); } catch (_) {}
+      } catch (_) {}
+    });
+    audioElementsRef.current = {};
+    setLoadingSlots({});
+  }, [activeTrack?.id]);
+
+  // Attach audio loading, buffering, and ready listeners to prevent impatient clicks
+  const attachAudioLoadingListeners = useCallback((el: HTMLAudioElement, slotId: string) => {
+    if ((el as any)._hasLoadingListeners) return;
+    (el as any)._hasLoadingListeners = true;
+
+    const onWait = () => {
+      setLoadingSlots(prev => ({ ...prev, [slotId]: true }));
+    };
+    const onPlaying = () => {
+      setLoadingSlots(prev => ({ ...prev, [slotId]: false }));
+    };
+    const onEndedOrPause = () => {
+      setLoadingSlots(prev => ({ ...prev, [slotId]: false }));
+    };
+    const onError = () => {
+      setLoadingSlots(prev => ({ ...prev, [slotId]: false }));
+    };
+
+    el.addEventListener('waiting', onWait);
+    el.addEventListener('loadstart', () => {
+      if (!el.paused) setLoadingSlots(prev => ({ ...prev, [slotId]: true }));
+    });
+    el.addEventListener('canplay', onPlaying);
+    el.addEventListener('playing', onPlaying);
+    el.addEventListener('pause', onEndedOrPause);
+    el.addEventListener('ended', onEndedOrPause);
+    el.addEventListener('error', onError);
+  }, []);
+
   // Fallback audio URL resolver to guarantee real Nextcloud streaming
   const resolveSlotAudioUrl = useCallback((slotId: string, currentUrl?: string): string => {
     if (currentUrl && currentUrl.trim().length > 0) return currentUrl;
@@ -412,6 +460,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       el.crossOrigin = 'anonymous';
       el.preload = 'auto';
       audioElementsRef.current[slot.id] = el;
+      attachAudioLoadingListeners(el, slot.id);
     }
     const resolvedUrl = resolveSlotAudioUrl(slot.id, slot.audioBlobUrl);
     const currentLoaded = (el as any)._loadedAudioUrl;
@@ -421,7 +470,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       el.load();
     }
     return el;
-  }, [resolveSlotAudioUrl]);
+  }, [resolveSlotAudioUrl, attachAudioLoadingListeners]);
 
   // 1. Maintain and preload HTMLAudioElements only when slot audio URLs actually change
   useEffect(() => {
@@ -435,6 +484,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         el.crossOrigin = 'anonymous';
         el.preload = 'auto';
         audioElementsRef.current[slot.id] = el;
+        attachAudioLoadingListeners(el, slot.id);
       }
 
       // Check if URL actually changed using custom tracked property to prevent infinite reload loops
@@ -445,7 +495,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         el.load();
       }
     });
-  }, [slots.map(s => `${s.id}:${s.audioBlobUrl}`).join(','), resolveSlotAudioUrl]);
+  }, [slots.map(s => `${s.id}:${s.audioBlobUrl}`).join(','), resolveSlotAudioUrl, attachAudioLoadingListeners]);
 
   // 2. Synchronize Volume, Pan, Mute, and Exclusive Solo without interrupting audio flow
   useEffect(() => {
@@ -671,15 +721,22 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     });
   }, [slots, isDarkMode]);
 
-  // Handle Play/Pause for a specific slot with synchronous real audio streaming
+  // Handle Play/Pause for a specific slot with synchronous real audio streaming and loading tracking
   const handleTogglePlay = (slotId: string) => {
     ensureAudioGraph();
     const target = slots.find(s => s.id === slotId);
-    const nextPlayState = !target?.isPlaying;
+    if (!target) return;
+    const nextPlayState = !target.isPlaying;
 
     if (syncPlayback) {
       // When Sync Playback is ON, force all three audio tracks to start/stop simultaneously in lockstep
-      const referenceTime = target?.currentTimeSeconds ?? 0;
+      const referenceTime = target.currentTimeSeconds ?? 0;
+      if (nextPlayState) {
+        setLoadingSlots({ 'slot-a': true, 'slot-b': true, 'slot-c': true });
+      } else {
+        setLoadingSlots({});
+      }
+
       slots.forEach(s => {
         const el = getOrCreateAudioElement(s);
         let effectiveVol = s.volume;
@@ -696,7 +753,15 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
           if (syncPlayheads) {
             try { el.currentTime = referenceTime; } catch (_) {}
           }
-          el.play().catch(e => console.warn(`Slot ${s.id} sync play note:`, e));
+          const playPromise = el.play();
+          if (playPromise) {
+            playPromise.then(() => {
+              setLoadingSlots(prev => ({ ...prev, [s.id]: false }));
+            }).catch(e => {
+              console.warn(`Slot ${s.id} sync play note:`, e);
+              setLoadingSlots(prev => ({ ...prev, [s.id]: false }));
+            });
+          }
         } else {
           el.pause();
         }
@@ -711,23 +776,31 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     }
 
     // Independent playback per track when Sync Playback is OFF
-    if (target) {
-      const el = getOrCreateAudioElement(target);
-      let effectiveVol = target.volume;
-      if (loudnessMatchEnabled && target.lufsTrimDb) {
-        const trimFactor = Math.pow(10, target.lufsTrimDb / 20);
-        effectiveVol = effectiveVol * trimFactor;
-      }
-      el.volume = Math.max(0, Math.min(1, effectiveVol * 0.95));
-      el.muted = Boolean(activeSoloSlot && activeSoloSlot !== target.id) || target.isMuted;
-      el.loop = target.isLooping;
-      el.playbackRate = target.playbackRate || 1.0;
+    const el = getOrCreateAudioElement(target);
+    let effectiveVol = target.volume;
+    if (loudnessMatchEnabled && target.lufsTrimDb) {
+      const trimFactor = Math.pow(10, target.lufsTrimDb / 20);
+      effectiveVol = effectiveVol * trimFactor;
+    }
+    el.volume = Math.max(0, Math.min(1, effectiveVol * 0.95));
+    el.muted = Boolean(activeSoloSlot && activeSoloSlot !== target.id) || target.isMuted;
+    el.loop = target.isLooping;
+    el.playbackRate = target.playbackRate || 1.0;
 
-      if (nextPlayState) {
-        el.play().catch(e => console.warn(`Slot ${slotId} play note:`, e));
-      } else {
-        el.pause();
+    if (nextPlayState) {
+      setLoadingSlots(prev => ({ ...prev, [slotId]: true }));
+      const playPromise = el.play();
+      if (playPromise) {
+        playPromise.then(() => {
+          setLoadingSlots(prev => ({ ...prev, [slotId]: false }));
+        }).catch(e => {
+          console.warn(`Slot ${slotId} play note:`, e);
+          setLoadingSlots(prev => ({ ...prev, [slotId]: false }));
+        });
       }
+    } else {
+      el.pause();
+      setLoadingSlots(prev => ({ ...prev, [slotId]: false }));
     }
 
     setSlots(prev => prev.map(s => {
@@ -745,6 +818,12 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     const nextPlayState = !anyPlaying;
     const referenceTime = slots[0]?.currentTimeSeconds ?? 0;
 
+    if (nextPlayState) {
+      setLoadingSlots({ 'slot-a': true, 'slot-b': true, 'slot-c': true });
+    } else {
+      setLoadingSlots({});
+    }
+
     slots.forEach(s => {
       const el = getOrCreateAudioElement(s);
       let effectiveVol = s.volume;
@@ -761,7 +840,15 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         if (syncPlayheads) {
           try { el.currentTime = referenceTime; } catch (_) {}
         }
-        el.play().catch(e => console.warn(`Global sync play note for ${s.id}:`, e));
+        const playPromise = el.play();
+        if (playPromise) {
+          playPromise.then(() => {
+            setLoadingSlots(prev => ({ ...prev, [s.id]: false }));
+          }).catch(e => {
+            console.warn(`Global sync play note for ${s.id}:`, e);
+            setLoadingSlots(prev => ({ ...prev, [s.id]: false }));
+          });
+        }
       } else {
         el.pause();
       }
@@ -1170,20 +1257,46 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
             {/* Global Play / Pause All */}
             <button
               onClick={handleToggleGlobalPlay}
+              disabled={isAnySlotLoading}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-md ${
-                slots.some(s => s.isPlaying)
-                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
-                  : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                isAnySlotLoading
+                  ? 'bg-amber-500/80 text-slate-950 border border-amber-400 ring-2 ring-amber-400/50 cursor-wait'
+                  : slots.some(s => s.isPlaying)
+                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 cursor-pointer'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer'
               }`}
+              title={isAnySlotLoading ? 'Buffering Nextcloud audio stream... Please wait' : slots.some(s => s.isPlaying) ? 'Pause All' : 'Play All Sync'}
             >
-              {slots.some(s => s.isPlaying) ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span>{slots.some(s => s.isPlaying) ? 'Pause All' : 'Play All Sync'}</span>
+              {isAnySlotLoading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                  <span>Buffering Stream...</span>
+                </>
+              ) : slots.some(s => s.isPlaying) ? (
+                <>
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  <span>Pause All</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Play All Sync</span>
+                </>
+              )}
             </button>
+
+            {/* Active Buffering Indicator Badge */}
+            {isAnySlotLoading && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-mono animate-pulse shadow-xs">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                <span className="truncate max-w-[200px]">Loading Nextcloud audio...</span>
+              </div>
+            )}
 
             {/* Rewind All */}
             <button
               onClick={() => handleRewind()}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
               title="Rewind all tracks to 00:00.0"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -1297,13 +1410,18 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                 <button
                   key={targetSlot.id}
                   onClick={() => handleSoloSlot(targetSlot.id)}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
                     isSolo
                       ? `${targetSlot.colorScheme.bg} ${targetSlot.colorScheme.border} ${targetSlot.colorScheme.primary} shadow-md ring-1 ring-current`
                       : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border-slate-700'
                   }`}
+                  title={loadingSlots[targetSlot.id] ? 'Buffering Nextcloud audio...' : `Audition ${displayLabel}`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-current"></span>
+                  {loadingSlots[targetSlot.id] ? (
+                    <Loader2 className="w-2.5 h-2.5 animate-spin text-amber-400" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-current"></span>
+                  )}
                   <span>{displayLabel}</span>
                   <span className="text-[9px] px-1 py-0.2 rounded bg-black/30 font-mono">
                     [{idx + 1}]
@@ -1413,21 +1531,32 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                 <div className="flex items-center space-x-2.5">
                   <button
                     type="button"
-                    onClick={() => handleTogglePlay(displaySlot.id)}
+                    onClick={() => {
+                      if (!loadingSlots[displaySlot.id]) {
+                        handleTogglePlay(displaySlot.id);
+                      }
+                    }}
+                    disabled={loadingSlots[displaySlot.id]}
                     className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center font-mono shadow-sm transition group cursor-pointer border ${
-                      displaySlot.isPlaying
+                      loadingSlots[displaySlot.id]
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400 ring-2 ring-amber-400/50 cursor-wait'
+                        : displaySlot.isPlaying
                         ? 'bg-amber-500 text-slate-950 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
                         : isSoloActive
                         ? 'bg-indigo-600 text-white border-indigo-400'
                         : 'bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white border-slate-700'
                     }`}
                     title={
-                      displaySlot.isPlaying
+                      loadingSlots[displaySlot.id]
+                        ? `Buffering Nextcloud audio for Take ${letter}... Please wait`
+                        : displaySlot.isPlaying
                         ? `Pause Take ${letter} [Space]`
                         : `Play / Audition Take ${letter} [Click icon or Space]`
                     }
                   >
-                    {displaySlot.isPlaying ? (
+                    {loadingSlots[displaySlot.id] ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    ) : displaySlot.isPlaying ? (
                       <Pause className="w-3.5 h-3.5 fill-current" />
                     ) : (
                       <>

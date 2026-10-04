@@ -12,12 +12,14 @@ import {
   X,
   Music,
   Activity,
-  RotateCcw
+  RotateCcw,
+  Loader2
 } from 'lucide-react';
 import { Track } from '../types';
 
 interface GlobalAudioTransportProps {
   isPlaying: boolean;
+  isLoadingAudio?: boolean;
   onTogglePlayPause: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
@@ -33,6 +35,7 @@ interface GlobalAudioTransportProps {
 
 export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
   isPlaying,
+  isLoadingAudio = false,
   onTogglePlayPause,
   isMuted,
   onToggleMute,
@@ -50,10 +53,10 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
 
   // If user hits play via Space or UI, automatically un-dismiss the transport
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying || isLoadingAudio) {
       setIsDismissed(false);
     }
-  }, [isPlaying]);
+  }, [isPlaying, isLoadingAudio]);
 
   if (isDismissed) return null;
 
@@ -75,19 +78,32 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onTogglePlayPause();
+              if (!isLoadingAudio) onTogglePlayPause();
             }}
+            disabled={isLoadingAudio}
             className={`w-7 h-7 rounded-full flex items-center justify-center transition ${
-              isPlaying ? 'bg-amber-500 text-slate-950' : 'bg-indigo-600 text-white'
+              isLoadingAudio
+                ? 'bg-amber-500/90 text-slate-950 ring-2 ring-amber-400/50 cursor-wait'
+                : isPlaying
+                ? 'bg-amber-500 text-slate-950'
+                : 'bg-indigo-600 text-white'
             }`}
-            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            title={isLoadingAudio ? 'Buffering Nextcloud audio stream...' : isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
-            {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
+            {isLoadingAudio ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : isPlaying ? (
+              <Pause className="w-3.5 h-3.5 fill-current" />
+            ) : (
+              <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+            )}
           </button>
 
           <div className="flex items-center gap-1.5 text-xs font-bold">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="max-w-[140px] truncate">{selectedTrack.title}</span>
+            <span className={`w-2 h-2 rounded-full ${isLoadingAudio ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'}`} />
+            <span className="max-w-[140px] truncate">
+              {isLoadingAudio ? 'Buffering...' : selectedTrack.title}
+            </span>
           </div>
 
           <button
@@ -129,7 +145,7 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
                   {selectedTrack.id}
                 </span>
-                <span className="text-xs font-bold tracking-tight truncate max-w-[160px] sm:max-w-[200px]">
+                <span className="text-xs font-bold tracking-tight truncate max-w-[160px] sm:max-w-[200px]" title={selectedTrack.title}>
                   {selectedTrack.title}
                 </span>
               </div>
@@ -179,7 +195,7 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
           </div>
         </div>
 
-        {/* Middle: Playback Transport Buttons & Waveform Pulse */}
+        {/* Middle: Playback Transport Buttons & Volume */}
         <div className="flex items-center justify-between gap-3">
           {/* Track Steppers & Play Button */}
           <div className="flex items-center gap-1.5">
@@ -196,15 +212,31 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
             </button>
 
             <button
-              onClick={onTogglePlayPause}
-              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition cursor-pointer ${
-                isPlaying
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+              onClick={() => {
+                if (!isLoadingAudio) onTogglePlayPause();
+              }}
+              disabled={isLoadingAudio}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition select-none ${
+                isLoadingAudio
+                  ? 'bg-amber-500/90 text-slate-950 ring-2 ring-amber-400/50 cursor-wait'
+                  : isPlaying
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40 cursor-pointer'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30 cursor-pointer'
               }`}
-              title="Play / Pause Stem Preview (Space)"
+              title={
+                isLoadingAudio
+                  ? 'Buffering Nextcloud audio stream... Please wait'
+                  : isPlaying
+                  ? 'Pause Stem Preview (Space)'
+                  : 'Play Stem Preview (Space)'
+              }
             >
-              {isPlaying ? (
+              {isLoadingAudio ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  <span>Buffering...</span>
+                </>
+              ) : isPlaying ? (
                 <>
                   <Pause className="w-4 h-4 fill-current" />
                   <span>Pause</span>
@@ -258,16 +290,24 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
           </div>
         </div>
 
+        {/* Loading / Buffering Banner */}
+        {isLoadingAudio && (
+          <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-amber-500/30 text-[10px] font-mono text-amber-300 bg-amber-950/40 px-2.5 py-1 rounded-lg animate-pulse">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+            <span className="truncate">Connecting to Nextcloud WebDAV stream for {selectedTrack.id}...</span>
+          </div>
+        )}
+
         {/* Live Audio Visualizer Bar */}
-        {isPlaying && (
+        {isPlaying && !isLoadingAudio && (
           <div className="flex items-center justify-between gap-1 mt-2.5 pt-2 border-t border-slate-800/60">
-            <span className="text-[9px] font-mono text-emerald-400 font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>4-TRACK STEM ENGINE LIVE</span>
+            <span className="text-[9px] font-mono text-emerald-400 font-bold flex items-center gap-1 truncate max-w-[210px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="truncate">LIVE: {selectedTrack.id} {selectedTrack.title}</span>
             </span>
 
             {/* EQ Level Animation Bars */}
-            <div className="flex items-end gap-0.5 h-3.5">
+            <div className="flex items-end gap-0.5 h-3.5 shrink-0">
               {[60, 90, 45, 100, 75, 50, 85, 95].map((height, i) => (
                 <span
                   key={i}

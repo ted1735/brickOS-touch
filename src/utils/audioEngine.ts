@@ -6,7 +6,10 @@ class MiniDawEngine {
   private ctx: AudioContext | null = null;
   private isRunning: boolean = false;
   private isLoadingAudio: boolean = false;
+  private pendingStreams: number = 0;
   private loadingListeners: Set<(loading: boolean) => void> = new Set();
+  private activeTrackId: string | null = null;
+  private activeTrackTitle: string | null = null;
   private masterGain: GainNode | null = null;
   private eqLowNode: BiquadFilterNode | null = null;
   private eqMidNode: BiquadFilterNode | null = null;
@@ -67,12 +70,33 @@ class MiniDawEngine {
     return this.isLoadingAudio;
   }
 
+  public getActiveTrackId(): string | null {
+    return this.activeTrackId;
+  }
+
+  public getActiveTrackTitle(): string | null {
+    return this.activeTrackTitle;
+  }
+
   public addLoadingListener(cb: (loading: boolean) => void): () => void {
     this.loadingListeners.add(cb);
     return () => this.loadingListeners.delete(cb);
   }
 
+  private incrementPendingStreams() {
+    this.pendingStreams++;
+    this.setIsLoadingAudio(true);
+  }
+
+  private decrementPendingStreams() {
+    this.pendingStreams = Math.max(0, this.pendingStreams - 1);
+    if (this.pendingStreams === 0) {
+      this.setIsLoadingAudio(false);
+    }
+  }
+
   private setIsLoadingAudio(loading: boolean) {
+    if (this.isLoadingAudio === loading) return;
     this.isLoadingAudio = loading;
     this.loadingListeners.forEach(cb => {
       try { cb(loading); } catch (_) {}
@@ -1034,7 +1058,7 @@ class MiniDawEngine {
     return buffer;
   }
 
-  public startPlayback(tracks: MixerTrack[], bpm: number = 78, songKey: string = 'G Major') {
+  public startPlayback(tracks: MixerTrack[], bpm: number = 78, songKey: string = 'G Major', trackId?: string, trackTitle?: string) {
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -1044,6 +1068,8 @@ class MiniDawEngine {
 
     this.stopPlayback();
     this.isRunning = true;
+    if (trackId) this.activeTrackId = trackId;
+    if (trackTitle) this.activeTrackTitle = trackTitle;
 
     // Compute key pitch frequencies dynamically for any key (G Major, D Minor, F# Minor, etc.)
     const keyInfo = this.parseKeyFrequencies(songKey);
@@ -1080,12 +1106,12 @@ class MiniDawEngine {
           audioEl.loop = true;
           audioEl.preload = 'auto';
 
-          this.setIsLoadingAudio(true);
+          this.incrementPendingStreams();
           let loaded = false;
           const handleReady = () => {
             if (!loaded) {
               loaded = true;
-              this.setIsLoadingAudio(false);
+              this.decrementPendingStreams();
             }
           };
 
@@ -1096,7 +1122,7 @@ class MiniDawEngine {
           });
           audioEl.addEventListener('error', (err) => {
             console.warn(`[AudioEngine] Stream loading warning for track ${t.id} (${t.name}):`, err);
-            this.setIsLoadingAudio(false);
+            handleReady();
           }, { once: true });
 
           const initialVol = t.muted ? 0 : (t.vol / 100) * 0.95;
@@ -1254,6 +1280,8 @@ class MiniDawEngine {
         if (node.audioEl) {
           node.audioEl.pause();
           node.audioEl.currentTime = 0;
+          node.audioEl.src = '';
+          try { node.audioEl.load(); } catch (_) {}
         }
         if (node.source) {
           try { node.source.stop(); node.source.disconnect(); } catch (_) {}
@@ -1261,6 +1289,7 @@ class MiniDawEngine {
       } catch (_) {}
     });
     this.trackNodes.clear();
+    this.pendingStreams = 0;
     this.setIsLoadingAudio(false);
     this.isRunning = false;
   }
