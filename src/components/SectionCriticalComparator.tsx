@@ -289,11 +289,16 @@ export const SectionCriticalComparator: React.FC<SectionCriticalComparatorProps>
         if (targetStem?.audioUrl) {
           if (!audioElRef.current) {
             audioElRef.current = new Audio();
-            audioElRef.current.loop = isLooping;
+            audioElRef.current.crossOrigin = 'anonymous';
+            audioElRef.current.preload = 'auto';
           }
-          if (audioElRef.current.src !== targetStem.audioUrl) {
+          const currentLoaded = (audioElRef.current as any)._loadedUrl;
+          if (currentLoaded !== targetStem.audioUrl) {
+            (audioElRef.current as any)._loadedUrl = targetStem.audioUrl;
             audioElRef.current.src = targetStem.audioUrl;
+            audioElRef.current.load();
           }
+          audioElRef.current.loop = isLooping;
           audioElRef.current.play().catch(err => console.warn('Audio play note:', err));
         }
       }

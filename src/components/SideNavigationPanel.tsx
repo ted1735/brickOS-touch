@@ -44,7 +44,8 @@ import {
   Check,
   Activity,
   AlertTriangle,
-  Zap
+  Zap,
+  Eye
 } from 'lucide-react';
 import { Track, TrackStatus, CompositionSession, GeneratedImage, GeneratedVideo, UniversalAssetItem, NextcloudLogEntry, NextcloudFolderAsset, NextcloudSyncConfig, NextcloudAssetCategory } from '../types';
 import { EP_COLLECTIONS } from '../data/canonicalCatalog';
@@ -499,8 +500,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         stemType = 'master';
       }
 
-      const webdavPath = asset.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename}`;
-      const audioUrl = buildNextcloudStreamUrl(webdavPath);
+      const matchedStem = getTrackStems(selectedTrack).find(s =>
+        s.name.toLowerCase().includes(fn) ||
+        (s.webdavPath && s.webdavPath.toLowerCase().includes(fn))
+      );
+      const webdavPath = asset.webdavPath || matchedStem?.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename}`;
+      const audioUrl = asset.audioUrl || matchedStem?.audioUrl || buildNextcloudStreamUrl(webdavPath);
 
       audioMiniDaw.startPlayback(
         [
@@ -519,7 +524,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             color: asset.color || '#06b6d4',
             audioUrl,
             webdavPath,
-            isRealAudio: true
+            isRealAudio: Boolean(audioUrl)
           }
         ],
         bpm,
@@ -589,20 +594,30 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
     }));
   });
 
-  // Keep customStems in sync whenever selectedTrack changes
+  // Keep customStems in sync whenever selectedTrack changes with guaranteed real audio URLs
   useEffect(() => {
+    const realStems = getTrackStems(selectedTrack);
     try {
       const saved = localStorage.getItem(`brickos_custom_stems_${selectedTrack.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setCustomStems(parsed);
+          const enriched = parsed.map((s, idx) => {
+            const real = realStems.find(r => r.id === s.id) || realStems[idx % realStems.length];
+            return {
+              ...s,
+              audioUrl: s.audioUrl || real?.audioUrl,
+              webdavPath: s.webdavPath || real?.webdavPath,
+              freq: s.freq || real?.freq,
+              waveType: s.waveType || real?.waveType
+            };
+          });
+          setCustomStems(enriched);
           return;
         }
       }
     } catch (_) {}
 
-    const realStems = getTrackStems(selectedTrack);
     setCustomStems(
       realStems.map((s, idx) => ({
         id: s.id,
@@ -619,7 +634,68 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         webdavPath: s.webdavPath
       }))
     );
-  }, [selectedTrack.id]);
+  }, [selectedTrack.id, selectedTrack.title]);
+
+  // Lightbox Image Viewer State with Arrow Key Navigation
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; title: string; index: number } | null>(null);
+
+  const allImagesForTrack = React.useMemo(() => {
+    const list: Array<{ url: string; title: string }> = [];
+    generatedImages.forEach(img => {
+      if (img.url) list.push({ url: img.url, title: img.prompt || img.name || selectedTrack.title });
+    });
+    ncAssets.forEach(a => {
+      if (
+        (a.category === 'VISUAL_ARTWORK' || a.filename.endsWith('.png') || a.filename.endsWith('.jpg') || a.filename.endsWith('.webp') || Boolean(a.previewImageUrl)) &&
+        (a.previewImageUrl || a.shareUrl)
+      ) {
+        list.push({ url: a.previewImageUrl || a.shareUrl, title: a.filename });
+      }
+    });
+    return list;
+  }, [generatedImages, ncAssets, selectedTrack.title]);
+
+  const handleOpenLightbox = (url: string, title: string) => {
+    const idx = allImagesForTrack.findIndex(item => item.url === url);
+    setLightboxImage({
+      url,
+      title,
+      index: idx >= 0 ? idx : 0
+    });
+  };
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxImage(null);
+      } else if (e.key === 'ArrowRight') {
+        setLightboxImage(prev => {
+          if (!prev || allImagesForTrack.length <= 1) return prev;
+          const nextIdx = (prev.index + 1) % allImagesForTrack.length;
+          return {
+            url: allImagesForTrack[nextIdx].url,
+            title: allImagesForTrack[nextIdx].title,
+            index: nextIdx
+          };
+        });
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxImage(prev => {
+          if (!prev || allImagesForTrack.length <= 1) return prev;
+          const prevIdx = (prev.index - 1 + allImagesForTrack.length) % allImagesForTrack.length;
+          return {
+            url: allImagesForTrack[prevIdx].url,
+            title: allImagesForTrack[prevIdx].title,
+            index: prevIdx
+          };
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxImage, allImagesForTrack]);
 
   const handleOpenEditImage = (img: GeneratedImage, mode: 'edit' | 'gemini' = 'edit') => {
     const item: UniversalAssetItem = {
@@ -812,12 +888,17 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
       setPlayingStemId(null);
     } else {
       audioMiniDaw.init();
-      const targetStem = customStems.find(s => s.id === stemId);
-      const stemType = targetStem?.type || 'vocal';
+      const realStems = getTrackStems(selectedTrack);
+      const targetStem = customStems.find(s => s.id === stemId) || realStems.find(s => s.id === stemId);
+      const fallbackRealStem = realStems.find(s => s.id === stemId) || realStems[0];
+      const audioUrl = targetStem?.audioUrl || fallbackRealStem?.audioUrl || (targetStem?.webdavPath ? buildNextcloudStreamUrl(targetStem.webdavPath) : '');
+      const webdavPath = targetStem?.webdavPath || fallbackRealStem?.webdavPath;
+
+      const stemType = (targetStem as any)?.type || fallbackRealStem?.stemType || 'vocal';
       const freq = targetStem?.freq || (stemType === 'drums' ? 120 : stemType === 'bass' ? 65 : 196);
       const waveType = targetStem?.waveType || (stemType === 'drums' ? 'square' : 'sawtooth');
 
-      // Play isolated authentic stem preview with physical modeling synthesis & track key
+      // Play isolated authentic stem preview with real Nextcloud audio
       audioMiniDaw.startPlayback(
         [
           {
@@ -833,8 +914,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
             waveType,
             stemType: stemType as any,
             color: targetStem?.color || '#06b6d4',
-            audioUrl: targetStem?.audioUrl,
-            webdavPath: targetStem?.webdavPath
+            audioUrl,
+            webdavPath,
+            isRealAudio: Boolean(audioUrl)
           }
         ],
         selectedTrack.bpm || 80,
@@ -2077,40 +2159,51 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
                       }`}
                     >
-                      <div className="space-y-0.5 min-w-0 pr-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`font-bold text-[11px] truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                            {stem.name}
-                          </span>
-                          {stem.linkedTrackIds && stem.linkedTrackIds.length > 0 && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950 border border-emerald-800/40 text-emerald-300 font-bold flex items-center gap-0.5">
-                              <LinkIcon className="w-2 h-2" />
-                              <span>+{stem.linkedTrackIds.length}</span>
-                            </span>
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        {/* Interactive Leading Icon Button: 1-Click Audition */}
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePlayStem(stem.id)}
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition group cursor-pointer border ${
+                            playingStemId === stem.id
+                              ? 'bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/40 shadow-sm'
+                              : isDarkMode
+                              ? 'bg-slate-900 hover:bg-cyan-950/60 border-slate-800 hover:border-cyan-700/60 text-cyan-400'
+                              : 'bg-slate-100 hover:bg-cyan-50 border-slate-200 text-cyan-600'
+                          }`}
+                          title={playingStemId === stem.id ? 'Pause Stem' : `Audition ${stem.name} [Click icon]`}
+                        >
+                          {playingStemId === stem.id ? (
+                            <Pause className="w-3.5 h-3.5 fill-current" />
+                          ) : (
+                            <>
+                              <Music className="w-3.5 h-3.5 group-hover:hidden" />
+                              <Play className="w-3.5 h-3.5 fill-current hidden group-hover:block ml-0.5" />
+                            </>
                           )}
-                        </div>
-                        <div className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5">
-                          <span>{stem.format}</span>
-                          <span>•</span>
-                          <span>{stem.size}</span>
+                        </button>
+
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`font-bold text-[11px] truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              {stem.name}
+                            </span>
+                            {stem.linkedTrackIds && stem.linkedTrackIds.length > 0 && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950 border border-emerald-800/40 text-emerald-300 font-bold flex items-center gap-0.5">
+                                <LinkIcon className="w-2 h-2" />
+                                <span>+{stem.linkedTrackIds.length}</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5">
+                            <span>{stem.format}</span>
+                            <span>•</span>
+                            <span>{stem.size}</span>
+                          </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePlayStem(stem.id)}
-                          className={`p-1.5 rounded-lg transition cursor-pointer ${
-                            playingStemId === stem.id
-                              ? 'bg-cyan-500 text-slate-950 font-bold'
-                              : isDarkMode
-                              ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300'
-                              : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200'
-                          }`}
-                          title={playingStemId === stem.id ? 'Pause Preview' : 'Audition Stem Preview'}
-                        >
-                          {playingStemId === stem.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                        </button>
                         <button
                           type="button"
                           onClick={() => handleOpenEditStem(stem)}
@@ -2181,7 +2274,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 <div className="space-y-1.5">
                   {ncAssets.map((asset) => {
                     const isLinked = (asset.linkedTrackIds && asset.linkedTrackIds.includes(selectedTrack.id)) || asset.matchedTrackId === selectedTrack.id || asset.isMatched;
-                    const isAudio = asset.category.includes('AUDIO') || asset.category.includes('STEM');
+                    const isAudio = asset.category.includes('AUDIO') || asset.category.includes('STEM') || asset.filename.endsWith('.flac') || asset.filename.endsWith('.wav') || asset.filename.endsWith('.mp3');
+                    const isImage = asset.category === 'VISUAL_ARTWORK' || asset.filename.endsWith('.png') || asset.filename.endsWith('.jpg') || asset.filename.endsWith('.webp') || Boolean(asset.previewImageUrl);
                     const isPlayingThis = playingNcAssetId === asset.id;
 
                     return (
@@ -2193,55 +2287,84 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                             : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
                         }`}
                       >
-                        <div className="space-y-0.5 min-w-0 pr-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`font-bold text-[11px] truncate max-w-[170px] ${
-                              isDarkMode ? 'text-white' : 'text-slate-900'
-                            }`} title={asset.filename}>
-                              {asset.filename}
-                            </span>
-                            <span className={`text-[8px] font-mono px-1 py-0.2 rounded font-bold border ${
-                              asset.category === 'MASTER_AUDIO'
-                                ? 'bg-amber-950 text-amber-300 border-amber-800/40'
-                                : asset.category === 'UVR5_VOCAL_STEM'
-                                ? 'bg-cyan-950 text-cyan-300 border-cyan-800/40'
-                                : asset.category === 'LYRIC_SOP_DOC'
-                                ? 'bg-indigo-950 text-indigo-300 border-indigo-800/40'
-                                : 'bg-slate-800 text-slate-300 border-slate-700'
-                            }`}>
-                              {asset.category.replace('UVR5_', '').replace('_STEM', '').replace('_AUDIO', '')}
-                            </span>
-                            {isLinked && (
-                              <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-950 border border-emerald-800/40 text-emerald-300 font-bold flex items-center gap-0.5">
-                                <CheckCircle2 className="w-2 h-2 text-emerald-400" />
-                                <span>Linked</span>
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          {/* Interactive Leading Icon Button: 1-Click Play or Lightbox View */}
+                          {isAudio ? (
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePlayNcAsset(asset)}
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition group cursor-pointer border ${
+                                isPlayingThis
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 ring-2 ring-emerald-400/40 shadow-sm'
+                                  : isDarkMode
+                                  ? 'bg-slate-900 hover:bg-emerald-950/60 border-slate-800 hover:border-emerald-700/60 text-emerald-400'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                              }`}
+                              title={isPlayingThis ? 'Pause Audio Preview' : `Audition ${asset.filename} [Click icon]`}
+                            >
+                              {isPlayingThis ? (
+                                <Pause className="w-3.5 h-3.5 fill-current" />
+                              ) : (
+                                <>
+                                  <Music className="w-3.5 h-3.5 group-hover:hidden" />
+                                  <Play className="w-3.5 h-3.5 fill-current hidden group-hover:block ml-0.5" />
+                                </>
+                              )}
+                            </button>
+                          ) : isImage ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenLightbox(asset.previewImageUrl || asset.shareUrl, asset.filename)}
+                              className="w-7 h-7 rounded-lg overflow-hidden shrink-0 transition group cursor-pointer border border-purple-500/40 hover:border-purple-400 bg-purple-950/30 flex items-center justify-center relative"
+                              title={`View ${asset.filename} in Lightbox (Use ← → Arrow keys to browse)`}
+                            >
+                              {asset.previewImageUrl ? (
+                                <img src={asset.previewImageUrl} alt={asset.filename} className="w-full h-full object-cover group-hover:opacity-50 transition" />
+                              ) : (
+                                <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                              )}
+                              <Eye className="w-3.5 h-3.5 text-white absolute inset-0 m-auto hidden group-hover:block drop-shadow" />
+                            </button>
+                          ) : (
+                            <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-slate-900 border border-slate-800 text-slate-400">
+                              <FileText className="w-3.5 h-3.5" />
+                            </div>
+                          )}
+
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`font-bold text-[11px] truncate max-w-[155px] ${
+                                isDarkMode ? 'text-white' : 'text-slate-900'
+                              }`} title={asset.filename}>
+                                {asset.filename}
                               </span>
-                            )}
-                          </div>
-                          <div className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5 truncate">
-                            <span>{asset.fileSizeFormatted || '15 KB'}</span>
-                            <span>•</span>
-                            <span className="truncate max-w-[150px]">{asset.webdavPath || '/Music-Production'}</span>
+                              <span className={`text-[8px] font-mono px-1 py-0.2 rounded font-bold border ${
+                                asset.category === 'MASTER_AUDIO'
+                                  ? 'bg-amber-950 text-amber-300 border-amber-800/40'
+                                  : asset.category === 'UVR5_VOCAL_STEM'
+                                  ? 'bg-cyan-950 text-cyan-300 border-cyan-800/40'
+                                  : asset.category === 'LYRIC_SOP_DOC'
+                                  ? 'bg-indigo-950 text-indigo-300 border-indigo-800/40'
+                                  : 'bg-slate-800 text-slate-300 border-slate-700'
+                              }`}>
+                                {asset.category.replace('UVR5_', '').replace('_STEM', '').replace('_AUDIO', '')}
+                              </span>
+                              {isLinked && (
+                                <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-950 border border-emerald-800/40 text-emerald-300 font-bold flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-2 h-2 text-emerald-400" />
+                                  <span>Linked</span>
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5 truncate">
+                              <span>{asset.fileSizeFormatted || '15 KB'}</span>
+                              <span>•</span>
+                              <span className="truncate max-w-[150px]">{asset.webdavPath || '/Music-Production'}</span>
+                            </div>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          {isAudio && (
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePlayNcAsset(asset)}
-                              className={`p-1.5 rounded-lg transition cursor-pointer ${
-                                isPlayingThis
-                                  ? 'bg-emerald-500 text-slate-950 font-bold'
-                                  : isDarkMode
-                                  ? 'bg-slate-800 hover:bg-slate-700 text-emerald-300'
-                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
-                              }`}
-                              title={isPlayingThis ? 'Pause Audio Preview' : 'Audition Stem Preview'}
-                            >
-                              {isPlayingThis ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                            </button>
-                          )}
                           <button
                             type="button"
                             onClick={() => handleToggleLinkNcAsset(asset.id)}
@@ -2377,7 +2500,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                           ? 'border-slate-800 bg-slate-950 hover:border-purple-500/80 shadow-md ring-1 ring-purple-500/10'
                           : 'border-slate-200 bg-slate-100 hover:border-purple-400 shadow-xs'
                       }`}
-                      onClick={() => handleOpenEditImage(img, 'edit')}
+                      onClick={() => handleOpenLightbox(img.url, img.prompt || img.name || selectedTrack.title)}
+                      title="Click to view in Lightbox (Use ← → Arrow keys to browse)"
                     >
                       <img src={img.url} alt={img.prompt} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
 
@@ -2683,6 +2807,95 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
         }}
         isDarkMode={isDarkMode}
       />
+
+      {/* FULLSCREEN LIGHTBOX MODAL WITH ARROW KEY NAVIGATION */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Bar with title, index, and close */}
+            <div className="w-full flex items-center justify-between pb-3 text-white text-xs font-mono">
+              <span className="truncate max-w-md font-bold">
+                {lightboxImage.title}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400">
+                  {lightboxImage.index + 1} of {allImagesForTrack.length}
+                </span>
+                <span className="text-[10px] text-slate-500 hidden sm:inline">
+                  (← → Arrow keys / Esc)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLightboxImage(null)}
+                  className="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition"
+                  title="Close (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Image viewport with left/right buttons */}
+            <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black max-h-[75vh] flex items-center justify-center">
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.title}
+                className="max-h-[75vh] max-w-full object-contain"
+              />
+
+              {allImagesForTrack.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxImage(prev => {
+                        if (!prev) return null;
+                        const prevIdx = (prev.index - 1 + allImagesForTrack.length) % allImagesForTrack.length;
+                        return {
+                          url: allImagesForTrack[prevIdx].url,
+                          title: allImagesForTrack[prevIdx].title,
+                          index: prevIdx
+                        };
+                      });
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/20 text-white cursor-pointer transition shadow-lg"
+                    title="Previous image (← Arrow key)"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxImage(prev => {
+                        if (!prev) return null;
+                        const nextIdx = (prev.index + 1) % allImagesForTrack.length;
+                        return {
+                          url: allImagesForTrack[nextIdx].url,
+                          title: allImagesForTrack[nextIdx].title,
+                          index: nextIdx
+                        };
+                      });
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/20 text-white cursor-pointer transition shadow-lg"
+                    title="Next image (→ Arrow key)"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

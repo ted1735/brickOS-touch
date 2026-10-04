@@ -34,12 +34,13 @@ import {
   FileText,
   Plus,
   Minus,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from 'lucide-react';
 import { Track } from '../types';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
 import { songVersionsCatalog } from '../data/songVersionsCatalog';
-import { ALL_CANONICAL_NEXTCLOUD_ASSETS } from '../data/nextcloudAssetIndex';
+import { ALL_CANONICAL_NEXTCLOUD_ASSETS, getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 
 export interface AudioTrackSlot {
   id: 'slot-a' | 'slot-b' | 'slot-c';
@@ -188,14 +189,64 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
   const [activeSoloSlot, setActiveSoloSlot] = useState<string | null>(null); // Quick exclusive A/B/C solo
   const [activeSectionRange, setActiveSectionRange] = useState<'full' | 'intro' | 'verse1' | 'chorus1' | 'bridge' | 'outro'>('full');
 
-  // Initial tracks initialization
+  // Available Nextcloud audio assets for the active track
+  const availableNextcloudAudioAssets = useMemo(() => {
+    const targetTrackId = activeTrack?.id || 'TRK-27';
+    const all = getTrackNextcloudAssets(targetTrackId, activeTrack?.title);
+    return all.filter(a => Boolean(a.audioUrl) && (
+      a.category.includes('AUDIO') ||
+      a.category.includes('STEM') ||
+      (a.mimeType && a.mimeType.includes('audio')) ||
+      a.filename.endsWith('.flac') ||
+      a.filename.endsWith('.wav') ||
+      a.filename.endsWith('.mp3')
+    ));
+  }, [activeTrack?.id, activeTrack?.title]);
+
+  // Initial tracks initialization with real Nextcloud streams
   const initialSlots = useMemo<AudioTrackSlot[]>(() => {
     // Attempt to pull versions from canonical track
-    const targetTrackId = activeTrack?.id || 'TRK-27';
-    const catVersions = songVersionsCatalog[targetTrackId]?.versions || [];
-    const baseTitle = activeTrack?.title || "The Work Ain't Done";
-    const bpm = activeTrack?.bpm || 128;
-    const key = activeTrack?.key || 'D Minor';
+    const targetTrack: Track = activeTrack || CANONICAL_TRACKS[0];
+    const catVersions = songVersionsCatalog[targetTrack.id]?.versions || [];
+    const baseTitle = targetTrack.title || "The Work Ain't Done";
+    const bpm = targetTrack.bpm || 128;
+    const key = targetTrack.key || 'D Minor';
+
+    const stems = getTrackStems(targetTrack);
+    const audioAssets = availableNextcloudAudioAssets;
+
+    const masterStem = stems.find(s => s.stemType === 'master') || stems[0];
+    const vocalStem = stems.find(s => s.stemType === 'vocal' || s.stemType === 'guitar') || stems[1] || masterStem;
+    const instStem = stems.find(s => s.stemType === 'drums' || s.stemType === 'organ' || s.stemType === 'piano' || s.stemType === 'bass') || stems[2] || masterStem;
+
+    const masterAudioUrl = masterStem?.audioUrl ||
+      audioAssets.find(a => a.category === 'MASTER_AUDIO')?.audioUrl ||
+      audioAssets[0]?.audioUrl || '';
+
+    const vocalAudioUrl = vocalStem?.audioUrl ||
+      audioAssets.find(a => a.category === 'UVR5_VOCAL_STEM')?.audioUrl ||
+      audioAssets[1]?.audioUrl ||
+      masterAudioUrl;
+
+    const instAudioUrl = instStem?.audioUrl ||
+      audioAssets.find(a => a.category === 'INSTRUMENTAL_STEM')?.audioUrl ||
+      audioAssets[2]?.audioUrl ||
+      masterAudioUrl;
+
+    const masterFile = masterStem?.webdavPath?.split('/').pop() ||
+      masterStem?.name ||
+      audioAssets[0]?.filename ||
+      `${baseTitle} Master Cut`;
+
+    const vocalFile = vocalStem?.webdavPath?.split('/').pop() ||
+      vocalStem?.name ||
+      audioAssets[1]?.filename ||
+      `${baseTitle} Vocal Stem`;
+
+    const instFile = instStem?.webdavPath?.split('/').pop() ||
+      instStem?.name ||
+      audioAssets[2]?.filename ||
+      `${baseTitle} Backing Bed Stem`;
 
     return [
       {
@@ -203,11 +254,13 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         slotLetter: 'A',
         label: 'Take A (Reference / Master)',
         title: baseTitle,
-        versionTag: catVersions[0]?.versionTag || 'v8.0 (Male K-Pop Radio Master)',
-        genre: 'Modern K-Pop / Future Bass',
+        versionTag: catVersions[0]?.versionTag || 'v8.0 (Master Audio Cut)',
+        genre: targetTrack.genre || 'Modern Production',
         bpm: bpm,
         key: key,
         sourceType: 'catalog',
+        fileName: masterFile,
+        audioBlobUrl: masterAudioUrl,
         durationSeconds: 218,
         currentTimeSeconds: 0,
         isPlaying: false,
@@ -224,7 +277,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         scores: { frequencyBalance: 9, dynamicRange: 8, vocalClarity: 9, lowEndControl: 9, emotionalImpact: 9 },
         pros: 'Massive transient punch on the 808 drop; crisp vocal presence in the upper-mid range.',
         cons: 'High-frequency supersaws are slightly aggressive; potential ear fatigue over extended listening.',
-        notes: 'Explosive high-energy supersaw drop. Sits forward in the mix with aggressive 808 transient punch.',
+        notes: 'Explosive high-energy mix. Sits forward in the mix with aggressive 808 transient punch.',
         isCrownedWinner: true,
         colorScheme: {
           primary: 'text-amber-400',
@@ -239,13 +292,15 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       {
         id: 'slot-b',
         slotLetter: 'B',
-        label: 'Take B (Nashville Radio Mix)',
+        label: 'Take B (Isolated Vocal / Radio Cut)',
         title: baseTitle,
-        versionTag: catVersions[1]?.versionTag || 'v6.0 (Nashville Folk-Hop Radio Master)',
-        genre: 'Blue-Collar Folk-Hop',
+        versionTag: catVersions[1]?.versionTag || 'v6.0 (Vocal / Stem Mix)',
+        genre: targetTrack.genre || 'Vocal Focus',
         bpm: bpm,
         key: key,
         sourceType: 'catalog',
+        fileName: vocalFile,
+        audioBlobUrl: vocalAudioUrl,
         durationSeconds: 218,
         currentTimeSeconds: 0,
         isPlaying: false,
@@ -260,9 +315,9 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         lufsTrimDb: +0.2,
         peakData: generateDeterministicPeaks(`${baseTitle}_TakeB_Radio`, 160),
         scores: { frequencyBalance: 9, dynamicRange: 9, vocalClarity: 8, lowEndControl: 8, emotionalImpact: 8 },
-        pros: 'Warm acoustic resonance; exceptional stereo separation between guitars, cello, and vocal.',
-        cons: 'Low-end sub lacks the club impact of Take A for heavy subwoofers.',
-        notes: 'Warm wooden acoustic resonance. Rich low-mids and intimate chest-voice vocal delivery.',
+        pros: 'Warm acoustic resonance; exceptional vocal clarity and dynamic separation.',
+        cons: 'Dry vocal requires gentle plate reverb for natural room integration.',
+        notes: 'UVR5 isolated vocal delivery with clean transients and high speech intelligibility.',
         isCrownedWinner: false,
         colorScheme: {
           primary: 'text-cyan-400',
@@ -277,13 +332,15 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       {
         id: 'slot-c',
         slotLetter: 'C',
-        label: 'Take C (Acoustic Blueprint)',
+        label: 'Take C (Backing Instrumental / Alt Cut)',
         title: baseTitle,
-        versionTag: catVersions[2]?.versionTag || 'v1.0 (Acoustic Nightshift Blueprint)',
-        genre: 'Raw Acoustic Blueprint',
+        versionTag: catVersions[2]?.versionTag || 'v1.0 (Instrumental Bed / Alt Take)',
+        genre: targetTrack.genre || 'Instrumental',
         bpm: bpm,
         key: key,
         sourceType: 'catalog',
+        fileName: instFile,
+        audioBlobUrl: instAudioUrl,
         durationSeconds: 218,
         currentTimeSeconds: 0,
         isPlaying: false,
@@ -298,9 +355,9 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         lufsTrimDb: +4.6, // Trim up to match -14 LUFS
         peakData: generateDeterministicPeaks(`${baseTitle}_TakeC_Acoustic`, 160),
         scores: { frequencyBalance: 8, dynamicRange: 10, vocalClarity: 8, lowEndControl: 7, emotionalImpact: 9 },
-        pros: 'Completely unvarnished emotional rasp; zero artificial compression artifacts or pump.',
-        cons: 'Raw vocal dynamics swing widely; lacks modern loudness density without riding fader.',
-        notes: 'Completely unmastered raw tracking take. Huge dynamic headroom; very honest, weathered vocal.',
+        pros: 'Completely unvarnished instrumental dynamics; rich harmonic content.',
+        cons: 'Dynamic swings wide without compression.',
+        notes: 'Full rhythm and harmonic section bed; pristine acoustic clarity.',
         isCrownedWinner: false,
         colorScheme: {
           primary: 'text-purple-400',
@@ -313,9 +370,119 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         }
       }
     ];
-  }, [activeTrack?.id, activeTrack?.title, activeTrack?.bpm, activeTrack?.key]);
+  }, [activeTrack?.id, activeTrack?.title, activeTrack?.bpm, activeTrack?.key, availableNextcloudAudioAssets]);
 
   const [slots, setSlots] = useState<AudioTrackSlot[]>(initialSlots);
+
+  // Sync slots whenever initialSlots updates for activeTrack
+  useEffect(() => {
+    setSlots(initialSlots);
+  }, [initialSlots]);
+
+  // Real Audio Elements Map for seamless streaming
+  const audioElementsRef = useRef<{ [slotId: string]: HTMLAudioElement }>({});
+
+  // Fallback audio URL resolver to guarantee real Nextcloud streaming
+  const resolveSlotAudioUrl = useCallback((slotId: string, currentUrl?: string): string => {
+    if (currentUrl && currentUrl.trim().length > 0) return currentUrl;
+    const targetTrack = activeTrack || CANONICAL_TRACKS[0];
+    const stems = getTrackStems(targetTrack);
+    const audioAssets = availableNextcloudAudioAssets;
+
+    if (slotId === 'slot-a') {
+      return stems.find(s => s.stemType === 'master')?.audioUrl ||
+        audioAssets.find(a => a.category === 'MASTER_AUDIO')?.audioUrl ||
+        stems[0]?.audioUrl || audioAssets[0]?.audioUrl || '';
+    } else if (slotId === 'slot-b') {
+      return stems.find(s => s.stemType === 'vocal' || s.stemType === 'guitar')?.audioUrl ||
+        audioAssets.find(a => a.category === 'UVR5_VOCAL_STEM')?.audioUrl ||
+        stems[1]?.audioUrl || stems[0]?.audioUrl || '';
+    } else {
+      return stems.find(s => s.stemType === 'drums' || s.stemType === 'organ' || s.stemType === 'piano' || s.stemType === 'bass')?.audioUrl ||
+        audioAssets.find(a => a.category === 'INSTRUMENTAL_STEM')?.audioUrl ||
+        stems[2]?.audioUrl || stems[0]?.audioUrl || '';
+    }
+  }, [activeTrack, availableNextcloudAudioAssets]);
+
+  // Synchronously ensure HTMLAudioElement exists and has real audio src loaded immediately on click
+  const getOrCreateAudioElement = useCallback((slot: AudioTrackSlot): HTMLAudioElement => {
+    let el = audioElementsRef.current[slot.id];
+    if (!el) {
+      el = new Audio();
+      el.crossOrigin = 'anonymous';
+      el.preload = 'auto';
+      audioElementsRef.current[slot.id] = el;
+    }
+    const resolvedUrl = resolveSlotAudioUrl(slot.id, slot.audioBlobUrl);
+    const currentLoaded = (el as any)._loadedAudioUrl;
+    if (resolvedUrl && currentLoaded !== resolvedUrl) {
+      (el as any)._loadedAudioUrl = resolvedUrl;
+      el.src = resolvedUrl;
+      el.load();
+    }
+    return el;
+  }, [resolveSlotAudioUrl]);
+
+  // 1. Maintain and preload HTMLAudioElements only when slot audio URLs actually change
+  useEffect(() => {
+    slots.forEach(slot => {
+      const url = resolveSlotAudioUrl(slot.id, slot.audioBlobUrl);
+      if (!url) return;
+
+      let el = audioElementsRef.current[slot.id];
+      if (!el) {
+        el = new Audio();
+        el.crossOrigin = 'anonymous';
+        el.preload = 'auto';
+        audioElementsRef.current[slot.id] = el;
+      }
+
+      // Check if URL actually changed using custom tracked property to prevent infinite reload loops
+      const currentLoaded = (el as any)._loadedAudioUrl;
+      if (currentLoaded !== url) {
+        (el as any)._loadedAudioUrl = url;
+        el.src = url;
+        el.load();
+      }
+    });
+  }, [slots.map(s => `${s.id}:${s.audioBlobUrl}`).join(','), resolveSlotAudioUrl]);
+
+  // 2. Synchronize Volume, Pan, Mute, and Exclusive Solo without interrupting audio flow
+  useEffect(() => {
+    slots.forEach(slot => {
+      const el = audioElementsRef.current[slot.id];
+      if (!el) return;
+
+      el.loop = slot.isLooping;
+      el.playbackRate = slot.playbackRate || 1.0;
+
+      // Handle muting and exclusive soloing
+      let isMuted = slot.isMuted;
+      if (activeSoloSlot && activeSoloSlot !== slot.id) {
+        isMuted = true;
+      }
+      el.muted = isMuted;
+
+      // Calculate effective volume with LUFS trim
+      let effectiveVol = slot.volume;
+      if (loudnessMatchEnabled && slot.lufsTrimDb) {
+        const trimFactor = Math.pow(10, slot.lufsTrimDb / 20);
+        effectiveVol = effectiveVol * trimFactor;
+      }
+      el.volume = Math.max(0, Math.min(1, effectiveVol * 0.95));
+    });
+  }, [slots.map(s => `${s.id}:${s.volume}:${s.isMuted}:${s.isLooping}:${s.playbackRate}`).join(','), activeSoloSlot, loudnessMatchEnabled]);
+
+  // Cleanup audio elements on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(audioElementsRef.current).forEach(el => {
+        el.pause();
+        el.src = '';
+      });
+      audioElementsRef.current = {};
+    };
+  }, []);
 
   // Initialize Web Audio graph
   const ensureAudioGraph = useCallback(() => {
@@ -393,7 +560,12 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
         return prevSlots.map(slot => {
           if (!slot.isPlaying) return slot;
 
-          let nextTime = slot.currentTimeSeconds + deltaSec * slot.playbackRate;
+          const el = audioElementsRef.current[slot.id];
+          if (el && el.paused && slot.isPlaying && !el.ended) {
+            el.play().catch(() => {});
+          }
+          const hasAudioClock = Boolean(el && !el.paused && !isNaN(el.currentTime) && el.currentTime >= 0);
+          let nextTime = hasAudioClock ? el!.currentTime : slot.currentTimeSeconds + deltaSec * slot.playbackRate;
 
           // Section boundaries check
           if (activeSectionRange !== 'full') {
@@ -407,9 +579,15 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
             const [startSec, endSec] = sectionRanges[activeSectionRange] || [0, slot.durationSeconds];
             if (nextTime >= endSec) {
               nextTime = slot.isLooping ? startSec : endSec;
+              if (el) {
+                try { el.currentTime = nextTime; } catch (_) {}
+              }
             }
           } else if (nextTime >= slot.durationSeconds) {
             nextTime = slot.isLooping ? 0 : slot.durationSeconds;
+            if (el) {
+              try { el.currentTime = nextTime; } catch (_) {}
+            }
           }
 
           return {
@@ -493,53 +671,163 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     });
   }, [slots, isDarkMode]);
 
-  // Handle Play/Pause for a specific slot
+  // Handle Play/Pause for a specific slot with synchronous real audio streaming
   const handleTogglePlay = (slotId: string) => {
     ensureAudioGraph();
-    setSlots(prev => {
-      const target = prev.find(s => s.id === slotId);
-      const nextPlayState = !target?.isPlaying;
+    const target = slots.find(s => s.id === slotId);
+    const nextPlayState = !target?.isPlaying;
 
-      if (syncPlayback) {
-        // When Sync Playback is ON, force all three audio tracks to start/stop simultaneously
-        const referenceTime = target?.currentTimeSeconds ?? 0;
-        return prev.map(s => ({
-          ...s,
-          isPlaying: nextPlayState,
-          currentTimeSeconds: syncPlayheads ? referenceTime : s.currentTimeSeconds
-        }));
-      }
-
-      // Independent playback per track when Sync Playback is OFF
-      return prev.map(s => {
-        if (s.id === slotId) {
-          return { ...s, isPlaying: nextPlayState };
+    if (syncPlayback) {
+      // When Sync Playback is ON, force all three audio tracks to start/stop simultaneously in lockstep
+      const referenceTime = target?.currentTimeSeconds ?? 0;
+      slots.forEach(s => {
+        const el = getOrCreateAudioElement(s);
+        let effectiveVol = s.volume;
+        if (loudnessMatchEnabled && s.lufsTrimDb) {
+          const trimFactor = Math.pow(10, s.lufsTrimDb / 20);
+          effectiveVol = effectiveVol * trimFactor;
         }
-        return s;
-      });
-    });
-  };
+        el.volume = Math.max(0, Math.min(1, effectiveVol * 0.95));
+        el.muted = Boolean(activeSoloSlot && activeSoloSlot !== s.id) || s.isMuted;
+        el.loop = s.isLooping;
+        el.playbackRate = s.playbackRate || 1.0;
 
-  // Master Global Play All / Pause All
-  const handleToggleGlobalPlay = () => {
-    ensureAudioGraph();
-    setSlots(prev => {
-      const anyPlaying = prev.some(s => s.isPlaying);
-      const nextPlayState = !anyPlaying;
-      const referenceTime = prev[0]?.currentTimeSeconds ?? 0;
-      return prev.map(s => ({
+        if (nextPlayState) {
+          if (syncPlayheads) {
+            try { el.currentTime = referenceTime; } catch (_) {}
+          }
+          el.play().catch(e => console.warn(`Slot ${s.id} sync play note:`, e));
+        } else {
+          el.pause();
+        }
+      });
+
+      setSlots(prev => prev.map(s => ({
         ...s,
         isPlaying: nextPlayState,
         currentTimeSeconds: syncPlayheads ? referenceTime : s.currentTimeSeconds
-      }));
+      })));
+      return;
+    }
+
+    // Independent playback per track when Sync Playback is OFF
+    if (target) {
+      const el = getOrCreateAudioElement(target);
+      let effectiveVol = target.volume;
+      if (loudnessMatchEnabled && target.lufsTrimDb) {
+        const trimFactor = Math.pow(10, target.lufsTrimDb / 20);
+        effectiveVol = effectiveVol * trimFactor;
+      }
+      el.volume = Math.max(0, Math.min(1, effectiveVol * 0.95));
+      el.muted = Boolean(activeSoloSlot && activeSoloSlot !== target.id) || target.isMuted;
+      el.loop = target.isLooping;
+      el.playbackRate = target.playbackRate || 1.0;
+
+      if (nextPlayState) {
+        el.play().catch(e => console.warn(`Slot ${slotId} play note:`, e));
+      } else {
+        el.pause();
+      }
+    }
+
+    setSlots(prev => prev.map(s => {
+      if (s.id === slotId) {
+        return { ...s, isPlaying: nextPlayState };
+      }
+      return s;
+    }));
+  };
+
+  // Master Global Play All / Pause All in lockstep
+  const handleToggleGlobalPlay = () => {
+    ensureAudioGraph();
+    const anyPlaying = slots.some(s => s.isPlaying);
+    const nextPlayState = !anyPlaying;
+    const referenceTime = slots[0]?.currentTimeSeconds ?? 0;
+
+    slots.forEach(s => {
+      const el = getOrCreateAudioElement(s);
+      let effectiveVol = s.volume;
+      if (loudnessMatchEnabled && s.lufsTrimDb) {
+        const trimFactor = Math.pow(10, s.lufsTrimDb / 20);
+        effectiveVol = effectiveVol * trimFactor;
+      }
+      el.volume = Math.max(0, Math.min(1, effectiveVol * 0.95));
+      el.muted = Boolean(activeSoloSlot && activeSoloSlot !== s.id) || s.isMuted;
+      el.loop = s.isLooping;
+      el.playbackRate = s.playbackRate || 1.0;
+
+      if (nextPlayState) {
+        if (syncPlayheads) {
+          try { el.currentTime = referenceTime; } catch (_) {}
+        }
+        el.play().catch(e => console.warn(`Global sync play note for ${s.id}:`, e));
+      } else {
+        el.pause();
+      }
     });
+
+    setSlots(prev => prev.map(s => ({
+      ...s,
+      isPlaying: nextPlayState,
+      currentTimeSeconds: syncPlayheads ? referenceTime : s.currentTimeSeconds
+    })));
+  };
+
+  // 1-Click Load Canonical 3-Take Shootout (Master, Vocal, Instrumental)
+  const handleLoadStandardTakes = () => {
+    const targetTrack: Track = activeTrack || CANONICAL_TRACKS[0];
+    const stems = getTrackStems(targetTrack);
+    const masterStem = stems.find(s => s.stemType === 'master') || stems[0];
+    const vocalStem = stems.find(s => s.stemType === 'vocal' || s.stemType === 'guitar') || stems[1] || masterStem;
+    const instStem = stems.find(s => s.stemType === 'drums' || s.stemType === 'organ' || s.stemType === 'piano' || s.stemType === 'bass') || stems[2] || masterStem;
+
+    setSlots(prev => prev.map(s => {
+      if (s.id === 'slot-a') {
+        return {
+          ...s,
+          title: masterStem?.name || `${targetTrack.title} Master`,
+          fileName: masterStem?.webdavPath?.split('/').pop() || masterStem?.name,
+          audioBlobUrl: masterStem?.audioUrl || '',
+          versionTag: 'Take A: Master Mix Print'
+        };
+      } else if (s.id === 'slot-b') {
+        return {
+          ...s,
+          title: vocalStem?.name || `${targetTrack.title} Isolated Vocal`,
+          fileName: vocalStem?.webdavPath?.split('/').pop() || vocalStem?.name,
+          audioBlobUrl: vocalStem?.audioUrl || '',
+          versionTag: 'Take B: Dry Vocal Stem'
+        };
+      } else {
+        return {
+          ...s,
+          title: instStem?.name || `${targetTrack.title} Instrumental Bed`,
+          fileName: instStem?.webdavPath?.split('/').pop() || instStem?.name,
+          audioBlobUrl: instStem?.audioUrl || '',
+          versionTag: 'Take C: Backing Bed Stem'
+        };
+      }
+    }));
+    if (showToast) {
+      showToast(`⚡ 1-Click Loaded: Master, Vocal, & Instrumental for "${targetTrack.title}"`, 'success');
+    }
   };
 
   // Rewind a slot to beginning
   const handleRewind = (slotId?: string) => {
     if (slotId) {
+      const target = slots.find(s => s.id === slotId);
+      if (target) {
+        const el = getOrCreateAudioElement(target);
+        try { el.currentTime = 0; } catch (_) {}
+      }
       setSlots(prev => prev.map(s => s.id === slotId ? { ...s, currentTimeSeconds: 0 } : s));
     } else {
+      slots.forEach(s => {
+        const el = getOrCreateAudioElement(s);
+        try { el.currentTime = 0; } catch (_) {}
+      });
       setSlots(prev => prev.map(s => ({ ...s, currentTimeSeconds: 0 })));
     }
   };
@@ -558,9 +846,17 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
 
       if (syncPlayheads) {
         // Locked playhead: seek ALL slots synchronously!
+        prev.forEach(s => {
+          const el = getOrCreateAudioElement(s);
+          try { el.currentTime = newSec; } catch (_) {}
+        });
         return prev.map(s => ({ ...s, currentTimeSeconds: newSec }));
       } else {
         // Independent seek
+        if (targetSlot) {
+          const el = getOrCreateAudioElement(targetSlot);
+          try { el.currentTime = newSec; } catch (_) {}
+        }
         return prev.map(s => s.id === slotId ? { ...s, currentTimeSeconds: newSec } : s);
       }
     });
@@ -576,7 +872,19 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
     }
   };
 
-  // Keyboard Shortcuts for instant A/B/C cross-switching (Keys 1, 2, 3 or A, B, C)
+  // 1-Click A/B Quick Flip between Take A and Take B
+  const handleToggleABFlip = () => {
+    ensureAudioGraph();
+    setActiveSoloSlot(prev => {
+      const next = prev === 'slot-a' ? 'slot-b' : 'slot-a';
+      if (showToast) {
+        showToast(`⚡ A/B Quick Flip: Auditioning Take ${next === 'slot-a' ? 'A' : 'B'}`, 'info');
+      }
+      return next;
+    });
+  };
+
+  // Keyboard Shortcuts for instant A/B/C cross-switching (Keys 1, 2, 3 or A, B, C, F, P, S, L)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
@@ -592,6 +900,9 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
       } else if (e.key === '3' || e.key.toLowerCase() === 'c') {
         e.preventDefault();
         handleSoloSlot('slot-c');
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        handleToggleABFlip();
       } else if (e.code === 'Space') {
         e.preventDefault();
         handleToggleGlobalPlay();
@@ -1003,11 +1314,22 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
             {activeSoloSlot && (
               <button
                 onClick={() => setActiveSoloSlot(null)}
-                className="text-[11px] text-slate-400 hover:text-slate-200 underline ml-1"
+                className="text-[11px] text-slate-400 hover:text-slate-200 underline ml-1 cursor-pointer"
               >
                 Clear Solo
               </button>
             )}
+
+            {/* 1-Click A/B Quick Flip Button */}
+            <button
+              type="button"
+              onClick={handleToggleABFlip}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gradient-to-r from-amber-600 to-cyan-600 hover:from-amber-500 hover:to-cyan-500 text-white shadow-sm border border-amber-400/40 cursor-pointer ml-1"
+              title="Instantly flip audition between Take A and Take B with zero clicks/latency (Hotkey: F)"
+            >
+              <Zap className="w-3.5 h-3.5 fill-current text-amber-200" />
+              <span>A/B Flip [F]</span>
+            </button>
           </div>
 
           {/* Section Cue Selector */}
@@ -1019,7 +1341,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
               <button
                 key={sec}
                 onClick={() => setActiveSectionRange(sec)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium border transition ${
+                className={`px-2 py-0.5 rounded text-[11px] font-medium border transition cursor-pointer ${
                   activeSectionRange === sec
                     ? 'bg-indigo-600 text-white border-indigo-400 font-bold'
                     : 'bg-slate-800/60 hover:bg-slate-800 text-slate-400 border-slate-700'
@@ -1030,18 +1352,30 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
             ))}
           </div>
 
-          <div className="text-[11px] text-slate-400 font-mono hidden lg:flex items-center space-x-2">
-            <span>Hotkeys:</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">1</kbd>
-            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">2</kbd>
-            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">3</kbd>
-            <span>Solo Take</span>
-            <span className="text-slate-600">|</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">Space</kbd>
-            <span>Play/Pause</span>
-            <span className="text-slate-600">|</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">P</kbd>
-            <span>Sync Play</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleLoadStandardTakes}
+              className="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/40 hover:border-emerald-500 text-emerald-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer shadow-xs"
+              title="1-Click: Automatically load Master into Take A, Isolated Vocal into Take B, and Instrumental Bed into Take C"
+            >
+              <Zap className="w-3 h-3 text-amber-300" />
+              <span>Auto-Map Takes A/B/C</span>
+            </button>
+
+            <div className="text-[11px] text-slate-400 font-mono hidden lg:flex items-center space-x-2">
+              <span>Hotkeys:</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">1</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">2</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">3</kbd>
+              <span>Solo Take</span>
+              <span className="text-slate-600">|</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-amber-300 font-bold">F</kbd>
+              <span>A/B Flip</span>
+              <span className="text-slate-600">|</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-bold">Space</kbd>
+              <span>Play/Pause</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1077,11 +1411,31 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
               {/* Channel Strip Header */}
               <div className={`p-3 border-b border-slate-800 flex items-center justify-between ${displaySlot.colorScheme.bg}`}>
                 <div className="flex items-center space-x-2.5">
-                  <div className={`w-7 h-7 rounded-lg font-bold text-xs flex items-center justify-center font-mono shadow-sm ${
-                    isSoloActive ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-slate-700'
-                  }`}>
-                    {letter}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePlay(displaySlot.id)}
+                    className={`w-8 h-8 rounded-lg font-bold text-xs flex items-center justify-center font-mono shadow-sm transition group cursor-pointer border ${
+                      displaySlot.isPlaying
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                        : isSoloActive
+                        ? 'bg-indigo-600 text-white border-indigo-400'
+                        : 'bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white border-slate-700'
+                    }`}
+                    title={
+                      displaySlot.isPlaying
+                        ? `Pause Take ${letter} [Space]`
+                        : `Play / Audition Take ${letter} [Click icon or Space]`
+                    }
+                  >
+                    {displaySlot.isPlaying ? (
+                      <Pause className="w-3.5 h-3.5 fill-current" />
+                    ) : (
+                      <>
+                        <span className="group-hover:hidden">{letter}</span>
+                        <Play className="w-3.5 h-3.5 fill-current hidden group-hover:block ml-0.5" />
+                      </>
+                    )}
+                  </button>
                   <div>
                     <h4 className="text-xs font-bold text-slate-100 truncate max-w-[190px]">
                       {titleDisplay}
@@ -1108,55 +1462,109 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
               </div>
 
               {/* Source Selection & File Upload Strip */}
-              <div className="p-2.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between gap-2 text-xs">
-                {/* Catalog Select */}
-                <div className="flex-1 min-w-0">
+              <div className="p-2.5 bg-slate-950/70 border-b border-slate-800/80 space-y-2 text-xs">
+                {/* 1-Click Nextcloud Stems & Audio Dropdown */}
+                {availableNextcloudAudioAssets.length > 0 && (
+                  <div>
+                    <select
+                      value={displaySlot.audioBlobUrl || ''}
+                      onChange={(e) => {
+                        const selectedUrl = e.target.value;
+                        if (!selectedUrl) return;
+                        const asset = availableNextcloudAudioAssets.find(a => a.audioUrl === selectedUrl);
+                        setSlots(prev => prev.map(s => {
+                          if (s.id === displaySlot.id) {
+                            return {
+                              ...s,
+                              title: asset?.filename.replace(/\.[^/.]+$/, '') || s.title,
+                              versionTag: `Nextcloud: ${asset?.category || 'Stream'}`,
+                              fileName: asset?.filename,
+                              audioBlobUrl: selectedUrl,
+                              sourceType: 'webdav',
+                              currentTimeSeconds: 0
+                            };
+                          }
+                          return s;
+                        }));
+                        if (showToast) {
+                          showToast(`Loaded "${asset?.filename}" into Take ${letter}`, 'success');
+                        }
+                      }}
+                      className="w-full bg-slate-900/90 border border-indigo-500/40 hover:border-indigo-400 rounded-lg px-2.5 py-1 text-[11px] font-mono text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 truncate cursor-pointer"
+                      title="1-Click Nextcloud Stems & Masters Loader"
+                    >
+                      <option value="">Nextcloud Stems & Masters ({availableNextcloudAudioAssets.length} found)...</option>
+                      {availableNextcloudAudioAssets.map(asset => (
+                        <option key={asset.id} value={asset.audioUrl}>
+                          {asset.filename} ({asset.category.replace('_', ' ')})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  {/* Catalog Select */}
+                  <div className="flex-1 min-w-0">
+                    <select
+                      disabled={blindModeEnabled && !blindRevealed}
+                      onChange={(e) => handleSelectCatalogTrack(displaySlot.id, e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500 truncate cursor-pointer disabled:opacity-50"
+                    >
+                      <option value="">Select Catalog Song...</option>
+                      {CANONICAL_TRACKS.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.id}: {t.title} ({t.genre})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Upload Local Audio File Button */}
+                  <div>
+                    <input
+                      type="file"
+                      ref={fileInputRefs[displaySlot.id as keyof typeof fileInputRefs]}
+                      accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(displaySlot.id, file);
+                      }}
+                    />
+                    <button
+                      onClick={() => fileInputRefs[displaySlot.id as keyof typeof fileInputRefs]?.current?.click()}
+                      className="flex items-center space-x-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] whitespace-nowrap cursor-pointer"
+                      title="Upload WAV, MP3, or FLAC file for decoding"
+                    >
+                      <Upload className="w-3 h-3 text-indigo-400" />
+                      <span>Upload</span>
+                    </button>
+                  </div>
+
+                  {/* Presets Menu */}
                   <select
-                    disabled={blindModeEnabled && !blindRevealed}
-                    onChange={(e) => handleSelectCatalogTrack(displaySlot.id, e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500 truncate cursor-pointer disabled:opacity-50"
+                    onChange={(e) => handleSelectPreset(displaySlot.id, e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none cursor-pointer"
                   >
-                    <option value="">Select Catalog Song...</option>
-                    {CANONICAL_TRACKS.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.id}: {t.title} ({t.genre})
-                      </option>
-                    ))}
+                    <option value="">Presets</option>
+                    <option value="nashville_master">Nashville 24/48</option>
+                    <option value="kpop_future_bass">K-Pop Future Bass</option>
+                    <option value="acoustic_blueprint">Acoustic Blueprint</option>
                   </select>
                 </div>
 
-                {/* Upload Local Audio File Button */}
-                <div>
-                  <input
-                    type="file"
-                    ref={fileInputRefs[displaySlot.id as keyof typeof fileInputRefs]}
-                    accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(displaySlot.id, file);
-                    }}
-                  />
-                  <button
-                    onClick={() => fileInputRefs[displaySlot.id as keyof typeof fileInputRefs]?.current?.click()}
-                    className="flex items-center space-x-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] whitespace-nowrap cursor-pointer"
-                    title="Upload WAV, MP3, or FLAC file for decoding"
-                  >
-                    <Upload className="w-3 h-3 text-indigo-400" />
-                    <span>Upload</span>
-                  </button>
-                </div>
-
-                {/* Presets Menu */}
-                <select
-                  onChange={(e) => handleSelectPreset(displaySlot.id, e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none cursor-pointer"
-                >
-                  <option value="">Presets</option>
-                  <option value="nashville_master">Nashville 24/48</option>
-                  <option value="kpop_future_bass">K-Pop Future Bass</option>
-                  <option value="acoustic_blueprint">Acoustic Blueprint</option>
-                </select>
+                {/* Active Stream Indicator */}
+                {displaySlot.fileName && (
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-slate-900/60 px-2 py-1 rounded border border-slate-800/60">
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span className={`w-1.5 h-1.5 rounded-full ${displaySlot.isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                      <span className="text-slate-500">STREAM:</span>
+                      <span className="text-slate-300 truncate" title={displaySlot.fileName}>{displaySlot.fileName}</span>
+                    </span>
+                    <span className="text-indigo-400 shrink-0 font-bold">24-Bit WebDAV</span>
+                  </div>
+                )}
               </div>
 
               {/* Dedicated Waveform Visualizer */}

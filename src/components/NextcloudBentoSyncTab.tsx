@@ -36,7 +36,9 @@ import {
   Settings,
   Edit3,
   Trash2,
-  Plus
+  Plus,
+  ChevronLeft,
+  X
 } from 'lucide-react';
 import { Track, NextcloudFolderAsset, NextcloudAssetCategory, NextcloudSyncConfig, UniversalAssetItem } from '../types';
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
@@ -52,6 +54,7 @@ import {
   buildNextcloudStreamUrl
 } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
+import { getTrackStems } from '../data/nextcloudAssetIndex';
 import { HelpCircle } from 'lucide-react';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { NextcloudWebDavFileExplorer } from './NextcloudWebDavFileExplorer';
@@ -475,8 +478,12 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         stemType = 'master';
       }
 
-      const webdavPath = asset.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename}`;
-      const audioUrl = buildNextcloudStreamUrl(webdavPath);
+      const matchedStem = getTrackStems(selectedTrack).find(s =>
+        s.name.toLowerCase().includes(fn) ||
+        (s.webdavPath && s.webdavPath.toLowerCase().includes(fn))
+      );
+      const webdavPath = asset.webdavPath || matchedStem?.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename}`;
+      const audioUrl = asset.audioUrl || matchedStem?.audioUrl || buildNextcloudStreamUrl(webdavPath);
 
       audioMiniDaw.startPlayback(
         [
@@ -495,7 +502,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
             color: asset.color || '#06b6d4',
             audioUrl,
             webdavPath,
-            isRealAudio: true
+            isRealAudio: Boolean(audioUrl)
           }
         ],
         bpm,
@@ -504,6 +511,64 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
       setPlayingAssetId(asset.id);
     }
   };
+
+  // Lightbox Image Viewer State with Arrow Key Navigation
+  const [bentoLightboxImage, setBentoLightboxImage] = useState<{ url: string; title: string; index: number } | null>(null);
+
+  const previewableAssets = React.useMemo(() => {
+    return assets.filter(a =>
+      a.category === 'VISUAL_ARTWORK' ||
+      a.category === 'VIDEO_REEL' ||
+      Boolean(a.previewImageUrl) ||
+      a.filename.endsWith('.png') ||
+      a.filename.endsWith('.jpg') ||
+      a.filename.endsWith('.webp')
+    );
+  }, [assets]);
+
+  const handleOpenBentoLightbox = (url: string, title: string) => {
+    const idx = previewableAssets.findIndex(a => (a.previewImageUrl || a.shareUrl) === url);
+    setBentoLightboxImage({
+      url,
+      title,
+      index: idx >= 0 ? idx : 0
+    });
+  };
+
+  useEffect(() => {
+    if (!bentoLightboxImage) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setBentoLightboxImage(null);
+      } else if (e.key === 'ArrowRight') {
+        setBentoLightboxImage(prev => {
+          if (!prev || previewableAssets.length <= 1) return prev;
+          const nextIdx = (prev.index + 1) % previewableAssets.length;
+          const target = previewableAssets[nextIdx];
+          return {
+            url: target.previewImageUrl || target.shareUrl || '',
+            title: target.filename,
+            index: nextIdx
+          };
+        });
+      } else if (e.key === 'ArrowLeft') {
+        setBentoLightboxImage(prev => {
+          if (!prev || previewableAssets.length <= 1) return prev;
+          const prevIdx = (prev.index - 1 + previewableAssets.length) % previewableAssets.length;
+          const target = previewableAssets[prevIdx];
+          return {
+            url: target.previewImageUrl || target.shareUrl || '',
+            title: target.filename,
+            index: prevIdx
+          };
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [bentoLightboxImage, previewableAssets]);
 
   // Extract distinct subfolders inside /Music-Production
   const subfoldersList = [
@@ -1094,34 +1159,58 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2 min-w-0">
-                      {/* File Icon */}
-                      <div
-                        className={`p-1.5 rounded-lg flex-shrink-0 mt-0.5 ${
-                          asset.category === 'MASTER_AUDIO'
-                            ? isDarkMode ? 'bg-cyan-950 text-cyan-400 border border-cyan-800/40' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
-                            : asset.category === 'UVR5_VOCAL_STEM'
-                            ? isDarkMode ? 'bg-purple-950 text-purple-400 border border-purple-800/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : asset.category === 'INSTRUMENTAL_STEM'
-                            ? isDarkMode ? 'bg-indigo-950 text-indigo-400 border border-indigo-800/40' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            : asset.category === 'VISUAL_ARTWORK'
-                            ? isDarkMode ? 'bg-amber-950 text-amber-400 border border-amber-800/40' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : asset.category === 'VIDEO_REEL'
+                      {/* Interactive Leading Icon Button: 1-Click Play or Lightbox View */}
+                      {isAudio ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleAudition(asset);
+                          }}
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition group cursor-pointer border ${
+                            playingAssetId === asset.id
+                              ? 'bg-cyan-500 text-slate-950 border-cyan-400 ring-2 ring-cyan-400/40 shadow-sm'
+                              : isDarkMode
+                              ? 'bg-cyan-950/80 hover:bg-cyan-900 border-cyan-800/40 text-cyan-300'
+                              : 'bg-cyan-50 hover:bg-cyan-100 border-cyan-200 text-cyan-700'
+                          }`}
+                          title={playingAssetId === asset.id ? 'Pause Preview' : `Audition ${asset.filename} [Click icon]`}
+                        >
+                          {playingAssetId === asset.id ? (
+                            <Pause className="w-3.5 h-3.5 fill-current" />
+                          ) : (
+                            <>
+                              <Music className="w-3.5 h-3.5 group-hover:hidden" />
+                              <Play className="w-3.5 h-3.5 fill-current hidden group-hover:block ml-0.5" />
+                            </>
+                          )}
+                        </button>
+                      ) : (asset.category === 'VISUAL_ARTWORK' || asset.previewImageUrl) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenBentoLightbox(asset.previewImageUrl || asset.shareUrl, asset.filename);
+                          }}
+                          className="w-7 h-7 rounded-lg overflow-hidden shrink-0 mt-0.5 border border-purple-500/40 hover:border-purple-400 bg-purple-950/40 flex items-center justify-center transition group cursor-pointer relative"
+                          title={`View ${asset.filename} in Lightbox (← → Arrow keys to browse)`}
+                        >
+                          {asset.previewImageUrl ? (
+                            <img src={asset.previewImageUrl} alt={asset.filename} className="w-full h-full object-cover group-hover:opacity-50 transition" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                          )}
+                          <Eye className="w-3.5 h-3.5 text-white absolute inset-0 m-auto hidden group-hover:block drop-shadow" />
+                        </button>
+                      ) : (
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                          asset.category === 'VIDEO_REEL'
                             ? isDarkMode ? 'bg-rose-950 text-rose-400 border border-rose-800/40' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : asset.category === 'LYRIC_SOP_DOC'
-                            ? isDarkMode ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : isDarkMode ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {isAudio ? (
-                          <Music className="w-3.5 h-3.5" />
-                        ) : asset.category === 'VISUAL_ARTWORK' ? (
-                          <ImageIcon className="w-3.5 h-3.5" />
-                        ) : asset.category === 'VIDEO_REEL' ? (
-                          <Video className="w-3.5 h-3.5" />
-                        ) : (
-                          <FileText className="w-3.5 h-3.5" />
-                        )}
-                      </div>
+                        }`}>
+                          {asset.category === 'VIDEO_REEL' ? <Video className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                        </div>
+                      )}
 
                       <div className="min-w-0 space-y-0.5">
                         <div className={`font-bold text-[11px] truncate leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`} title={asset.filename}>
@@ -1187,25 +1276,8 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                       </div>
                     </div>
 
-                    {/* Quick Row Actions: Edit, Ask Gemini, Audition, Delete */}
+                    {/* Quick Row Actions: Edit, Ask Gemini, Delete */}
                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                      {isAudio && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAudition(asset)}
-                          className={`p-1 rounded-md transition cursor-pointer ${
-                            playingAssetId === asset.id
-                              ? 'bg-cyan-500 text-slate-950 font-bold'
-                              : isDarkMode
-                              ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300'
-                              : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700'
-                          }`}
-                          title={playingAssetId === asset.id ? 'Pause Preview' : 'Audition Stem'}
-                        >
-                          {playingAssetId === asset.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                        </button>
-                      )}
-
                       <button
                         type="button"
                         onClick={() => handleOpenEditAssetModal(asset, 'gemini')}
@@ -1312,7 +1384,11 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
 
               {/* Visual Preview if Image or Video */}
               {currentAsset.previewImageUrl && (
-                <div className="relative rounded-2xl overflow-hidden border border-slate-800 aspect-video group max-h-56 bg-black">
+                <div
+                  onClick={() => handleOpenBentoLightbox(currentAsset.previewImageUrl!, currentAsset.filename)}
+                  className="relative rounded-2xl overflow-hidden border border-slate-800 aspect-video group max-h-56 bg-black cursor-pointer shadow-md"
+                  title="Click to view in Lightbox (← → Arrow keys to browse)"
+                >
                   <img
                     src={currentAsset.previewImageUrl}
                     alt={currentAsset.filename}
@@ -1322,7 +1398,10 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                     <span className="font-bold truncate">{currentAsset.filename}</span>
                     <button
                       type="button"
-                      onClick={() => handleOpenEditAssetModal(currentAsset, 'gemini')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEditAssetModal(currentAsset, 'gemini');
+                      }}
                       className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-[10px] font-bold flex items-center gap-1"
                     >
                       <Sparkles className="w-3 h-3 text-amber-300" />
@@ -1640,6 +1719,97 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         }}
         isDarkMode={isDarkMode}
       />
+
+      {/* FULLSCREEN LIGHTBOX MODAL WITH ARROW KEY NAVIGATION */}
+      {bentoLightboxImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setBentoLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Bar with title, index, and close */}
+            <div className="w-full flex items-center justify-between pb-3 text-white text-xs font-mono">
+              <span className="truncate max-w-md font-bold">
+                {bentoLightboxImage.title}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400">
+                  {bentoLightboxImage.index + 1} of {previewableAssets.length}
+                </span>
+                <span className="text-[10px] text-slate-500 hidden sm:inline">
+                  (← → Arrow keys / Esc)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBentoLightboxImage(null)}
+                  className="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition"
+                  title="Close (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Image viewport with left/right buttons */}
+            <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-black max-h-[75vh] flex items-center justify-center">
+              <img
+                src={bentoLightboxImage.url}
+                alt={bentoLightboxImage.title}
+                className="max-h-[75vh] max-w-full object-contain"
+              />
+
+              {previewableAssets.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBentoLightboxImage(prev => {
+                        if (!prev) return null;
+                        const prevIdx = (prev.index - 1 + previewableAssets.length) % previewableAssets.length;
+                        const target = previewableAssets[prevIdx];
+                        return {
+                          url: target.previewImageUrl || target.shareUrl || '',
+                          title: target.filename,
+                          index: prevIdx
+                        };
+                      });
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/20 text-white cursor-pointer transition shadow-lg"
+                    title="Previous image (← Arrow key)"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBentoLightboxImage(prev => {
+                        if (!prev) return null;
+                        const nextIdx = (prev.index + 1) % previewableAssets.length;
+                        const target = previewableAssets[nextIdx];
+                        return {
+                          url: target.previewImageUrl || target.shareUrl || '',
+                          title: target.filename,
+                          index: nextIdx
+                        };
+                      });
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/90 border border-white/20 text-white cursor-pointer transition shadow-lg"
+                    title="Next image (→ Arrow key)"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
