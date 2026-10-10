@@ -622,10 +622,11 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
 /**
  * Generate full AOT Nextcloud folder asset manifest for a given track definition.
  */
-export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): NextcloudFolderAsset[] {
+export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition, overrideTitle?: string): NextcloudFolderAsset[] {
   const folderPath = `/remote.php/dav/files/ncted/Music-Production/${def.folderName}`;
   const shareUrl = `https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production/${def.folderName}`;
   const assets: NextcloudFolderAsset[] = [];
+  const effectiveTitle = overrideTitle || def.title;
 
   // 1. Masters for all versions/styles
   def.versions.forEach((ver, idx) => {
@@ -635,7 +636,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
     const audioUrl = buildNextcloudStreamUrl(webdavPath);
     assets.push({
       id: `NC-${def.trackId}-M${idx + 1}`,
-      name: `${def.title} - ${ver.tag} (${ver.styleName})`,
+      name: `${effectiveTitle} - ${ver.tag} (${ver.styleName})`,
       filename: realAudioFilename,
       folderId: def.folderName,
       category: 'MASTER_AUDIO',
@@ -646,7 +647,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
       audioUrl,
       shareUrl,
       matchedTrackId: def.trackId,
-      matchedTrackTitle: def.title,
+      matchedTrackTitle: effectiveTitle,
       matchConfidence: 100,
       suggestedTrackId: def.trackId,
       suggestedCategory: 'MASTER_AUDIO',
@@ -660,7 +661,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
       waveType: 'sawtooth',
       notes: `${ver.tag} (${ver.styleName}): ${ver.notes} Master Audio. Nashville LUFS -14.1 compliant.`,
       lastSyncedAt: new Date().toISOString(),
-      tags: [def.folderName, def.title, def.trackId, ver.tag, 'Master Audio', 'Fiber Synced']
+      tags: [def.folderName, effectiveTitle, def.trackId, ver.tag, 'Master Audio', 'Fiber Synced']
     });
   });
 
@@ -692,7 +693,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
       audioUrl,
       shareUrl,
       matchedTrackId: def.trackId,
-      matchedTrackTitle: def.title,
+      matchedTrackTitle: effectiveTitle,
       matchConfidence: 100,
       suggestedTrackId: def.trackId,
       suggestedCategory: category,
@@ -723,13 +724,13 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
     webdavPath: `${folderPath}/visuals/${def.folderName}_Cover_Art_4k_1x1.png`,
     shareUrl,
     matchedTrackId: def.trackId,
-    matchedTrackTitle: def.title,
+    matchedTrackTitle: effectiveTitle,
     matchConfidence: 100,
     suggestedTrackId: def.trackId,
     suggestedCategory: 'VISUAL_ARTWORK',
     isMatched: true,
-    previewImageUrl: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800"><defs><linearGradient id="g_${def.trackId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%230f172a"/><stop offset="50%" stop-color="%231e1b4b"/><stop offset="100%" stop-color="%23020617"/></linearGradient></defs><rect width="800" height="800" fill="url(%23g_${def.trackId})"/><circle cx="400" cy="360" r="260" fill="%236366f1" opacity="0.15"/><circle cx="400" cy="360" r="160" fill="%23f59e0b" opacity="0.25"/><text x="400" y="380" font-family="system-ui, sans-serif" font-size="72" font-weight="900" fill="%23ffffff" text-anchor="middle">${def.trackId}</text><text x="400" y="660" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="%23fef08a" text-anchor="middle" letter-spacing="2">${def.title.toUpperCase()}</text><text x="400" y="705" font-family="monospace" font-size="14" font-weight="700" fill="%2338bdf8" text-anchor="middle" letter-spacing="3">${def.bpm} BPM • ${def.key} • NEXTCLOUD FIBER</text></svg>`,
-    notes: `3840x3840 4K Album Art for ${def.title}. ${def.visualTitle}.`,
+    previewImageUrl: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800"><defs><linearGradient id="g_${def.trackId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%230f172a"/><stop offset="50%" stop-color="%231e1b4b"/><stop offset="100%" stop-color="%23020617"/></linearGradient></defs><rect width="800" height="800" fill="url(%23g_${def.trackId})"/><circle cx="400" cy="360" r="260" fill="%236366f1" opacity="0.15"/><circle cx="400" cy="360" r="160" fill="%23f59e0b" opacity="0.25"/><text x="400" y="380" font-family="system-ui, sans-serif" font-size="72" font-weight="900" fill="%23ffffff" text-anchor="middle">${def.trackId}</text><text x="400" y="660" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="%23fef08a" text-anchor="middle" letter-spacing="2">${effectiveTitle.toUpperCase()}</text><text x="400" y="705" font-family="monospace" font-size="14" font-weight="700" fill="%2338bdf8" text-anchor="middle" letter-spacing="3">${def.bpm} BPM • ${def.key} • NEXTCLOUD FIBER</text></svg>`,
+    notes: `3840x3840 4K Album Art for ${effectiveTitle}. ${def.visualTitle}.`,
     lastSyncedAt: new Date().toISOString(),
     tags: [def.folderName, def.trackId, 'Cover Art', '4K', 'Artwork']
   });
@@ -746,13 +747,13 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
     webdavPath: `${folderPath}/visuals/${def.folderName}_Storyboard_Scene_Plate_16x9.png`,
     shareUrl,
     matchedTrackId: def.trackId,
-    matchedTrackTitle: def.title,
+    matchedTrackTitle: effectiveTitle,
     matchConfidence: 100,
     suggestedTrackId: def.trackId,
     suggestedCategory: 'VISUAL_ARTWORK',
     isMatched: true,
-    previewImageUrl: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720"><defs><linearGradient id="sc_${def.trackId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%231e1b4b"/><stop offset="50%" stop-color="%23312e81"/><stop offset="100%" stop-color="%230f172a"/></linearGradient></defs><rect width="1280" height="720" fill="url(%23sc_${def.trackId})"/><text x="640" y="320" font-family="system-ui, sans-serif" font-size="36" font-weight="900" fill="%23ffffff" text-anchor="middle">${def.title.toUpperCase()}</text><text x="640" y="380" font-family="system-ui, sans-serif" font-size="20" font-style="italic" fill="%23fde047" text-anchor="middle">&quot;${def.sceneTitle}&quot;</text><rect x="520" y="620" width="240" height="36" rx="18" fill="%236366f1"/><text x="640" y="643" font-family="monospace" font-size="13" font-weight="900" fill="%23ffffff" text-anchor="middle">STORYBOARD SCENE PLATE</text></svg>`,
-    notes: `1920x1080 16:9 Storyboard Plate for ${def.title}. ${def.sceneTitle}.`,
+    previewImageUrl: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720"><defs><linearGradient id="sc_${def.trackId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%231e1b4b"/><stop offset="50%" stop-color="%23312e81"/><stop offset="100%" stop-color="%230f172a"/></linearGradient></defs><rect width="1280" height="720" fill="url(%23sc_${def.trackId})"/><text x="640" y="320" font-family="system-ui, sans-serif" font-size="36" font-weight="900" fill="%23ffffff" text-anchor="middle">${effectiveTitle.toUpperCase()}</text><text x="640" y="380" font-family="system-ui, sans-serif" font-size="20" font-style="italic" fill="%23fde047" text-anchor="middle">&quot;${def.sceneTitle}&quot;</text><rect x="520" y="620" width="240" height="36" rx="18" fill="%236366f1"/><text x="640" y="643" font-family="monospace" font-size="13" font-weight="900" fill="%23ffffff" text-anchor="middle">STORYBOARD SCENE PLATE</text></svg>`,
+    notes: `1920x1080 16:9 Storyboard Plate for ${effectiveTitle}. ${def.sceneTitle}.`,
     lastSyncedAt: new Date().toISOString(),
     tags: [def.folderName, def.trackId, 'Storyboard', '16:9', 'Video Express']
   });
@@ -769,7 +770,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
     webdavPath: `${folderPath}/video/${def.folderName}_Studio_Cinematic_Reel_1080p_9x16.mp4`,
     shareUrl,
     matchedTrackId: def.trackId,
-    matchedTrackTitle: def.title,
+    matchedTrackTitle: effectiveTitle,
     matchConfidence: 100,
     suggestedTrackId: def.trackId,
     suggestedCategory: 'VIDEO_REEL',
@@ -791,7 +792,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
     webdavPath: `${folderPath}/video/${def.folderName}_Visualizer_Loop_4k_16x9.mp4`,
     shareUrl,
     matchedTrackId: def.trackId,
-    matchedTrackTitle: def.title,
+    matchedTrackTitle: effectiveTitle,
     matchConfidence: 100,
     suggestedTrackId: def.trackId,
     suggestedCategory: 'VIDEO_REEL',
@@ -813,7 +814,7 @@ export function generateTrackNextcloudAssets(def: TrackNextcloudDefinition): Nex
     webdavPath: `${folderPath}/docs/${def.folderName}_Lyrics_And_Theological_SOP.md`,
     shareUrl,
     matchedTrackId: def.trackId,
-    matchedTrackTitle: def.title,
+    matchedTrackTitle: effectiveTitle,
     matchConfidence: 100,
     suggestedTrackId: def.trackId,
     suggestedCategory: 'LYRIC_SOP_DOC',
@@ -901,7 +902,7 @@ export function getTrackNextcloudAssets(trackId: string, trackTitle?: string): N
     CATALOG_TRACK_DEFINITIONS.find(d => trackTitle && d.aliases.some(a => trackTitle.toLowerCase().includes(a.toLowerCase()))) ||
     getOrCreateTrackDefinition({ id: trackId, title: trackTitle || trackId } as Track);
 
-  const canonicalAssets = generateTrackNextcloudAssets(def);
+  const canonicalAssets = generateTrackNextcloudAssets(def, trackTitle);
 
   // Check if there are live synced assets saved in localStorage for this track
   if (typeof window !== 'undefined') {
@@ -958,4 +959,42 @@ export function getTrackStems(track: Track): MixerTrack[] {
       assetId: `NC-${def.trackId}-S${s.id}`
     };
   });
+}
+
+/**
+ * Updates track title and aliases in the in-memory Nextcloud definitions and local storage caches.
+ * Returns the count of definition and asset records updated.
+ */
+export function updateTrackCatalogDefinitionTitle(trackId: string, newTitle: string, oldTitle?: string): number {
+  let updatedCount = 0;
+  const def = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === trackId);
+  if (def) {
+    def.title = newTitle;
+    def.visualTitle = `${newTitle} 4K Sovereign Cathedral Master`;
+    def.sceneTitle = `${newTitle} Storyboard Devotional Scene`;
+    if (!def.aliases.includes(newTitle)) {
+      def.aliases.push(newTitle);
+    }
+    updatedCount++;
+  }
+
+  // Update live localStorage assets if present
+  if (typeof window !== 'undefined') {
+    try {
+      const keys = [`brickos_nextcloud_live_assets_${trackId}`, `brickos_custom_stems_${trackId}`];
+      keys.forEach(k => {
+        const item = localStorage.getItem(k);
+        if (item) {
+          let str = item;
+          if (oldTitle) {
+            str = str.split(oldTitle).join(newTitle);
+          }
+          localStorage.setItem(k, str);
+          updatedCount++;
+        }
+      });
+    } catch (_) {}
+  }
+
+  return updatedCount;
 }

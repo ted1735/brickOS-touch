@@ -3907,3 +3907,14 @@ Please... God... Just meet me here.`
     }))
   }
 };
+
+/**
+ * Updates the title in the songVersionsCatalog for a given track id.
+ */
+export function updateSongVersionCatalogTitle(trackId: string, newTitle: string): boolean {
+  if (songVersionsCatalog && songVersionsCatalog[trackId]) {
+    songVersionsCatalog[trackId].title = newTitle;
+    return true;
+  }
+  return false;
+}
