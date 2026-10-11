@@ -56,6 +56,7 @@ import { SUNO_USERSCRIPT_CODE } from '../data/automationUserscripts';
 import { loadPresetsFromFirestore, subscribeToFirestorePresets, getLocalCachedPresets, isFirebaseConfigured } from '../lib/firebase';
 import { getNextVersionString } from '../utils/versioning';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
+import { LyricBrainstormingChatbot } from './LyricBrainstormingChatbot';
 
 interface LyricsAndSunoTabProps {
   track: Track;
@@ -136,6 +137,25 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   // Nashville SOP Rules Manager State (Direct Markdown & Text Editing)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [sopRules, setSopRules] = useState<SOPRulesPackage>(() => getLocalCachedSOPRules());
+
+  // 4-Stage Lyric Studio Workflow Pipeline State (Workflow 1: Gemini Brainstorming -> Workflow 2: Workbench -> Workflow 3: SOP Audit -> Workflow 4: Suno 4-Blocks)
+  const [activeWorkflow, setActiveWorkflow] = useState<'brainstorm' | 'workbench' | 'audit' | 'suno'>('brainstorm');
+  const [showBrainstormSplit, setShowBrainstormSplit] = useState(false);
+
+  const handleInsertLyricsFromBrainstorm = (snippet: string, mode: 'replace' | 'append' | 'prepend') => {
+    const current = track.lyrics || '';
+    let updated = '';
+    if (mode === 'replace') {
+      updated = snippet;
+    } else if (mode === 'prepend') {
+      updated = snippet + (current ? '\n\n' + current : '');
+    } else {
+      updated = (current ? current + '\n\n' : '') + snippet;
+    }
+    onUpdateTrack('lyrics', updated);
+    setSaveStatus('saved');
+    setLastSavedTime('Just now');
+  };
 
   // Song & Project Title Versioning & Renaming System
   const [isEditingIdentity, setIsEditingIdentity] = useState(false);
@@ -1272,9 +1292,124 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* 4-STAGE SONGWRITING WORKFLOW PIPELINE SELECTOR */}
+      {/* ========================================================================= */}
+      <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 flex-wrap shadow-lg ${
+        isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100 border-slate-200'
+      }`}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-mono uppercase font-bold text-slate-400 px-1">Stages:</span>
+          
+          <button
+            type="button"
+            onClick={() => setActiveWorkflow('brainstorm')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
+              activeWorkflow === 'brainstorm'
+                ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-md'
+                : isDarkMode
+                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-amber-400/20 text-amber-300 font-mono text-[10px] flex items-center justify-center font-bold">1</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Workflow 1: Gemini Brainstorming (Chatbot)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveWorkflow('workbench')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
+              activeWorkflow === 'workbench'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : isDarkMode
+                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-indigo-400/20 text-indigo-300 font-mono text-[10px] flex items-center justify-center font-bold">2</span>
+            <FileText className="w-3.5 h-3.5 text-indigo-300" />
+            <span>Workflow 2: Lyric Workbench (1-3 Panes)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveWorkflow('audit');
+              handleRunAudit();
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
+              activeWorkflow === 'audit'
+                ? 'bg-purple-600 text-white shadow-md'
+                : isDarkMode
+                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-purple-400/20 text-purple-300 font-mono text-[10px] flex items-center justify-center font-bold">3</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
+            <span>Workflow 3: SOP Theological Audit</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveWorkflow('suno');
+              const el = document.getElementById('suno-4block-deck');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
+              activeWorkflow === 'suno'
+                ? 'bg-gradient-to-r from-indigo-600 to-amber-600 text-white shadow-md'
+                : isDarkMode
+                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-amber-400/20 text-amber-300 font-mono text-[10px] flex items-center justify-center font-bold">4</span>
+            <Zap className="w-3.5 h-3.5 text-amber-300" />
+            <span>Workflow 4: Suno 4-Block Compiler</span>
+          </button>
+        </div>
+
+        {/* View mode toggle (Split View) */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowBrainstormSplit(!showBrainstormSplit)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition flex items-center gap-1.5 cursor-pointer ${
+              showBrainstormSplit 
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                : isDarkMode
+                ? 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                : 'bg-white text-slate-600 border-slate-300 hover:text-slate-900'
+            }`}
+            title="Split View: View Gemini Brainstorming Chatbot alongside Lyric Workbench"
+          >
+            <Columns className="w-3 h-3 text-amber-400" />
+            <span>{showBrainstormSplit ? 'Split View Active' : 'Split View'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* WORKFLOW 1: GEMINI CREATIVE BRAINSTORMING CHATBOT & RAW SCRATCHPAD */}
+      {(activeWorkflow === 'brainstorm' || showBrainstormSplit) && (
+        <LyricBrainstormingChatbot
+          track={track}
+          onInsertLyrics={handleInsertLyricsFromBrainstorm}
+          isDarkMode={isDarkMode}
+          onNavigateToWorkbench={() => {
+            setActiveWorkflow('workbench');
+            const el = document.getElementById('lyric-workbench-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+      )}
+
+      {/* ========================================================================= */}
       {/* FULL-WIDTH LYRIC WORKBENCH & UP TO 3 PANES SIDE-BY-SIDE REVISION COMPARISON */}
       {/* ========================================================================= */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+      <section id="lyric-workbench-section" className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
         
         {/* TOP TOOLBAR: PANE COUNT SELECTOR & WORKBENCH ACTIONS */}
         <div className="flex items-center justify-between gap-4 flex-wrap border-b border-slate-800 pb-4">
@@ -1340,6 +1475,16 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
           {/* Quick Actions & Copilot Trigger */}
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveWorkflow('brainstorm')}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/50 hover:to-indigo-600/50 border border-amber-500/40 text-xs font-bold text-amber-200 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="Open Workflow 1: Gemini Creative Brainstorming Chatbot & Scratchpad"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Brainstorm (W1)</span>
+            </button>
+
             <button
               onClick={() => onCopyText(track.lyrics, `${track.title} Lyrics`)}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1.5 transition cursor-pointer"

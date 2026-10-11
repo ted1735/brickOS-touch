@@ -7,6 +7,8 @@ import {
   Settings,
   Plus,
   Play,
+  Pause,
+  Compass,
   Square,
   Volume2,
   Sliders,
@@ -98,6 +100,8 @@ import { StudioCopilotTab } from './components/StudioCopilotTab';
 import { SearchGroundingTab } from './components/SearchGroundingTab';
 import { StudioCommandPalette } from './components/StudioCommandPalette';
 import { StudioCopilotDrawer } from './components/StudioCopilotDrawer';
+import { StudioQuickToolsDrawer } from './components/StudioQuickToolsDrawer';
+import { SmartContextActionBar } from './components/SmartContextActionBar';
 import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
 import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
@@ -170,6 +174,19 @@ export default function BrickOSMusicStudioWorkspace() {
   // Unified Command Palette & Studio Copilot Drawer State
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCopilotDrawerOpen, setIsCopilotDrawerOpen] = useState(false);
+  const [isQuickToolsDrawerOpen, setIsQuickToolsDrawerOpen] = useState(false);
+  const [auditionBus, setAuditionBus] = useState<'A' | 'B'>('A');
+
+  const handleToggleAuditionBus = () => {
+    const nextBus = auditionBus === 'A' ? 'B' : 'A';
+    setAuditionBus(nextBus);
+    if (nextBus === 'B') {
+      showToast('Audition Bus B: Stems Preview (Vocals & isolated elements)', 'info');
+    } else {
+      showToast('Audition Bus A: Full Master Mix (Canonical balance)', 'info');
+    }
+  };
+
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState(false);
   const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
@@ -266,13 +283,14 @@ export default function BrickOSMusicStudioWorkspace() {
       else if (e.key === 'Escape') {
         if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
         if (isCopilotDrawerOpen) setIsCopilotDrawerOpen(false);
+        if (isQuickToolsDrawerOpen) setIsQuickToolsDrawerOpen(false);
         if (isThemeModalOpen) setIsThemeModalOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCommandPaletteOpen, isCopilotDrawerOpen, isThemeModalOpen, studioTheme, focusMode]);
+  }, [isCommandPaletteOpen, isCopilotDrawerOpen, isQuickToolsDrawerOpen, isThemeModalOpen, studioTheme, focusMode]);
 
   // Firestore persistent cloud database synchronization state
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
@@ -1775,29 +1793,32 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
 
       {/* TOP NAVIGATION HEADER */}
       <header
-        className={`px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
+        className={`px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
           isDarkMode
             ? 'bg-slate-900/95 border-b border-slate-800 text-white'
             : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
         }`}
       >
-        <div className="flex items-center gap-4">
+        {/* BRAND ZONE: 150x150 PROMINENT HERO LOGO & IDENTITY */}
+        <div className="flex items-center gap-4 flex-shrink-0">
           <button
             onClick={() => setActiveTab('home')}
-            className="w-[150px] min-w-[150px] h-[52px] rounded-xl bg-slate-900/90 border border-slate-700/60 p-1 flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer overflow-hidden group shrink-0"
+            className="w-[150px] h-[150px] min-w-[150px] min-h-[150px] rounded-2xl bg-slate-950 border-2 border-indigo-500/30 p-2.5 flex items-center justify-center shadow-2xl shadow-indigo-500/20 ring-1 ring-white/10 hover:border-indigo-400 hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer overflow-hidden group shrink-0 relative"
             title="Return to Studio Home"
           >
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 opacity-70 group-hover:opacity-100 transition" />
             <img 
               src="/brick-logo.webp" 
               alt="brickOS Studio Logo" 
-              className="w-full h-full object-contain drop-shadow group-hover:brightness-110 transition min-w-[150px]" 
+              className="w-full h-full object-contain drop-shadow-lg group-hover:brightness-110 transition relative z-10" 
             />
           </button>
-          <div>
+
+          <div className="flex flex-col justify-center space-y-1">
             <div className="flex items-center gap-2">
               <h1 
                 onClick={() => setActiveTab('home')}
-                className={`text-xl sm:text-2xl font-black tracking-wider transition cursor-pointer ${
+                className={`text-2xl sm:text-3xl font-black tracking-wider transition cursor-pointer ${
                   isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
                 }`}
                 title="Return to Studio Home"
@@ -1810,7 +1831,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               <button
                 type="button"
                 onClick={() => setActiveTab('nextcloud_sync')}
-                className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
+                className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
                 title="Nextcloud Live WebDAV & Folder 207332 Matcher"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -1835,170 +1856,210 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 {lastSyncedAt && isDbConnected && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
               </button>
             </div>
-            <p className={`text-[11px] flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              <span>Ted Moyer (Primary Artist / OAC)</span>
+            
+            <p className={`text-xs flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              <span className="font-semibold text-slate-300">Ted Moyer (Primary Artist / OAC)</span>
               <span>•</span>
-              <span className="text-indigo-500 font-medium">BRICK Records</span>
+              <span className="text-indigo-400 font-medium">BRICK Records</span>
               <span>•</span>
               {activeTab === 'home' ? (
-                <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">Studio Home</span>
+                <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">Studio Home</span>
               ) : activeTab === 'kanban' ? (
-                <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                   {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5">
-                  <span className="text-indigo-500 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
+                  <span className="text-indigo-400 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
                   <span>•</span>
-                  <span className="text-amber-500 font-medium">{selectedTrack.ep}</span>
+                  <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
                 </span>
               )}
             </p>
+
+            {/* Quick 1-Click Command Palette trigger */}
+            <div className="pt-1 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCommandPaletteOpen(true)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer shadow-sm group ${
+                  isDarkMode
+                    ? 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white hover:border-indigo-500/50'
+                    : 'bg-slate-100 hover:bg-white border-slate-300 text-slate-700'
+                }`}
+                title="Open Command Palette (Cmd+K or Ctrl+K)"
+              >
+                <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300" />
+                <span className="text-slate-400">Search 26 tracks, stages, or stems...</span>
+                <kbd className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-700 text-indigo-400 font-bold">
+                  ⌘K
+                </kbd>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Global Nav Actions */}
-        <div className="workspace-header-actions flex items-center gap-2 sm:gap-2.5 flex-wrap">
-          <button
-            onClick={() => setActiveTab('home')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              activeTab === 'home'
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-            title="Studio Home"
-          >
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Home</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('kanban')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${activeTab === 'kanban' ? 'bg-indigo-600 border-indigo-500 text-white' : isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'}`}
-            title="Open the Kanban production pipeline"
-          >
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Pipeline</span>
-          </button>
-
-          {/* NEXTCLOUD WEBDAV MATCHER & SYNC (FOLDER 207332) */}
-          <button
-            onClick={() => setActiveTab('nextcloud_sync')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              activeTab === 'nextcloud_sync'
-                ? 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-950/60 shadow-md'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-emerald-700 border-slate-300'
-            }`}
-            title="Open Nextcloud /Music-Production Folder & Stem Matcher"
-          >
-            <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">/Music-Production (207332)</span>
-            <span className="sm:hidden">/Music-Production</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('search')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-          >
-            <Search className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden md:inline">Grounding</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('coproducer')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden md:inline">Co-Producer</span>
-          </button>
-
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
-            title="Create New Project"
-          >
-            <Plus className="w-3.5 h-3.5 text-white" />
-            <span>+ New Project</span>
-          </button>
-
-          <button
-            onClick={() => setIsSunoBridgeOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950/50 transition border border-indigo-400/30 cursor-pointer"
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-            <span className="hidden sm:inline">⚡ Suno Bridge</span>
-          </button>
-
-          {/* KEYBOARD SHORTCUTS CHEAT SHEET BUTTON */}
-          <button
-            onClick={toggleCheatSheet}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
-              isCheatSheetOpen
-                ? 'bg-purple-600 border-purple-500 text-white shadow-purple-950/60 shadow-md'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700 hover:text-white'
-                : 'bg-slate-100 hover:bg-slate-200 text-purple-700 border-slate-300'
-            }`}
-            title="Open Interactive Keyboard Shortcuts Cheat Sheet (? or Shift+/)"
-            aria-label="Toggle Keyboard Shortcuts Cheat Sheet"
-          >
-            <Keyboard className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Shortcuts</span>
-            <kbd className="hidden md:inline px-1.5 py-0.2 rounded text-[10px] font-mono bg-purple-950/70 border border-purple-800/60 text-purple-300 font-bold">
-              ?
-            </kbd>
-          </button>
-
-          {/* Global Studio Theme Selector */}
-          <div className="flex items-center gap-1 bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-xs flex-shrink-0">
-            <StudioThemeSelector
-              currentTheme={studioTheme}
-              onSelectTheme={handleSelectTheme}
-              variant="header"
-              showLabels={false}
-            />
+        {/* RIGHT ZONE: STICKY MINI-TRANSPORT WITH A/B AUDITIONING + STREAMLINED ACTIONS */}
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Integrated Mini-Transport with 1-Click A/B Auditioning */}
+          <div className={`p-2 rounded-2xl border flex items-center gap-2.5 shadow-md backdrop-blur-md ${
+            isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}>
+            {/* Play/Pause Button */}
             <button
               type="button"
-              onClick={() => setIsThemeModalOpen(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer"
-              title="Studio Theme Architecture: Six palettes (Shift+T to cycle)"
-              aria-label="Studio Theme Customizer"
+              onClick={() => {
+                if (!isLoadingAudio) handleTogglePlayPauseAudio();
+              }}
+              disabled={isLoadingAudio}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-md transition cursor-pointer ${
+                isLoadingAudio
+                  ? 'bg-amber-500/90 text-slate-950 ring-2 ring-amber-400/50 cursor-wait'
+                  : isPlaying
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+              }`}
+              title={isLoadingAudio ? 'Buffering Nextcloud audio...' : isPlaying ? 'Pause (Space)' : 'Play (Space)'}
             >
-              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              {isLoadingAudio ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+              ) : isPlaying ? (
+                <Pause className="w-4 h-4 fill-current" />
+              ) : (
+                <Play className="w-4 h-4 fill-current ml-0.5" />
+              )}
+            </button>
+
+            {/* Track Info & Visualizer */}
+            <div className="flex flex-col min-w-[120px] max-w-[160px]">
+              <span className="text-[11px] font-bold truncate text-white" title={selectedTrack.title}>
+                {selectedTrack.id}: {selectedTrack.title}
+              </span>
+              <div className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400">
+                <span className="text-emerald-400 font-bold">24-bit Lossless</span>
+                <span>•</span>
+                <span>{selectedTrack.bpm} BPM</span>
+              </div>
+            </div>
+
+            {/* 1-Click A/B Auditioning Bus Toggle */}
+            <div className="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={handleToggleAuditionBus}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer ${
+                  auditionBus === 'A'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Audition Bus A: Full Master Mix"
+              >
+                <span>A</span>
+                <span className="text-[9px] opacity-75">Master</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleAuditionBus}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer ${
+                  auditionBus === 'B'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Audition Bus B: Isolated UVR5 Stems"
+              >
+                <span>B</span>
+                <span className="text-[9px] opacity-75">Stems</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Primary View Switches: Home & Pipeline */}
+          <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'home'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Studio Home Hub"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Home</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('kanban')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'kanban'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Pipeline Kanban"
+            >
+              <Compass className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Pipeline</span>
             </button>
           </div>
 
-          {/* FOCUS MODE TOGGLE */}
+          {/* New Project Quick Button */}
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
+            title="Create New Track Project"
+          >
+            <Plus className="w-3.5 h-3.5 text-white" />
+            <span className="hidden sm:inline">+ New Project</span>
+          </button>
+
+          {/* Studio Quick Tools Drawer Trigger (Groups secondary tools cleanly) */}
           <button
             type="button"
-            onClick={handleToggleFocusMode}
-            className={`focus-mode-toggle p-2 rounded-xl border flex items-center gap-1 transition cursor-pointer ${
-              focusMode
-                ? 'bg-purple-900/60 text-purple-200 border-purple-500/50 shadow-xs'
-                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'
+            onClick={() => setIsQuickToolsDrawerOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-2 transition shadow-md cursor-pointer ${
+              isQuickToolsDrawerOpen
+                ? 'bg-purple-600 border-purple-500 text-white shadow-purple-950/60'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700 hover:border-purple-500/50 hover:text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-purple-700 border-slate-300'
             }`}
-            title={focusMode ? 'Exit Focus Mode and restore the previous sidebar state' : 'Focus Mode hides secondary navigation and utility controls'}
-            aria-label={focusMode ? 'Exit Focus Mode' : 'Enter Focus Mode'}
+            title="Open Studio Quick Tools Drawer (Co-Producer, Search Grounding, Suno Bridge, Shortcuts, VPN, Cloud Sync)"
+            aria-label="Open Studio Quick Tools Drawer"
           >
-            <Eye className="w-3.5 h-3.5 text-purple-400" />
-            <span className="text-xs font-bold font-mono hidden xl:inline">
-              {focusMode ? 'Exit Focus' : 'Focus'}
-            </span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
+            <span>Studio Tools</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
           </button>
         </div>
       </header>
+
+      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Adaptive 1-click stage shortcuts) */}
+      <SmartContextActionBar
+        activeTab={activeTab}
+        selectedTrack={selectedTrack}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab as any);
+          showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+        }}
+        onQuickAction={(actionId) => {
+          if (actionId === 'copy_suno') {
+            copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
+          } else if (actionId === 'load_stems') {
+            audioMiniDaw.init();
+            const currentStems = getTrackStems(selectedTrack);
+            audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+            setIsPlaying(true);
+            showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
+          } else if (actionId === 'measure_lufs') {
+            setActiveTab('mastering');
+            showToast('Loudness Metering Active: Target -12 LUFS', 'info');
+          } else if (actionId === 'sync_folder') {
+            setActiveTab('nextcloud_sync');
+            showToast('Refreshed Folder 207332 WebDAV assets', 'info');
+          }
+        }}
+        isDarkMode={isDarkMode}
+      />
 
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -3068,6 +3129,29 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onSearchGrounding={handleSearchGrounding}
         isSearching={isSearching}
         searchResult={searchResult}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* STUDIO QUICK TOOLS DRAWER (Right Slide-over Panel) */}
+      <StudioQuickToolsDrawer
+        isOpen={isQuickToolsDrawerOpen}
+        onClose={() => setIsQuickToolsDrawerOpen(false)}
+        selectedTrack={selectedTrack}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab as any);
+          showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+        }}
+        onOpenSunoBridge={() => setIsSunoBridgeOpen(true)}
+        onToggleCheatSheet={toggleCheatSheet}
+        onOpenTailscaleModal={() => setIsTailscaleModalOpen(true)}
+        onOpenCoproducer={() => setActiveTab('coproducer')}
+        onOpenGroundingSearch={() => setActiveTab('search')}
+        onSyncDatabase={handleManualSyncDatabase}
+        isDbConnected={isDbConnected}
+        isDbSyncing={isDbSyncing}
+        lastSyncedAt={lastSyncedAt}
+        focusMode={focusMode}
+        onToggleFocusMode={handleToggleFocusMode}
         isDarkMode={isDarkMode}
       />
 
