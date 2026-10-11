@@ -47,6 +47,7 @@ interface SongVersionCompareTabProps {
   onNavigateToTab?: (tab: string) => void;
   isDarkMode?: boolean;
   showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onOpenRenameModal?: () => void;
 }
 
 // Compute line-by-line diff between a target text and a reference text
@@ -86,7 +87,8 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   onUpdateTrackLyrics,
   onNavigateToTab,
   isDarkMode = true,
-  showToast
+  showToast,
+  onOpenRenameModal
 }) => {
   // Baseline state initialized from canonical catalog or activeTrack
   const initialSongId = activeTrack?.id || 'TRK-27';
@@ -343,6 +345,17 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
                   </option>
                 ))}
               </select>
+              {onOpenRenameModal && (
+                <button
+                  type="button"
+                  onClick={onOpenRenameModal}
+                  className="px-1.5 py-0.5 rounded bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  title="Rename song title and sync all linked assets"
+                >
+                  <Edit3 className="w-3 h-3 text-indigo-400" />
+                  <span>Rename</span>
+                </button>
+              )}
             </div>
           )}
 

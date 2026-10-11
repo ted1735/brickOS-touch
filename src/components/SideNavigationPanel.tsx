@@ -88,6 +88,7 @@ interface SideNavigationPanelProps {
   onClose?: () => void;
   isDarkMode?: boolean;
   workspaceMode?: StudioWorkspace;
+  onOpenRenameModal?: () => void;
 }
 
 export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
@@ -121,6 +122,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   onClose,
   isDarkMode = true,
   workspaceMode = 'all',
+  onOpenRenameModal,
 }) => {
   // Search & Filter state for Projects
   const [projectSearch, setProjectSearch] = useState('');
@@ -173,6 +175,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   );
   const [playingNcAssetId, setPlayingNcAssetId] = useState<string | null>(null);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [isAssetLinking, setIsAssetLinking] = useState(false);
+  const [linkingFeedbackMsg, setLinkingFeedbackMsg] = useState<string>('');
 
   // Subscribe to audio engine streaming loading state
   useEffect(() => {
@@ -430,6 +434,8 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   };
 
   const handleAutoLinkAllTrackAssets = () => {
+    setIsAssetLinking(true);
+    setLinkingFeedbackMsg(`Linking all ${ncAssets.length} Nextcloud assets to "${selectedTrack.title}"...`);
     setNcAssets(prev => {
       const updated = prev.map(a => {
         const links = new Set(a.linkedTrackIds || []);
@@ -449,6 +455,10 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
       } catch (_) {}
       return updated;
     });
+    setTimeout(() => {
+      setIsAssetLinking(false);
+      setLinkingFeedbackMsg('');
+    }, 700);
     setNcSyncSuccessMsg(`✓ Linked all ${ncAssets.length} assets to current track "${selectedTrack.title}"!`);
     setTimeout(() => setNcSyncSuccessMsg(null), 4000);
   };
@@ -542,12 +552,14 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   };
 
   const handleToggleLinkNcAsset = (assetId: string) => {
+    setIsAssetLinking(true);
     setNcAssets(prev => {
       const nextList = prev.map(a => {
         if (a.id === assetId) {
           const links = a.linkedTrackIds || [];
           const isLinked = links.includes(selectedTrack.id) || a.matchedTrackId === selectedTrack.id;
           const next = isLinked ? links.filter(id => id !== selectedTrack.id) : [...links, selectedTrack.id];
+          setLinkingFeedbackMsg(isLinked ? `Unlinking "${a.filename}" from track...` : `Linking "${a.filename}" to track...`);
           return {
             ...a,
             linkedTrackIds: next,
@@ -562,6 +574,10 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
       } catch (_) {}
       return nextList;
     });
+    setTimeout(() => {
+      setIsAssetLinking(false);
+      setLinkingFeedbackMsg('');
+    }, 600);
   };
 
   // Universal Asset Editor Modal State
@@ -1209,18 +1225,12 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
       }`}
     >
       
-      {/* HEADER: TITLE, TAB SWITCHER & PIN/COLLAPSE */}
+      {/* HEADER: TITLE, LOGO (AT LEAST 150PX), TAB SWITCHER & PIN/COLLAPSE */}
       <div className={`p-3.5 border-b space-y-3 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700/60 p-0.5 flex items-center justify-center shadow-md overflow-hidden">
-              <img src="/brick-logo.webp" alt="brickOS Logo" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <h2 className={`text-xs font-black uppercase tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Studio Side Nav</h2>
-              <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Projects, Sessions & Assets</p>
-            </div>
-          </div>
+          <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+            Studio Side Nav
+          </span>
 
           <div className="flex items-center gap-1">
             <button
@@ -1243,6 +1253,25 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 <X className="w-4 h-4" />
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Brand Logo Container (At least 150px) */}
+        <div className="flex flex-col items-center justify-center pt-1 pb-1">
+          <div className="w-[150px] h-[150px] min-w-[150px] min-h-[150px] rounded-2xl bg-slate-950/90 border border-slate-700/60 p-3 flex items-center justify-center shadow-xl shadow-indigo-950/50 overflow-hidden ring-1 ring-white/10 group hover:border-indigo-500/60 transition-all">
+            <img 
+              src="/brick-logo.webp" 
+              alt="brickOS Logo" 
+              className="w-full h-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300" 
+            />
+          </div>
+          <div className="text-center mt-2.5">
+            <h2 className={`text-xs font-black uppercase tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              brickOS Master Studio
+            </h2>
+            <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              Projects, Sessions & Assets
+            </p>
           </div>
         </div>
 
@@ -1387,75 +1416,68 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     <div
                       key={track.id}
                       onClick={() => onSelectTrack(track)}
-                      className={`p-2.5 rounded-xl border transition-all cursor-pointer group ${
+                      className={`px-2 py-0.5 rounded-md border transition-all cursor-pointer group flex items-center justify-between gap-1.5 h-[22px] min-h-[22px] ${
                         isSelected
                           ? isDarkMode
-                            ? 'bg-indigo-950/60 border-indigo-500/80 shadow-md shadow-indigo-950/50'
-                            : 'bg-indigo-50/80 border-indigo-400 shadow-sm'
+                            ? 'bg-indigo-950/70 border-indigo-500/80 shadow-xs shadow-indigo-950/50'
+                            : 'bg-indigo-50/90 border-indigo-400 shadow-xs'
                           : isDarkMode
                           ? 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
                           : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/30">
-                              {track.id}
-                            </span>
-                            <span className={`font-bold text-xs truncate max-w-[160px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                              {track.title}
-                            </span>
-                            {isSelected && (
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Active on workbench" />
-                            )}
-                          </div>
-                          <p className={`text-[10px] truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                            {track.ep} • {track.genre}
-                          </p>
-                        </div>
-
-                        <div className="text-right space-y-1 flex-shrink-0">
-                          <span
-                            className={`inline-block text-[9px] font-bold font-mono px-1.5 py-0.5 rounded ${
-                              track.status === 'Released'
-                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
-                                : track.status === 'Audio Master'
-                                ? 'bg-purple-500/10 text-purple-500 border border-purple-500/30'
-                                : track.status === 'UVR5 Stem Prep'
-                                ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
-                                : isDarkMode
-                                ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200'
-                            }`}
-                          >
-                            {track.status}
-                          </span>
-                          <div className="text-[9px] font-mono text-slate-400">
-                            {track.bpm} BPM • {track.key}
-                          </div>
-                        </div>
+                      {/* Left: ID & Title & Genre */}
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="font-mono text-[8px] font-bold text-indigo-500 bg-indigo-500/10 px-1 py-0 rounded border border-indigo-500/30 flex-shrink-0 leading-tight">
+                          {track.id}
+                        </span>
+                        <span className={`font-bold text-[11px] truncate max-w-[130px] sm:max-w-[170px] leading-tight ${
+                          isDarkMode ? 'text-white group-hover:text-indigo-200' : 'text-slate-900 group-hover:text-indigo-600'
+                        }`}>
+                          {track.title}
+                        </span>
+                        {isSelected && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" title="Active on workbench" />
+                        )}
+                        <span className={`text-[9px] truncate max-w-[100px] hidden sm:inline leading-tight ${
+                          isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                        }`}>
+                          • {track.genre}
+                        </span>
                       </div>
 
-                      {/* Bottom row: Sessions count and Selah status */}
-                      <div className={`mt-2 pt-1.5 border-t flex items-center justify-between text-[10px] ${
-                        isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'
-                      }`}>
-                        <span className="truncate max-w-[170px] italic">
-                          {track.vocalCast || track.vocal}
+                      {/* Right: Status badge & Rename trigger */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {onOpenRenameModal && isSelected && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenRenameModal();
+                            }}
+                            className={`p-0.5 rounded text-[9px] transition opacity-70 hover:opacity-100 ${
+                              isDarkMode ? 'hover:bg-slate-800 text-indigo-300' : 'hover:bg-indigo-50 text-indigo-600'
+                            }`}
+                            title="Rename song title and sync linked assets"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        <span
+                          className={`inline-block text-[8px] font-bold font-mono px-1 py-0 rounded leading-tight ${
+                            track.status === 'Released'
+                              ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
+                              : track.status === 'Audio Master'
+                              ? 'bg-purple-500/10 text-purple-500 border border-purple-500/30'
+                              : track.status === 'UVR5 Stem Prep'
+                              ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
+                              : isDarkMode
+                              ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {track.status}
                         </span>
-                        <div className="flex items-center gap-2">
-                          {trackSessionCount > 0 && (
-                            <span className="text-purple-400 font-mono text-[9px]">
-                              {trackSessionCount} sess
-                            </span>
-                          )}
-                          {track.selahPrayed && (
-                            <span className="text-emerald-400 flex items-center gap-0.5 text-[9px]">
-                              <Heart className="w-2.5 h-2.5 fill-emerald-400" /> Selah
-                            </span>
-                          )}
-                        </div>
                       </div>
                     </div>
                   );
@@ -1761,9 +1783,6 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
               <div>
                 <p className={`text-[11px] font-bold truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedTrack.title}</p>
-                <p className={`text-[10px] font-mono truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {selectedTrack.ep} • {selectedTrack.bpm} BPM • {selectedTrack.key}
-                </p>
               </div>
 
               {/* Nextcloud Live WebDAV Connection Service & Diagnostics Engine */}
@@ -2807,6 +2826,22 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               </button>
             </div>
 
+          </div>
+        )}
+
+        {/* TRACK ASSET HUB LINKING LOADING OVERLAY */}
+        {activePanelTab === 'assets' && isAssetLinking && (
+          <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 shadow-xl mb-3">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <h4 className="text-xs font-bold text-white tracking-wide">Syncing Track Asset Link</h4>
+            <p className="text-[11px] text-cyan-300 font-mono mt-1 max-w-[200px] leading-tight">
+              {linkingFeedbackMsg || 'Updating Nextcloud asset link...'}
+            </p>
+            <div className="w-32 bg-slate-800 rounded-full h-1 mt-3 overflow-hidden">
+              <div className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full w-2/3 animate-pulse rounded-full" />
+            </div>
           </div>
         )}
 

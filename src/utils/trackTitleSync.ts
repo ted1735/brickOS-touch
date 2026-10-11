@@ -253,8 +253,8 @@ export async function syncTrackTitleAcrossAllAssets({
   const versionCatalogUpdated = updateSongVersionCatalogTitle(trackId, cleanTitle);
 
   // 9. Sync active audio engine mini-DAW transport
-  if (audioMiniDaw.activeTrackTitle === oldTitle) {
-    audioMiniDaw.activeTrackTitle = cleanTitle;
+  if (audioMiniDaw.getActiveTrackTitle() === oldTitle) {
+    audioMiniDaw.setActiveTrackTitle(cleanTitle);
   }
 
   // 10. Persist track changes to Firestore asynchronously

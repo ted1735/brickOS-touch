@@ -78,6 +78,10 @@ class MiniDawEngine {
     return this.activeTrackTitle;
   }
 
+  public setActiveTrackTitle(title: string): void {
+    this.activeTrackTitle = title;
+  }
+
   public addLoadingListener(cb: (loading: boolean) => void): () => void {
     this.loadingListeners.add(cb);
     return () => this.loadingListeners.delete(cb);

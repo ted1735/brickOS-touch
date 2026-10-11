@@ -103,6 +103,8 @@ import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
 import type { StudioWorkspace } from './components/StudioHome';
 import { TailscaleVpnModal } from './components/TailscaleVpnModal';
+import { SongTitleRenameModal } from './components/SongTitleRenameModal';
+import { syncTrackTitleAcrossAllAssets } from './utils/trackTitleSync';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
 import {
   loadTracksFromFirestore,
@@ -640,6 +642,48 @@ export default function BrickOSMusicStudioWorkspace() {
   // Modal for new track project creation
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCatalogDrawerOpen, setIsCatalogDrawerOpen] = useState(false);
+  const [isRenameSongModalOpen, setIsRenameSongModalOpen] = useState(false);
+
+  // Rename song & propagate change synchronously across all linked assets (sessions, artwork, video reels, prompts, Nextcloud stems)
+  const handleRenameTrackAndSyncAssets = async (payload: {
+    trackId: string;
+    newTitle: string;
+    newGenre?: string;
+    newEp?: string;
+    newBpm?: number;
+    newKey?: string;
+    newThesis?: string;
+    newVocalCast?: string;
+    reason?: string;
+  }) => {
+    try {
+      setIsDbSyncing(true);
+      const res = await syncTrackTitleAcrossAllAssets({
+        payload,
+        tracks,
+        setTracks,
+        selectedTrack,
+        setSelectedTrack,
+        sessions,
+        setSessions,
+        generatedImages,
+        setGeneratedImages,
+        generatedVideos,
+        setGeneratedVideos,
+        nightCafePrompts,
+        setNightCafePrompts
+      });
+      showToast(res.summaryMessage, 'success');
+      if (selectedTrack.id === payload.trackId) {
+        setTrackStates(getTrackStems(res.updatedTrack));
+      }
+    } catch (err: any) {
+      showToast(`Rename Failed: ${err?.message || err}`, 'error');
+      throw err;
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
 
   // Add new track from Modal or Kanban and permanently persist to Firestore
   const handleAddNewTrack = async (newTrack: Track, openLyricEngine = true, generatedPrompts?: PromptItem[]) => {
@@ -1737,28 +1781,28 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
             : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => setActiveTab('home')}
-            className="w-10 h-10 rounded-xl bg-slate-900/90 border border-slate-700/60 p-1 flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer overflow-hidden group"
+            className="w-[150px] min-w-[150px] h-[52px] rounded-xl bg-slate-900/90 border border-slate-700/60 p-1 flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20 hover:scale-105 active:scale-95 transition cursor-pointer overflow-hidden group shrink-0"
             title="Return to Studio Home"
           >
             <img 
               src="/brick-logo.webp" 
               alt="brickOS Studio Logo" 
-              className="w-full h-full object-contain drop-shadow group-hover:brightness-110 transition" 
+              className="w-full h-full object-contain drop-shadow group-hover:brightness-110 transition min-w-[150px]" 
             />
           </button>
           <div>
             <div className="flex items-center gap-2">
               <h1 
-              onClick={() => setActiveTab('home')}
-                className={`text-base font-black tracking-wider transition cursor-pointer ${
+                onClick={() => setActiveTab('home')}
+                className={`text-xl sm:text-2xl font-black tracking-wider transition cursor-pointer ${
                   isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
                 }`}
-              title="Return to Studio Home"
+                title="Return to Studio Home"
               >
-                brickOS MASTER STUDIO
+                brickOS
               </h1>
               <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/30">
                 {CURRENT_STUDIO_VERSION}
@@ -2005,6 +2049,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 onClose={() => setIsSideNavOpen(false)}
                 isDarkMode={isDarkMode}
                 workspaceMode={workspaceMode}
+                onOpenRenameModal={() => setIsRenameSongModalOpen(true)}
               />
             </div>
           </>
@@ -2059,6 +2104,16 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                       </option>
                     ))}
                   </select>
+
+                  {/* Prominent Rename Song & Linked Assets Auto-Sync Button */}
+                  <button
+                    onClick={() => setIsRenameSongModalOpen(true)}
+                    className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold flex items-center gap-1.5 border border-indigo-400/40 shadow-sm shadow-indigo-950/40 transition cursor-pointer"
+                    title="Edit Song Title, Genre & Sync All Linked Assets (Sessions, Visuals, Video Reels, Nextcloud Stems, Suno Prompts)"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-indigo-200" />
+                    <span>Rename Song</span>
+                  </button>
 
                   {/* Side Navigation Panel Toggle: Projects */}
                   <button
@@ -2158,20 +2213,41 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                 </div>
 
                 <div>
-                  <h2 className={`text-xl sm:text-2xl font-black flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    <span>{selectedTrack.title}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded font-normal font-mono ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-slate-100'}`}>
-                      {selectedTrack.bpm} BPM • {selectedTrack.key}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 
+                      onClick={() => setIsRenameSongModalOpen(true)}
+                      className={`text-xl sm:text-2xl font-black flex items-center gap-2 cursor-pointer hover:text-indigo-400 transition group ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
+                      title="Click to rename song title and update all linked assets"
+                    >
+                      <span>{selectedTrack.title}</span>
+                      <button 
+                        type="button" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsRenameSongModalOpen(true);
+                        }}
+                        className={`p-1 rounded-lg border transition ${
+                          isDarkMode 
+                            ? 'bg-slate-800 hover:bg-indigo-600 border-slate-700 text-slate-400 hover:text-white' 
+                            : 'bg-slate-100 hover:bg-indigo-50 border-slate-300 text-slate-600 hover:text-indigo-600'
+                        }`}
+                        title="Edit song title"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    </h2>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold flex items-center gap-1 ${
+                      isDarkMode ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300' : 'bg-cyan-50 border-cyan-200 text-cyan-800'
+                    }`}>
+                      <Music className="w-3 h-3 text-cyan-400" />
+                      <span>{selectedTrack.genre}</span>
                     </span>
-                    <span className="text-xs text-indigo-500 font-semibold font-mono">
-                      {selectedTrack.ep}
-                    </span>
-                  </h2>
+                  </div>
                   <p className={`text-xs italic max-w-2xl mt-0.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>"{selectedTrack.thesis}"</p>
                 </div>
               </div>
 
-              {/* Status & Vocal Cast Selector */}
+              {/* Status Selector */}
               <div className="flex items-center gap-3 flex-wrap">
                 <div>
                   <label className={`block text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Production Status</label>
@@ -2190,36 +2266,6 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
                     <option value="Sent for Distribution">Sent for Distribution</option>
                     <option value="Released">Released</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className={`block text-[10px] uppercase font-bold mb-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Vocal Formant Cast</label>
-                  <input
-                    type="text"
-                    value={selectedTrack.vocalCast}
-                    onChange={(e) => handleTrackUpdate('vocalCast', e.target.value)}
-                    className={`border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 ${
-                      isDarkMode ? 'bg-slate-950 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
-                    placeholder="e.g. Silas Thorne (Aged Oak)"
-                  />
-                </div>
-
-                <div className="pt-4">
-                  <button
-                    onClick={() => setIsSelahGateOpen(true)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
-                      selectedTrack.selahPrayed
-                        ? 'bg-emerald-950 border-emerald-600 text-emerald-300'
-                        : isDarkMode
-                        ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-                        : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900'
-                    }`}
-                    title="Mandatory 24h prayer & stationkeeping before master release (Nashville SOP Rule 1)"
-                  >
-                    <Heart className={`w-3.5 h-3.5 ${selectedTrack.selahPrayed ? 'fill-emerald-400 text-emerald-400' : ''}`} />
-                    <span>{selectedTrack.selahPrayed ? 'Selah Done' : 'Selah Prayer'}</span>
-                  </button>
                 </div>
               </div>
             </div>
@@ -2371,6 +2417,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onOpenSectionGuide={handleOpenSectionGuide}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               isDarkMode={isDarkMode}
+              onOpenRenameModal={() => setIsRenameSongModalOpen(true)}
             />
           )}
 
@@ -2387,6 +2434,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
               isDarkMode={isDarkMode}
               showToast={showToast}
+              onOpenRenameModal={() => setIsRenameSongModalOpen(true)}
             />
           )}
 
@@ -2997,6 +3045,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onOpenSectionGuide={(sec) => sec && handleOpenSectionGuide(sec as any)}
         onOpenCopilotDrawer={() => setIsCopilotDrawerOpen(true)}
         onOpenTailscaleModal={() => setIsTailscaleModalOpen(true)}
+        onOpenRenameModal={() => setIsRenameSongModalOpen(true)}
         isDarkMode={isDarkMode}
       />
 
@@ -3047,6 +3096,19 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
       <TailscaleVpnModal
         isOpen={isTailscaleModalOpen}
         onClose={() => setIsTailscaleModalOpen(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* SONG TITLE RENAME & LINKED ASSETS SYNCHRONIZATION MODAL */}
+      <SongTitleRenameModal
+        isOpen={isRenameSongModalOpen}
+        onClose={() => setIsRenameSongModalOpen(false)}
+        track={selectedTrack}
+        sessions={sessions}
+        generatedImages={generatedImages}
+        generatedVideos={generatedVideos}
+        nightCafePrompts={nightCafePrompts}
+        onSaveRename={handleRenameTrackAndSyncAssets}
         isDarkMode={isDarkMode}
       />
 

@@ -23,7 +23,8 @@ import {
   Grid,
   Columns,
   MessageSquare,
-  Shield
+  Shield,
+  Edit3
 } from 'lucide-react';
 import { Track, StudioTheme } from '../types';
 import { ALL_STUDIO_NAV_ITEMS } from '../data/studioNavigationData';
@@ -44,6 +45,7 @@ interface StudioCommandPaletteProps {
   onOpenCopilotDrawer?: () => void;
   onOpenSectionGuide?: (sectionId: string) => void;
   onOpenTailscaleModal?: () => void;
+  onOpenRenameModal?: () => void;
 }
 
 interface PaletteAction {
@@ -72,7 +74,8 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
   onToggleFocusMode,
   onOpenCopilotDrawer,
   onOpenSectionGuide,
-  onOpenTailscaleModal
+  onOpenTailscaleModal,
+  onOpenRenameModal
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -151,6 +154,19 @@ export const StudioCommandPalette: React.FC<StudioCommandPaletteProps> = ({
       accentColor: 'text-cyan-400',
       onSelect: () => {
         onNavigateToTab('nextcloud_sync');
+        onClose();
+      }
+    },
+    {
+      id: 'action-rename-song',
+      title: `Rename Current Song: "${selectedTrack.title}"`,
+      category: 'SOP & Quick Actions',
+      subtitle: 'Change title, evolve genre, and sync all linked sessions, stems, artwork & prompts',
+      icon: Edit3,
+      accentColor: 'text-indigo-400',
+      badge: 'RENAME',
+      onSelect: () => {
+        if (onOpenRenameModal) onOpenRenameModal();
         onClose();
       }
     },

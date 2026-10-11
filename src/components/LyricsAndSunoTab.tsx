@@ -64,6 +64,7 @@ interface LyricsAndSunoTabProps {
   onOpenSectionGuide?: (sectionId?: any) => void;
   onNavigateToTab?: (tab: string) => void;
   isDarkMode?: boolean;
+  onOpenRenameModal?: () => void;
 }
 
 export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
@@ -73,6 +74,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   onOpenSectionGuide,
   onNavigateToTab,
   isDarkMode = true,
+  onOpenRenameModal,
 }) => {
   // Multi-pane comparison layout state (up to 3 panes side-by-side)
   const [paneCount, setPaneCount] = useState<1 | 2 | 3>(1);
@@ -900,12 +902,20 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 pt-0.5">
+            <div className="flex items-center gap-2 pt-0.5 group">
               <Disc className="w-4 h-4 text-indigo-400 animate-spin-slow" />
-              <h2 className={`text-lg font-black tracking-tight ${
-                isDarkMode ? 'text-white' : 'text-slate-900'
-              }`}>
-                {track.title}
+              <h2 
+                onClick={() => {
+                  if (onOpenRenameModal) onOpenRenameModal();
+                  else setIsEditingIdentity(!isEditingIdentity);
+                }}
+                className={`text-lg font-black tracking-tight cursor-pointer hover:text-indigo-400 transition flex items-center gap-2 ${
+                  isDarkMode ? 'text-white' : 'text-slate-900'
+                }`}
+                title="Click to edit song title and update all linked assets"
+              >
+                <span>{track.title}</span>
+                <Edit3 className="w-3.5 h-3.5 text-indigo-400 opacity-60 group-hover:opacity-100 transition" />
               </h2>
             </div>
           </div>
@@ -914,7 +924,10 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setIsEditingIdentity(!isEditingIdentity)}
+              onClick={() => {
+                if (onOpenRenameModal) onOpenRenameModal();
+                else setIsEditingIdentity(!isEditingIdentity);
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
                 isEditingIdentity
                   ? 'bg-indigo-600 text-white shadow-indigo-900/50'
@@ -922,10 +935,10 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
                   ? 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700'
                   : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
               }`}
-              title="Change the song title or reassign EP project collection"
+              title="Change the song title, genre, or reassign EP project collection"
             >
               <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{isEditingIdentity ? 'Close Title Editor' : 'Edit Song / Project Name'}</span>
+              <span>{isEditingIdentity ? 'Close Title Editor' : 'Edit Song Title & Metadata'}</span>
             </button>
 
             <button

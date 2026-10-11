@@ -132,48 +132,36 @@ export const CatalogSidebar: React.FC<CatalogSidebarProps> = ({
             <div
               key={trk.id}
               onClick={() => onSelectTrack(trk)}
-              className={`p-3.5 rounded-xl border transition cursor-pointer flex flex-col gap-1.5 text-left relative group ${
+              className={`px-2.5 py-1.5 rounded-lg border transition cursor-pointer flex items-center justify-between gap-2 min-h-[38px] text-left relative group ${
                 isSelected
-                  ? 'bg-indigo-950/50 border-indigo-500/80 shadow-lg shadow-indigo-950/60 ring-1 ring-indigo-500/30'
+                  ? 'bg-indigo-950/70 border-indigo-500/80 shadow-xs shadow-indigo-950/60 ring-1 ring-indigo-500/30'
                   : 'bg-slate-900/90 border-slate-800/90 hover:border-slate-700 hover:bg-slate-850'
               }`}
             >
-              <div className="flex items-center justify-between text-[11px]">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-indigo-400">{trk.id}</span>
-                  {trk.selahPrayed && (
-                    <span className="text-[10px] text-amber-400 flex items-center gap-0.5" title="Selah Prayer Block Completed">
-                      <Heart className="w-3 h-3 fill-amber-400/40 text-amber-400 inline" />
-                    </span>
-                  )}
-                </div>
-                <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${
-                  trk.status === 'Sent for Distribution' || trk.status === 'Released'
-                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
-                    : trk.status === 'Audio Master'
-                    ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
-                    : 'bg-slate-800 text-slate-300'
-                }`}>
-                  {trk.status}
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="font-mono text-[9px] font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/30 flex-shrink-0">
+                  {trk.id}
+                </span>
+                <h3 className="text-xs font-bold text-white group-hover:text-indigo-200 transition truncate max-w-[150px]">
+                  {trk.title}
+                </h3>
+                {isSelected && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                )}
+                <span className="text-[10px] text-slate-400 truncate max-w-[100px] hidden sm:inline">
+                  • {trk.genre}
                 </span>
               </div>
 
-              <h3 className="text-sm font-bold text-white group-hover:text-indigo-200 transition line-clamp-1">
-                {trk.title}
-              </h3>
-
-              <p className="text-[11px] text-slate-400 line-clamp-1">
-                {trk.genre} • <span className="font-mono text-slate-300">{trk.bpm} BPM</span> • <span className="text-indigo-300">{trk.key}</span>
-              </p>
-
-              <div className="text-[10px] text-slate-400 flex items-center justify-between pt-0.5 border-t border-slate-800/60">
-                <span className="truncate max-w-[170px] text-slate-300 font-medium">
-                  {trk.vocalCast}
-                </span>
-                <span className="text-slate-400 font-mono text-[9px]">
-                  v{trk.versions[trk.versions.length - 1]?.version || '1.0'}
-                </span>
-              </div>
+              <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] font-semibold flex-shrink-0 ${
+                trk.status === 'Sent for Distribution' || trk.status === 'Released'
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
+                  : trk.status === 'Audio Master'
+                  ? 'bg-amber-950 text-amber-300 border border-amber-800/40'
+                  : 'bg-slate-800 text-slate-300'
+              }`}>
+                {trk.status}
+              </span>
             </div>
           );
         })}

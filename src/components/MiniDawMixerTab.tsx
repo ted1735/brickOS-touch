@@ -24,7 +24,8 @@ import {
   HelpCircle,
   RefreshCw,
   GripVertical,
-  FolderKanban
+  FolderKanban,
+  Loader2
 } from 'lucide-react';
 import { Track, MixerTrack, DawEffectsState, LufsMeasurementData } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
@@ -71,6 +72,8 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState<boolean>(true);
   const [dragOverChannelId, setDragOverChannelId] = useState<number | null>(null);
   const [isLoadingAudio, setIsLoadingAudio] = useState<boolean>(false);
+  const [isLinkingAsset, setIsLinkingAsset] = useState<boolean>(false);
+  const [linkingAssetLabel, setLinkingAssetLabel] = useState<string>('');
 
   useEffect(() => {
     return audioMiniDaw.addLoadingListener(setIsLoadingAudio);
@@ -85,6 +88,9 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     const webdavPath = asset.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${asset.filename || asset.name}`;
     const audioUrl = buildNextcloudStreamUrl(webdavPath);
     const cleanName = (asset.filename || asset.name || `Stem ${channelId}`).replace(/\.[^/.]+$/, '');
+
+    setIsLinkingAsset(true);
+    setLinkingAssetLabel(`Linking "${cleanName}" to Channel ${channelId} from Nextcloud...`);
 
     setTracks(prev => prev.map(t => {
       if (t.id === channelId) {
@@ -102,6 +108,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     }));
 
     setNextcloudSyncNotice(`✓ Routed "${cleanName}" to Channel ${channelId}`);
+    setTimeout(() => {
+      setIsLinkingAsset(false);
+      setLinkingAssetLabel('');
+    }, 700);
     setTimeout(() => setNextcloudSyncNotice(''), 4000);
 
     if (isPlaying) {
@@ -118,9 +128,15 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
   // Load all 4 stems of any track into Mixer
   const handleLoadAllStems = (trackToLoad: Track) => {
+    setIsLinkingAsset(true);
+    setLinkingAssetLabel(`Fetching & linking all 4 stems for "${trackToLoad.title}" from Nextcloud...`);
     const stems = getUniversalTrackStems(trackToLoad);
     setTracks(stems);
     setNextcloudSyncNotice(`✓ Loaded all 4 stems for ${trackToLoad.title}`);
+    setTimeout(() => {
+      setIsLinkingAsset(false);
+      setLinkingAssetLabel('');
+    }, 800);
     setTimeout(() => setNextcloudSyncNotice(''), 4000);
 
     if (isPlaying) {
@@ -1328,6 +1344,25 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
       )}
         </div>
       </div>
+
+      {/* ASSET-LINK & STEM ROUTING LOADING OVERLAY */}
+      {isLinkingAsset && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 max-w-sm w-full shadow-2xl shadow-cyan-950/60 text-center space-y-3.5">
+            <div className="w-12 h-12 rounded-xl bg-cyan-950/80 border border-cyan-500/50 flex items-center justify-center mx-auto text-cyan-400">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">Nextcloud Asset Link in Progress</h4>
+              <p className="text-xs text-slate-300 mt-1 font-mono">{linkingAssetLabel || 'Resolving WebDAV stems...'}</p>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div className="bg-gradient-to-r from-cyan-500 to-indigo-500 h-full w-2/3 animate-pulse rounded-full" />
+            </div>
+            <p className="text-[10px] text-slate-500 font-mono">Nextcloud Folder 207332 • Lossless PCM Audio Bridge</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
