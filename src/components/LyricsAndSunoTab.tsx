@@ -138,9 +138,11 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [sopRules, setSopRules] = useState<SOPRulesPackage>(() => getLocalCachedSOPRules());
 
-  // 4-Stage Lyric Studio Workflow Pipeline State (Workflow 1: Gemini Brainstorming -> Workflow 2: Workbench -> Workflow 3: SOP Audit -> Workflow 4: Suno 4-Blocks)
-  const [activeWorkflow, setActiveWorkflow] = useState<'brainstorm' | 'workbench' | 'audit' | 'suno'>('brainstorm');
+  // Distraction-Free Lyric Studio Drawer & View State (Front-and-center editor + slide-out drawer for extras)
+  const [isLyricDrawerOpen, setIsLyricDrawerOpen] = useState(false);
+  const [lyricDrawerTab, setLyricDrawerTab] = useState<'brainstorm' | 'audit' | 'suno' | 'extras'>('brainstorm');
   const [showBrainstormSplit, setShowBrainstormSplit] = useState(false);
+  const [showSopAuditBar, setShowSopAuditBar] = useState(false);
 
   const handleInsertLyricsFromBrainstorm = (snippet: string, mode: 'replace' | 'append' | 'prepend') => {
     const current = track.lyrics || '';
@@ -766,485 +768,18 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* SECTION QUICK HELP BANNER & SOP GUIDE */}
-      <SectionQuickHelpBanner
-        sectionId="lyrics"
-        onOpenModalGuide={(sec) => onOpenSectionGuide?.(sec || 'lyrics')}
-        isDarkMode={isDarkMode}
-      />
-      
-      {/* STORAGE & SYNC STATUS HEADER BAR */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-emerald-950 border border-emerald-700/40 flex items-center justify-center text-emerald-400">
-            <ShieldCheck className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white">Lyrics Master Vault</span>
-              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/50">
-                ✓ LocalStorage & WebDAV Synced
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-mono">
-              Last saved: <strong className="text-slate-200">{lastSavedTime}</strong> • Version:{' '}
-              <strong className="text-indigo-400">
-                {track.versions[track.versions.length - 1]?.version || 'v1.0'}
-              </strong>
-            </p>
-          </div>
-        </div>
-
-        {/* Global Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIsPresetLibraryOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 via-indigo-600 to-purple-600 hover:from-amber-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950 transition cursor-pointer"
-            title="Open Sound Preset Library (4-Block Engine Configurations)"
-          >
-            <Sliders className="w-3.5 h-3.5 text-amber-300" />
-            <span>Sound Presets ({presets.length})</span>
-          </button>
-
-          {onNavigateToTab && (
-            <button
-              type="button"
-              onClick={() => onNavigateToTab('versions')}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-900/60 to-indigo-900/60 hover:from-amber-800/80 hover:to-indigo-800/80 text-amber-200 font-bold text-xs border border-amber-600/40 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              title="Open Section Shootout (A/B/X) to compare choruses and verses across versions with LUFS loudness matching"
-            >
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>Section Shootout</span>
-            </button>
-          )}
-
-          {onNavigateToTab && (
-            <button
-              type="button"
-              onClick={() => onNavigateToTab('brainstorming')}
-              className="px-3.5 py-2 rounded-xl bg-purple-900/60 hover:bg-purple-800/80 text-purple-200 font-bold text-xs border border-purple-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              title="Open BlockSuite Infinite Whiteboard Canvas for visual brainstorming & arrangement"
-            >
-              <Grid className="w-3.5 h-3.5 text-purple-400" />
-              <span>Open in Whiteboard</span>
-            </button>
-          )}
-
-          {onOpenSectionGuide && (
-            <button
-              type="button"
-              onClick={() => onOpenSectionGuide('lyrics')}
-              className="px-3.5 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 font-bold text-xs border border-amber-700/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              title="Open Lyric Engine & Nashville SOP Rules Guide"
-            >
-              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span>How To Use Lyrics & SOP</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950 transition cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Import Lyrics</span>
-          </button>
-
-          <button
-            onClick={() => setIsCheckpointModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
-          >
-            <Save className="w-3.5 h-3.5 text-amber-400" />
-            <span>Save Checkpoint</span>
-          </button>
-
-          <button
-            onClick={handleDownloadTxt}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
-            title="Download formatted lyrics (.txt)"
-          >
-            <Download className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden sm:inline">.TXT</span>
-          </button>
-
-          <button
-            onClick={handleExportJson}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
-            title="Export complete song package (.json)"
-          >
-            <HardDrive className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Package</span>
-          </button>
-
-          {/* Jump to Suno Generator button */}
-          <button
-            onClick={() => {
-              const el = document.getElementById('suno-4block-deck');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition cursor-pointer"
-            title="Jump to Suno 4-Block Generation Engine below"
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-300" />
-            <span>⚡ Suno 4-Blocks</span>
-          </button>
-        </div>
-      </div>
-
-      {/* SONG & PROJECT TITLE IDENTITY & VERSIONING SYSTEM */}
-      <div className={`p-4 rounded-2xl border transition shadow-lg ${
-        isDarkMode 
-          ? 'bg-slate-900/90 border-slate-800 ring-1 ring-slate-800' 
-          : 'bg-white border-slate-200 shadow-md'
-      }`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Identity Info */}
-          <div className="space-y-1 min-w-[240px]">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/40">
-                {track.id}
-              </span>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
-                isDarkMode 
-                  ? 'bg-cyan-950/60 border-cyan-700/40 text-cyan-300' 
-                  : 'bg-cyan-50 border-cyan-200 text-cyan-800'
-              }`}>
-                <FolderEdit className="w-3 h-3 text-cyan-400" />
-                <span>Project: {track.ep}</span>
-              </span>
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                isDarkMode 
-                  ? 'bg-slate-950 border-slate-800 text-slate-400' 
-                  : 'bg-slate-100 border-slate-200 text-slate-600'
-              }`}>
-                {track.bpm} BPM • {track.key} • {track.genre}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 pt-0.5 group">
-              <Disc className="w-4 h-4 text-indigo-400 animate-spin-slow" />
-              <h2 
-                onClick={() => {
-                  if (onOpenRenameModal) onOpenRenameModal();
-                  else setIsEditingIdentity(!isEditingIdentity);
-                }}
-                className={`text-lg font-black tracking-tight cursor-pointer hover:text-indigo-400 transition flex items-center gap-2 ${
-                  isDarkMode ? 'text-white' : 'text-slate-900'
-                }`}
-                title="Click to edit song title and update all linked assets"
-              >
-                <span>{track.title}</span>
-                <Edit3 className="w-3.5 h-3.5 text-indigo-400 opacity-60 group-hover:opacity-100 transition" />
-              </h2>
-            </div>
-          </div>
-
-          {/* Action Buttons: Rename & Title History */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenRenameModal) onOpenRenameModal();
-                else setIsEditingIdentity(!isEditingIdentity);
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                isEditingIdentity
-                  ? 'bg-indigo-600 text-white shadow-indigo-900/50'
-                  : isDarkMode
-                  ? 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700'
-                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
-              }`}
-              title="Change the song title, genre, or reassign EP project collection"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{isEditingIdentity ? 'Close Title Editor' : 'Edit Song Title & Metadata'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsTitleHistoryModalOpen(true)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                isDarkMode
-                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
-                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
-              }`}
-              title="Inspect change history for song & project names, and revert to previous titles"
-            >
-              <History className="w-3.5 h-3.5 text-amber-400" />
-              <span>Title History ({track.titleHistory?.length || 0})</span>
-            </button>
-          </div>
-        </div>
-
-        {/* INLINE SONG & PROJECT TITLE EDITOR */}
-        {isEditingIdentity && (
-          <div className={`mt-3 pt-3 border-t space-y-3 animate-fadeIn ${
-            isDarkMode ? 'border-slate-800' : 'border-slate-200'
-          }`}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                  Song Title (Nashville Sovereign Standard)
-                </label>
-                <input
-                  type="text"
-                  value={editTitleInput}
-                  onChange={(e) => setEditTitleInput(e.target.value)}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
-                    isDarkMode
-                      ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
-                      : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                  placeholder="e.g. Crown of Thorns (Sovereign Mix)"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                  Project / EP Collection
-                </label>
-                <input
-                  type="text"
-                  value={editEpInput}
-                  onChange={(e) => setEditEpInput(e.target.value)}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
-                    isDarkMode
-                      ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
-                      : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                  placeholder="e.g. EP 1: Restoration"
-                />
-                {/* Quick EP suggestions */}
-                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <span className="text-[10px] text-slate-400 font-mono">Quick Pick:</span>
-                  {EP_COLLECTIONS.map((ep) => (
-                    <button
-                      key={ep.id}
-                      type="button"
-                      onClick={() => setEditEpInput(ep.id)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-medium border transition cursor-pointer ${
-                        editEpInput === ep.id
-                          ? 'bg-indigo-600 text-white border-indigo-500 font-bold'
-                          : isDarkMode
-                          ? 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {ep.id}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                Reason for Title / Project Change (Tracked in Audit Versioning)
-              </label>
-              <input
-                type="text"
-                value={editReasonInput}
-                onChange={(e) => setEditReasonInput(e.target.value)}
-                className={`w-full px-3 py-1.5 rounded-xl text-xs border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
-                  isDarkMode
-                    ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
-                    : 'bg-slate-50 border-slate-300 text-slate-900'
-                }`}
-                placeholder="e.g. Nashville SOP compliance, radio edit renaming, or Suno v5.5 title refinement"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditTitleInput(track.title);
-                  setEditEpInput(track.ep);
-                  setIsEditingIdentity(false);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveIdentity}
-                disabled={!editTitleInput.trim()}
-                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950 cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Save New Title & Project</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* TITLE & PROJECT UPDATE SUCCESS NOTIFICATION */}
-      {titleUpdateSuccess && (
-        <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-2xl p-3 shadow-xl flex items-center justify-between gap-4 animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-              <CheckCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-emerald-300">{titleUpdateSuccess}</p>
-              <p className="text-[10px] font-mono text-emerald-400/80">Persistent to Firestore & Nextcloud WebDAV metadata</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setTitleUpdateSuccess(null)}
-            className="p-1 rounded text-emerald-400 hover:text-white"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* TITLE & PROJECT VERSION HISTORY MODAL */}
-      {isTitleHistoryModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col max-h-[85vh] animate-scaleUp overflow-hidden ${
-            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <div className={`p-4 border-b flex items-center justify-between ${
-              isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-100 bg-slate-50'
-            }`}>
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    Song & Project Title Version History
-                  </h3>
-                  <p className="text-[11px] font-mono text-slate-400">
-                    Track ID: {track.id} • Active: "{track.title}" ({track.ep})
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsTitleHistoryModalOpen(false)}
-                className={`p-1.5 rounded-lg text-slate-400 hover:text-white transition cursor-pointer ${
-                  isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
-                }`}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto space-y-3 custom-scrollbar flex-1">
-              {(!track.titleHistory || track.titleHistory.length === 0) ? (
-                <div className={`p-8 text-center rounded-xl border ${
-                  isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'
-                }`}>
-                  <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                  <p className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                    No Previous Title Changes Recorded
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
-                    The current title "{track.title}" and project "{track.ep}" are the canonical initial values. Every time you rename this song or change its project collection, an immutable snapshot will be recorded here allowing one-click revert.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="text-[11px] font-mono text-slate-400">
-                    Found {track.titleHistory.length} recorded title / project revision(s):
-                  </div>
-
-                  {track.titleHistory.map((item, idx) => (
-                    <div
-                      key={item.id || idx}
-                      className={`p-3.5 rounded-xl border transition ${
-                        isDarkMode
-                          ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/40">
-                            Snapshot #{track.titleHistory!.length - idx}
-                          </span>
-                          <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {item.timestamp}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRevertIdentity(item)}
-                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
-                          title={`Revert title back to "${item.previousTitle}" and project back to "${item.previousEp}"`}
-                        >
-                          <Undo2 className="w-3 h-3" />
-                          <span>Revert to Previous</span>
-                        </button>
-                      </div>
-
-                      <div className="space-y-1.5 text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-500 font-mono text-[10px] w-14">Title:</span>
-                          <span className="line-through text-rose-400/90 font-mono text-[11px]">{item.previousTitle}</span>
-                          <ArrowRight className="w-3 h-3 text-slate-500" />
-                          <span className="text-emerald-400 font-bold">{item.newTitle}</span>
-                        </div>
-
-                        {item.previousEp !== item.newEp && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-500 font-mono text-[10px] w-14">Project:</span>
-                            <span className="line-through text-rose-400/90 font-mono text-[11px]">{item.previousEp}</span>
-                            <ArrowRight className="w-3 h-3 text-slate-500" />
-                            <span className="text-cyan-400 font-bold">{item.newEp}</span>
-                          </div>
-                        )}
-
-                        {item.reason && (
-                          <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 flex items-start gap-1.5">
-                            <span className="text-indigo-400 font-bold">Reason:</span>
-                            <span>{item.reason}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className={`p-3 border-t flex items-center justify-between ${
-              isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-100 bg-slate-50'
-            }`}>
-              <span className="text-[10px] font-mono text-slate-500">
-                Audit trail synced across local storage & cloud database
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsTitleHistoryModalOpen(false)}
-                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
-              >
-                Close History
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SUCCESS NOTIFICATION BANNER */}
+      {/* SUCCESS COMMIT NOTIFICATION BANNER */}
       {successCommitNotification && (
-        <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-2xl p-4 shadow-xl flex items-center justify-between gap-4 animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
-              <CheckCheck className="w-5 h-5 text-emerald-400" />
+        <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-xl p-3 shadow-lg flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+              <CheckCheck className="w-4 h-4 text-emerald-400" />
             </div>
             <div>
               <h4 className="text-xs font-bold text-emerald-300">{successCommitNotification.message}</h4>
-              <p className="text-[11px] text-emerald-400/80 font-mono mt-0.5">
-                Pre-change snapshot: <span className="text-white font-bold">{successCommitNotification.preVer}</span> •
-                Post-change version: <span className="text-white font-bold">{successCommitNotification.postVer}</span>
+              <p className="text-[10px] text-emerald-400/80 font-mono mt-0.5">
+                Pre-change: <span className="text-white font-bold">{successCommitNotification.preVer}</span> •
+                Post-change: <span className="text-white font-bold">{successCommitNotification.postVer}</span>
               </p>
             </div>
           </div>
@@ -1252,15 +787,15 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
             <button
               type="button"
               onClick={() => setPaneCount(2)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-900/70 hover:bg-emerald-800 text-white text-[11px] font-bold border border-emerald-700/50 transition cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-emerald-900/70 hover:bg-emerald-800 text-white text-[10px] font-bold border border-emerald-700/50 transition cursor-pointer"
             >
-              Side-by-Side View
+              Side-by-Side
             </button>
             <button
               type="button"
               onClick={() => setSuccessCommitNotification(null)}
               className="p-1 rounded text-emerald-400 hover:text-white"
-              title="Dismiss notification"
+              title="Dismiss"
             >
               ✕
             </button>
@@ -1270,14 +805,14 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
 
       {/* ERROR NOTIFICATION BANNER */}
       {errorNotification && (
-        <div className="bg-rose-950/80 border border-rose-600/50 rounded-2xl p-4 shadow-xl flex items-center justify-between gap-4 animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center flex-shrink-0">
-              <AlertCircle className="w-5 h-5 text-rose-400" />
+        <div className="bg-rose-950/80 border border-rose-600/50 rounded-xl p-3 shadow-lg flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-4 h-4 text-rose-400" />
             </div>
             <div>
               <h4 className="text-xs font-bold text-rose-300">Error Applying Revisions</h4>
-              <p className="text-[11px] text-rose-400/80 font-mono mt-0.5">{errorNotification}</p>
+              <p className="text-[10px] text-rose-400/80 font-mono mt-0.5">{errorNotification}</p>
             </div>
           </div>
           <button
@@ -1291,120 +826,261 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 4-STAGE SONGWRITING WORKFLOW PIPELINE SELECTOR */}
-      {/* ========================================================================= */}
-      <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 flex-wrap shadow-lg ${
-        isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100 border-slate-200'
-      }`}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-mono uppercase font-bold text-slate-400 px-1">Stages:</span>
-          
+      {/* TITLE & PROJECT UPDATE SUCCESS NOTIFICATION */}
+      {titleUpdateSuccess && (
+        <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-xl p-2.5 shadow-lg flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <p className="text-xs font-bold text-emerald-300">{titleUpdateSuccess}</p>
+          </div>
           <button
             type="button"
-            onClick={() => setActiveWorkflow('brainstorm')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
-              activeWorkflow === 'brainstorm'
-                ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-md'
-                : isDarkMode
-                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
-            }`}
+            onClick={() => setTitleUpdateSuccess(null)}
+            className="p-1 rounded text-emerald-400 hover:text-white text-xs"
           >
-            <span className="w-4 h-4 rounded-full bg-amber-400/20 text-amber-300 font-mono text-[10px] flex items-center justify-center font-bold">1</span>
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Workflow 1: Gemini Brainstorming (Chatbot)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveWorkflow('workbench')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
-              activeWorkflow === 'workbench'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : isDarkMode
-                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-indigo-400/20 text-indigo-300 font-mono text-[10px] flex items-center justify-center font-bold">2</span>
-            <FileText className="w-3.5 h-3.5 text-indigo-300" />
-            <span>Workflow 2: Lyric Workbench (1-3 Panes)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveWorkflow('audit');
-              handleRunAudit();
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
-              activeWorkflow === 'audit'
-                ? 'bg-purple-600 text-white shadow-md'
-                : isDarkMode
-                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-purple-400/20 text-purple-300 font-mono text-[10px] flex items-center justify-center font-bold">3</span>
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
-            <span>Workflow 3: SOP Theological Audit</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveWorkflow('suno');
-              const el = document.getElementById('suno-4block-deck');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
-              activeWorkflow === 'suno'
-                ? 'bg-gradient-to-r from-indigo-600 to-amber-600 text-white shadow-md'
-                : isDarkMode
-                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-amber-400/20 text-amber-300 font-mono text-[10px] flex items-center justify-center font-bold">4</span>
-            <Zap className="w-3.5 h-3.5 text-amber-300" />
-            <span>Workflow 4: Suno 4-Block Compiler</span>
+            ✕
           </button>
         </div>
+      )}
 
-        {/* View mode toggle (Split View) */}
-        <div className="flex items-center gap-2">
+      {/* DISTRACTION-FREE PRISTINE TITLE & TOOLBAR HEADER */}
+      <div className={`p-3 rounded-2xl border transition shadow-md flex items-center justify-between gap-3 flex-wrap ${
+        isDarkMode ? 'bg-slate-900/90 border-slate-800 ring-1 ring-slate-800' : 'bg-white border-slate-200'
+      }`}>
+        {/* Left: Track Title, Project, Live Stats */}
+        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/40">
+            {track.id}
+          </span>
+
+          <h2
+            onClick={() => {
+              if (onOpenRenameModal) onOpenRenameModal();
+              else setIsEditingIdentity(!isEditingIdentity);
+            }}
+            className={`text-base sm:text-lg font-black tracking-tight cursor-pointer hover:text-indigo-400 transition flex items-center gap-1.5 ${
+              isDarkMode ? 'text-white' : 'text-slate-900'
+            }`}
+            title="Click to edit song title and update all linked assets"
+          >
+            <span className="truncate max-w-[280px] sm:max-w-md">{track.title}</span>
+            <Edit3 className="w-3.5 h-3.5 text-indigo-400 opacity-60 hover:opacity-100 transition" />
+          </h2>
+
+          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1 ${
+            isDarkMode ? 'bg-cyan-950/50 border-cyan-800/40 text-cyan-300' : 'bg-cyan-50 border-cyan-200 text-cyan-800'
+          }`}>
+            <FolderEdit className="w-2.5 h-2.5 text-cyan-400" />
+            <span>{track.ep}</span>
+          </span>
+
+          <span className="text-[10px] font-mono text-slate-400 hidden md:inline">
+            {wordCount} words • {linesCount} lines • {track.bpm} BPM • {track.key} • {track.genre}
+          </span>
+
+          <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 hidden lg:inline">
+            ✓ Auto-saved {lastSavedTime}
+          </span>
+        </div>
+
+        {/* Right: Quick Action Buttons for Slide-out Drawers */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Split view toggle */}
           <button
             type="button"
             onClick={() => setShowBrainstormSplit(!showBrainstormSplit)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition flex items-center gap-1.5 cursor-pointer ${
-              showBrainstormSplit 
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 cursor-pointer ${
+              showBrainstormSplit
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 : isDarkMode
-                ? 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
-                : 'bg-white text-slate-600 border-slate-300 hover:text-slate-900'
+                ? 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
             }`}
-            title="Split View: View Gemini Brainstorming Chatbot alongside Lyric Workbench"
+            title="Toggle side-by-side Brainstorming Chatbot & Lyric Editor"
           >
-            <Columns className="w-3 h-3 text-amber-400" />
-            <span>{showBrainstormSplit ? 'Split View Active' : 'Split View'}</span>
+            <Columns className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">{showBrainstormSplit ? 'Split: ON' : 'Split View'}</span>
+          </button>
+
+          {/* Brainstorm Chatbot Drawer Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setLyricDrawerTab('brainstorm');
+              setIsLyricDrawerOpen(true);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+              isLyricDrawerOpen && lyricDrawerTab === 'brainstorm'
+                ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-md'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-950/40'
+            }`}
+            title="Open Gemini Brainstorming Chatbot Drawer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>💡 Brainstorm</span>
+          </button>
+
+          {/* Nashville SOP Audit Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setLyricDrawerTab('audit');
+              setIsLyricDrawerOpen(true);
+            }}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+              isLyricDrawerOpen && lyricDrawerTab === 'audit'
+                ? 'bg-purple-600 text-white border-purple-500 shadow-md'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700'
+                : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
+            }`}
+            title="Open Nashville SOP Theological Quality Audit"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">Audit ({passingRulesCount}/4)</span>
+          </button>
+
+          {/* Suno 4-Blocks Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setLyricDrawerTab('suno');
+              setIsLyricDrawerOpen(true);
+            }}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+              isLyricDrawerOpen && lyricDrawerTab === 'suno'
+                ? 'bg-gradient-to-r from-indigo-600 to-amber-600 text-white shadow-md'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+            }`}
+            title="Open Suno 4-Block Compiler Drawer"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">⚡ Suno</span>
+          </button>
+
+          {/* Secondary Tools Drawer Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setLyricDrawerTab('extras');
+              setIsLyricDrawerOpen(true);
+            }}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+              isLyricDrawerOpen && lyricDrawerTab === 'extras'
+                ? 'bg-slate-700 text-white border-slate-600'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            }`}
+            title="Open Lyric Tools Drawer (Presets, Import, Checkpoints, Download TXT, Title History)"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+            <span>Tools</span>
           </button>
         </div>
       </div>
 
-      {/* WORKFLOW 1: GEMINI CREATIVE BRAINSTORMING CHATBOT & RAW SCRATCHPAD */}
-      {(activeWorkflow === 'brainstorm' || showBrainstormSplit) && (
-        <LyricBrainstormingChatbot
-          track={track}
-          onInsertLyrics={handleInsertLyricsFromBrainstorm}
-          isDarkMode={isDarkMode}
-          onNavigateToWorkbench={() => {
-            setActiveWorkflow('workbench');
-            const el = document.getElementById('lyric-workbench-section');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}
-        />
+      {/* INLINE SONG & PROJECT TITLE EDITOR (WHEN CLICKED) */}
+      {isEditingIdentity && (
+        <div className={`p-4 rounded-2xl border space-y-3 animate-fadeIn ${
+          isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+        }`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                Song Title (Nashville Sovereign Standard)
+              </label>
+              <input
+                type="text"
+                value={editTitleInput}
+                onChange={(e) => setEditTitleInput(e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                  isDarkMode
+                    ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
+                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}
+                placeholder="e.g. Crown of Thorns (Sovereign Mix)"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                Project / EP Collection
+              </label>
+              <input
+                type="text"
+                value={editEpInput}
+                onChange={(e) => setEditEpInput(e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                  isDarkMode
+                    ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
+                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}
+                placeholder="e.g. EP 1: Restoration"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-400 mb-1">
+              Reason for Title / Project Change
+            </label>
+            <input
+              type="text"
+              value={editReasonInput}
+              onChange={(e) => setEditReasonInput(e.target.value)}
+              className={`w-full px-3 py-1.5 rounded-xl text-xs border focus:outline-hidden focus:ring-2 focus:ring-indigo-500 ${
+                isDarkMode
+                  ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
+                  : 'bg-slate-50 border-slate-300 text-slate-900'
+              }`}
+              placeholder="e.g. Nashville SOP compliance, radio edit renaming"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setEditTitleInput(track.title);
+                setEditEpInput(track.ep);
+                setIsEditingIdentity(false);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveIdentity}
+              disabled={!editTitleInput.trim()}
+              className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950 cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Save New Title</span>
+            </button>
+          </div>
+        </div>
       )}
+
+      {/* SPLIT VIEW WRAPPER OR FULL WORKBENCH */}
+      <div className={showBrainstormSplit ? 'grid grid-cols-1 lg:grid-cols-12 gap-4 items-start' : ''}>
+        {showBrainstormSplit && (
+          <div className="lg:col-span-5 flex flex-col">
+            <LyricBrainstormingChatbot
+              track={track}
+              onInsertLyrics={handleInsertLyricsFromBrainstorm}
+              isDarkMode={isDarkMode}
+              onNavigateToWorkbench={() => setShowBrainstormSplit(false)}
+            />
+          </div>
+        )}
+
+        <div className={showBrainstormSplit ? 'lg:col-span-7 min-w-0' : ''}>
 
       {/* ========================================================================= */}
       {/* FULL-WIDTH LYRIC WORKBENCH & UP TO 3 PANES SIDE-BY-SIDE REVISION COMPARISON */}
@@ -1477,12 +1153,15 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setActiveWorkflow('brainstorm')}
+              onClick={() => {
+                setLyricDrawerTab('brainstorm');
+                setIsLyricDrawerOpen(true);
+              }}
               className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/50 hover:to-indigo-600/50 border border-amber-500/40 text-xs font-bold text-amber-200 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              title="Open Workflow 1: Gemini Creative Brainstorming Chatbot & Scratchpad"
+              title="Open Gemini Creative Brainstorming Chatbot & Scratchpad Drawer"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Brainstorm (W1)</span>
+              <span>💡 Brainstorm</span>
             </button>
 
             <button
@@ -1513,32 +1192,37 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
           </div>
         </div>
 
-        {/* NASHVILLE SOP v1.9 LIVE RULES & REAL-TIME QUALITY AUDIT BAR */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+        {/* NASHVILLE SOP v1.9 COMPACT QUALITY AUDIT BAR */}
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 space-y-2">
           <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-white font-black tracking-wider">The Nashville SOP {sopRules.version} Live Rules</span>
+              <span className="text-white font-black tracking-wider">The Nashville SOP {sopRules.version}</span>
               <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-mono text-[9px] border border-indigo-800/40">
                 {passingRulesCount}/4 Standards Passing
               </span>
+              <button
+                type="button"
+                onClick={() => setShowSopAuditBar(!showSopAuditBar)}
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer underline ml-1"
+              >
+                {showSopAuditBar ? 'Hide Details' : 'Show Details'}
+              </button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-indigo-400 font-mono text-[10px] hidden sm:inline">
-                Real-time Quality Audit
-              </span>
               <button
                 type="button"
                 onClick={() => setIsRulesModalOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] flex items-center gap-1.5 shadow transition cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] flex items-center gap-1 shadow transition cursor-pointer"
                 title="Edit SOP rules via Markdown, text editing, or file upload"
               >
-                <Settings className="w-3.5 h-3.5" />
-                <span>⚙️ Edit Rules (Markdown / Text)</span>
+                <Settings className="w-3 h-3" />
+                <span>⚙️ Edit Rules</span>
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          {showSopAuditBar && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs pt-1 animate-fadeIn">
             
             {/* 1. OBI Funnel Rule */}
             <div
@@ -1646,6 +1330,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
             </div>
 
           </div>
+          )}
         </div>
 
         {/* ========================================================================= */}
@@ -2115,6 +1800,8 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
         </div>
 
       </section>
+        </div>
+      </div>
 
       {/* ACTIVE AUDIT RESULT & ACTION CARD (IF ACTIVE) */}
       {auditResult && (
@@ -2681,6 +2368,527 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
         isFirestoreConnected={isFirebaseConfigured()}
         isDarkMode={isDarkMode}
       />
+
+      {/* TITLE & PROJECT VERSION HISTORY MODAL */}
+      {isTitleHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col max-h-[85vh] animate-scaleUp overflow-hidden ${
+            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+          }`}>
+            <div className={`p-4 border-b flex items-center justify-between ${
+              isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-100 bg-slate-50'
+            }`}>
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    Song & Project Title Version History
+                  </h3>
+                  <p className="text-[11px] font-mono text-slate-400">
+                    Track ID: {track.id} • Active: "{track.title}" ({track.ep})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTitleHistoryModalOpen(false)}
+                className={`p-1.5 rounded-lg text-slate-400 hover:text-white transition cursor-pointer ${
+                  isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 custom-scrollbar flex-1">
+              {(!track.titleHistory || track.titleHistory.length === 0) ? (
+                <div className={`p-8 text-center rounded-xl border ${
+                  isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    No Previous Title Changes Recorded
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
+                    The current title "{track.title}" and project "{track.ep}" are the canonical initial values. Every time you rename this song or change its project collection, an immutable snapshot will be recorded here allowing one-click revert.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-[11px] font-mono text-slate-400">
+                    Found {track.titleHistory.length} recorded title / project revision(s):
+                  </div>
+
+                  {track.titleHistory.map((item, idx) => (
+                    <div
+                      key={item.id || idx}
+                      className={`p-3.5 rounded-xl border transition ${
+                        isDarkMode
+                          ? 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/40">
+                            Snapshot #{track.titleHistory!.length - idx}
+                          </span>
+                          <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {item.timestamp}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRevertIdentity(item)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
+                          title={`Revert title back to "${item.previousTitle}" and project back to "${item.previousEp}"`}
+                        >
+                          <Undo2 className="w-3 h-3" />
+                          <span>Revert to Previous</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500 font-mono text-[10px] w-14">Title:</span>
+                          <span className="line-through text-rose-400/90 font-mono text-[11px]">{item.previousTitle}</span>
+                          <ArrowRight className="w-3 h-3 text-slate-500" />
+                          <span className="text-emerald-400 font-bold">{item.newTitle}</span>
+                        </div>
+
+                        {item.previousEp !== item.newEp && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500 font-mono text-[10px] w-14">Project:</span>
+                            <span className="line-through text-rose-400/90 font-mono text-[11px]">{item.previousEp}</span>
+                            <ArrowRight className="w-3 h-3 text-slate-500" />
+                            <span className="text-cyan-400 font-bold">{item.newEp}</span>
+                          </div>
+                        )}
+
+                        {item.reason && (
+                          <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 flex items-start gap-1.5">
+                            <span className="text-indigo-400 font-bold">Reason:</span>
+                            <span>{item.reason}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={`p-3 border-t flex items-center justify-between ${
+              isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-100 bg-slate-50'
+            }`}>
+              <span className="text-[10px] font-mono text-slate-500">
+                Audit trail synced across local storage & cloud database
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsTitleHistoryModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Close History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SLIDE-OUT LYRIC TOOLS DRAWER (DISTRACTION-FREE SLIDE-OVER) */}
+      {isLyricDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsLyricDrawerOpen(false)}
+          />
+
+          {/* Drawer Panel */}
+          <div className={`relative w-full max-w-xl md:max-w-2xl h-full shadow-2xl flex flex-col z-10 border-l animate-in slide-in-from-right duration-200 overflow-hidden ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            {/* Drawer Header with Tabs */}
+            <div className={`p-3.5 border-b flex items-center justify-between gap-2 shrink-0 ${
+              isDarkMode ? 'border-slate-800 bg-slate-950/90' : 'border-slate-200 bg-slate-50'
+            }`}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setLyricDrawerTab('brainstorm')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    lyricDrawerTab === 'brainstorm'
+                      ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>💡 Brainstorm</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLyricDrawerTab('audit')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    lyricDrawerTab === 'audit'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
+                  <span>⚖️ SOP Audit</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLyricDrawerTab('suno')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    lyricDrawerTab === 'suno'
+                      ? 'bg-gradient-to-r from-indigo-600 to-amber-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-300" />
+                  <span>⚡ Suno</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLyricDrawerTab('extras')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    lyricDrawerTab === 'extras'
+                      ? 'bg-slate-700 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-slate-300" />
+                  <span>🎛 Tools</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsLyricDrawerOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Close Drawer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              {lyricDrawerTab === 'brainstorm' && (
+                <LyricBrainstormingChatbot
+                  track={track}
+                  onInsertLyrics={(snippet, mode) => {
+                    handleInsertLyricsFromBrainstorm(snippet, mode);
+                  }}
+                  isDarkMode={isDarkMode}
+                  onNavigateToWorkbench={() => setIsLyricDrawerOpen(false)}
+                />
+              )}
+
+              {lyricDrawerTab === 'audit' && (
+                <div className="space-y-4">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-purple-400" />
+                        <span>Nashville SOP {sopRules.version} Theological Standards</span>
+                      </h4>
+                      <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-mono text-[10px] font-bold border border-indigo-800/40">
+                        {passingRulesCount}/4 Passing
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Live auditing evaluates required tags (Chorus, Verse, Bridge, Outro), Throne Room Christological triggers, and cliché blacklists.
+                    </p>
+                  </div>
+
+                  {/* 4 Standards Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className={`p-2.5 rounded-xl border ${hasChorus ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-200' : 'bg-rose-950/40 border-rose-700/50 text-rose-200'}`}>
+                      <div className="font-bold flex items-center justify-between">
+                        <span>1. OBI Funnel Rule</span>
+                        <span>{hasChorus ? '✓ PASS' : '⚠ FAIL'}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Requires standard arrangement tags ([Chorus], [Verse], etc.)</p>
+                    </div>
+
+                    <div className={`p-2.5 rounded-xl border ${hasThroneRoom ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-200' : 'bg-rose-950/40 border-rose-700/50 text-rose-200'}`}>
+                      <div className="font-bold flex items-center justify-between">
+                        <span>2. Throne Room Pivot</span>
+                        <span>{hasThroneRoom ? '✓ PASS' : '⚠ FAIL'}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Requires sovereign, theological God-centered lyric pivot.</p>
+                    </div>
+
+                    <div className={`p-2.5 rounded-xl border ${foundCliches.length === 0 ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-200' : 'bg-amber-950/40 border-amber-700/50 text-amber-200'}`}>
+                      <div className="font-bold flex items-center justify-between">
+                        <span>3. Cliché Filter</span>
+                        <span>{foundCliches.length === 0 ? '✓ CLEAN' : `⚠ ${foundCliches.length} CLICHÉS`}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {foundCliches.length === 0 ? 'No blacklisted evangelical clichés found.' : `Found: ${foundCliches.join(', ')}`}
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl border bg-slate-950 border-slate-800 text-slate-200">
+                      <div className="font-bold flex items-center justify-between">
+                        <span>4. 3:1 Sonic Scar</span>
+                        <span className="text-amber-400">STANDARD</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">3 raw organic elements to 1 synthetic element.</p>
+                    </div>
+                  </div>
+
+                  {/* Run Copilot Audit */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-white">AI Theological Audit Runner</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={auditModel}
+                          onChange={(e) => setAuditModel(e.target.value as any)}
+                          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
+                        >
+                          <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleRunAudit}
+                          disabled={isAuditing}
+                          className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 disabled:opacity-50 transition cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>{isAuditing ? 'Auditing...' : 'Run Audit'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {auditResult && (
+                      <div className="space-y-2 pt-2 border-t border-slate-800">
+                        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
+                          {auditResult}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyFeedbackText()}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1"
+                          >
+                            <Copy className="w-3 h-3 text-indigo-400" />
+                            <span>Copy Audit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyFeedbackChanges()}
+                            disabled={isApplyingChanges}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 shadow disabled:opacity-50"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>{isApplyingChanges ? 'Applying...' : 'Apply Revisions'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {lyricDrawerTab === 'suno' && (
+                <div className="space-y-4">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        <span>Suno v5.5 4-Block Generation Compiler</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLyricDrawerOpen(false);
+                          const el = document.getElementById('suno-4block-deck');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                      >
+                        Jump to Deck ↓
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Compiles Core DNA, Style Prompt, Nashville SOP Lyric Payload, and Excluded Styles into ready-to-paste prompts.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                    <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Compiled Style Prompt:</span>
+                    <p className="text-xs font-mono text-slate-200 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                      {track.genre}, {track.bpm} BPM, {track.key}, acoustic baritone, sovereign organ, unpolished live praise
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onCopyText(`${track.genre}, ${track.bpm} BPM, ${track.key}, acoustic baritone, sovereign organ`, 'Suno Style')}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Style Prompt</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {lyricDrawerTab === 'extras' && (
+                <div className="space-y-4">
+                  {/* Storage Status */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <div>
+                        <span className="text-xs font-bold text-white">Lyrics Master Vault</span>
+                        <p className="text-[10px] font-mono text-slate-400">
+                          Auto-saved: {lastSavedTime} • Version {track.versions[track.versions.length - 1]?.version || 'v1.0'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[9px] border border-emerald-800/40">
+                      Synced
+                    </span>
+                  </div>
+
+                  {/* Actions Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLyricDrawerOpen(false);
+                        setIsPresetLibraryOpen(true);
+                      }}
+                      className="p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <Sliders className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <span className="font-bold text-white block">Sound Presets</span>
+                        <span className="text-[10px] text-slate-400">{presets.length} presets loaded</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLyricDrawerOpen(false);
+                        setIsImportModalOpen(true);
+                      }}
+                      className="p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <Upload className="w-4 h-4 text-indigo-400" />
+                      <div>
+                        <span className="font-bold text-white block">Import Lyrics</span>
+                        <span className="text-[10px] text-slate-400">From clipboard or file</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLyricDrawerOpen(false);
+                        setIsCheckpointModalOpen(true);
+                      }}
+                      className="p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <Save className="w-4 h-4 text-emerald-400" />
+                      <div>
+                        <span className="font-bold text-white block">Save Checkpoint</span>
+                        <span className="text-[10px] text-slate-400">Snapshot to version matrix</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLyricDrawerOpen(false);
+                        setIsTitleHistoryModalOpen(true);
+                      }}
+                      className="p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <History className="w-4 h-4 text-purple-400" />
+                      <div>
+                        <span className="font-bold text-white block">Title History</span>
+                        <span className="text-[10px] text-slate-400">{track.titleHistory?.length || 0} change snapshots</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadTxt}
+                      className="p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <Download className="w-4 h-4 text-blue-400" />
+                      <div>
+                        <span className="font-bold text-white block">Download .TXT</span>
+                        <span className="text-[10px] text-slate-400">Formatted lyric file</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExportJson}
+                      className="p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <HardDrive className="w-4 h-4 text-teal-400" />
+                      <div>
+                        <span className="font-bold text-white block">Export Package</span>
+                        <span className="text-[10px] text-slate-400">Full JSON bundle</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* External navigation */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                    {onNavigateToTab && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLyricDrawerOpen(false);
+                          onNavigateToTab('brainstorming');
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-800/40 text-purple-200 text-xs font-bold flex items-center justify-between"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Grid className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Open in BlockSuite Whiteboard</span>
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                      </button>
+                    )}
+
+                    {onNavigateToTab && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLyricDrawerOpen(false);
+                          onNavigateToTab('versions');
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 text-amber-200 text-xs font-bold flex items-center justify-between"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Open in Section Shootout (A/B/X)</span>
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
