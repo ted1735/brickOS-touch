@@ -399,20 +399,21 @@ export const SECTION_GUIDES: Record<StudioSectionId, SectionGuideItem> = {
     title: 'Studio Co-Producer AI (Gemini)',
     badge: 'AI Assistant',
     icon: Bot,
-    summary: 'Real-time studio AI assistant powered by Gemini Pro, specialized in theological auditing, audio engineering, and social growth.',
-    purpose: 'Collaborate with specialized AI personas to critique lyrics, troubleshoot mastering phase issues, and brainstorm viral hooks.',
+    summary: 'Real-time studio AI songwriting mentor powered by Gemini 3.1 Pro, specialized in BrickOS v10 SOP, Conversational Poetics, 4-Block Suno prompts, and audio engineering.',
+    purpose: 'Collaborate with your Co-Producer to develop lyrics, enforce the Christianese filter, structure 4-Block Suno generation prompts, and troubleshoot arrangement.',
     keySteps: [
-      'Select a Co-Producer Role: 1. Theological & Lyrical Assistant, 2. Senior Mastering Engineer, 3. Social Media Strategist.',
-      'Type your question or query regarding the currently selected track.',
-      'Receive context-aware feedback referencing the active song’s BPM, key, and theological thesis.',
-      'Copy suggestions directly into the Lyric Engine or Social Rollout tabs.'
+      'Select a Co-Producer Role: 1. Elite Nashville Producer & Mentor (BrickOS v10), 2. Senior Mastering Engineer, 3. Social Media Strategist.',
+      'Click "Gem Instructions & SOP" to inspect or edit your custom Gemini Gem prompt directives.',
+      'Type your question or song coaching query regarding the currently selected track.',
+      'Receive deep reasoning feedback referencing the active song’s BPM, key, and BrickOS v10 guidelines.',
+      'Copy 4-Block Suno prompts or lyric revisions directly into the Lyric Studio.'
     ],
     bestPractices: [
-      'Ask the Theological Assistant to find potential Christianese clichés in draft verses.',
-      'Ask the Mastering Engineer for advice on frequency cutoffs for specific acoustic guitar strumming.'
+      'Enforce Conversational Poetics: strictly replace tired Christianese religious tropes with authentic human vulnerability.',
+      'Ask the Co-Producer to formulate standard 4-block Suno prompt architecture with character audit ceilings.'
     ],
     sopRules: [
-      'AI suggestions must be reviewed and approved by the human producer before committing.'
+      'Adhere to the BrickOS v10 Official SOP: OBI Funnel, Conversational Poetics, Throne Room Pivot, and 3:1 Sonic Scar rule.'
     ],
     relatedTabs: ['lyrics', 'mastering', 'kanban']
   },

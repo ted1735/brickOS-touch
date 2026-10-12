@@ -3905,6 +3905,30 @@ Please... God... Just meet me here.`
       updatedAt: v.timestamp,
       content: v.lyrics
     }))
+  },
+  'TRK-28': {
+    id: 'TRK-28',
+    title: "Standing at the Breach",
+    versions: [
+      {
+        id: 'satb-1',
+        versionTag: 'v1.0 (Battle-Tested Arrangement)',
+        updatedAt: '2026-10-01',
+        content: `[Verse 1]\nMidnight oil burning in the kitchen glow.\nTracing every bill and every note below.\nI won't let this foundation break in two...\nStanding in the gap for what is true.\n\n[Chorus]\nWho's standing at the breach when the wind blows hard?\nKeep the shield lifted up in the quiet dark.\nNot by might, not by pride in what we do...\nWe're standing at the breach with You.`
+      }
+    ]
+  },
+  'TRK-29': {
+    id: 'TRK-29',
+    title: "Track 29 (At the Last Line)",
+    versions: [
+      {
+        id: 'trk29-v1',
+        versionTag: 'v1.0 (Work in Progress)',
+        updatedAt: '2026-10-11',
+        content: `[Intro – Spoken, close mic, tired breath]\nNo stage lights tonight.\nJust grease on my knuckles and gravel under my boots.\nI'm done pretending I've got it all figured out.\n\n[Verse 1]\nTwo lane highway, dashboard glow at 3 AM.\nTired of the phrases and the polished hymns.\nIf I can't speak the truth when my chest is tight,\nThen what's the point of fighting through another night?\n\n[Chorus - 60-Second Refrain]\nStrip away the slogans, strip away the pride.\nI don't need a sermon just to feel alive.\nMeet me in the wreckage, meet me in the grit...\nWhere the broken heart is where the healing fits.\n\n[Verse 2]\nHands on the wheel, calloused and sore.\nLeft my excuses right outside the door.\nReal faith isn't pretty words upon a page—\nIt's breathing in the quiet when the storms still rage.\n\n[Bridge - Throne Room Pivot]\nHere at the bottom of the canyon floor...\nI'm not asking for an easy way out no more.\nTake the broken pieces, take this heavy breath...\nYou are the life that overcomes the death.\n\n[Outro]\nRight here at the last line...\nMeet me here.`
+      }
+    ]
   }
 };
 

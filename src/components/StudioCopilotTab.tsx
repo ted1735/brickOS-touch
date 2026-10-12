@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, RefreshCw, Send, HelpCircle, Bot, User, Sparkles } from 'lucide-react';
+import { MessageSquare, RefreshCw, Send, HelpCircle, FileCode, Square, Sparkles } from 'lucide-react';
 import { Track, ChatMessage, StudioTheme } from '../types';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 
@@ -15,6 +15,9 @@ interface StudioCopilotTabProps {
   chatModel: string;
   setChatModel: (model: string) => void;
   onOpenSectionGuide?: (sectionId: string) => void;
+  onOpenPromptEditor?: () => void;
+  chatElapsedTime?: number;
+  onAbortChat?: () => void;
   isDarkMode?: boolean;
   studioTheme?: StudioTheme;
 }
@@ -31,6 +34,9 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
   chatModel,
   setChatModel,
   onOpenSectionGuide,
+  onOpenPromptEditor,
+  chatElapsedTime = 0,
+  onAbortChat,
   isDarkMode = true,
   studioTheme = 'moon'
 }) => {
@@ -44,17 +50,17 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
         />
       )}
 
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 flex flex-col h-[650px] shadow-xl">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 flex flex-col h-[680px] shadow-xl">
         <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-teal-950 border border-teal-800/60 text-teal-400">
+            <div className="p-2 rounded-xl bg-purple-950 border border-purple-800/60 text-purple-400">
               <MessageSquare className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span>Studio Co-Producer AI (Gemini Multi-Turn Copilot)</span>
-                  <span className="px-2 py-0.5 rounded bg-teal-950 text-teal-300 font-mono text-[10px] font-bold border border-teal-800/50">
+                  <span>Studio Co-Producer AI (Gemini Copilot)</span>
+                  <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[10px] font-bold border border-purple-800/50">
                     {selectedTrack.id}
                   </span>
                 </h3>
@@ -63,13 +69,25 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Contextually aware of <strong className="text-white">{selectedTrack.title}</strong> ({selectedTrack.genre} • {selectedTrack.key} • {selectedTrack.bpm} BPM)
+                Contextually grounded in <strong className="text-white">{selectedTrack.title}</strong> ({selectedTrack.genre} • {selectedTrack.key} • {selectedTrack.bpm} BPM)
               </p>
             </div>
           </div>
 
-          {/* Role, Model Selectors, Theme Switcher, and Guide button */}
+          {/* Action buttons and model/role selectors */}
           <div className="flex items-center gap-2 flex-wrap">
+            {onOpenPromptEditor && (
+              <button
+                type="button"
+                onClick={onOpenPromptEditor}
+                className="px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-purple-300 text-xs font-bold border border-purple-700/60 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="View and edit custom Gemini Gem / BrickOS v10 SOP Instructions"
+              >
+                <FileCode className="w-3.5 h-3.5 text-purple-400" />
+                <span>Gem Instructions & SOP</span>
+              </button>
+            )}
+
             {onOpenSectionGuide && (
               <button
                 type="button"
@@ -78,7 +96,7 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
                 title="Open Studio Co-Producer AI Operating Guide & SOP Rules"
               >
                 <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                <span>How To Use Co-Producer</span>
+                <span>How To Use</span>
               </button>
             )}
 
@@ -87,7 +105,7 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
               onChange={(e) => setChatRole(e.target.value as any)}
               className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 font-bold focus:outline-none"
             >
-              <option value="lyric_assistant">Lyric & Theological Assistant</option>
+              <option value="lyric_assistant">Elite Nashville Producer & Mentor (BrickOS v10)</option>
               <option value="mastering_engineer">Senior Mastering Engineer</option>
               <option value="omnipost_strategist">Omnipost Social Strategist</option>
             </select>
@@ -97,8 +115,8 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
               onChange={(e) => setChatModel(e.target.value)}
               className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-indigo-300 font-mono focus:outline-none"
             >
+              <option value="gemini-3.1-pro-preview">gemini-3.1-pro (Deep Reasoning & Production Craft)</option>
               <option value="gemini-3.8-flash">gemini-3.8-flash (Fast & Cost-Effective)</option>
-              <option value="gemini-3.1-pro-preview">gemini-3.1-pro (Deep Reasoning)</option>
               <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Ultra Fast)</option>
             </select>
           </div>
@@ -112,7 +130,7 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
               className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               <div className="flex items-center gap-2 mb-1 text-[10px] text-slate-500 font-mono">
-                <span>{msg.role === 'user' ? 'You' : 'brickOS AI'}</span>
+                <span>{msg.role === 'user' ? 'You' : 'brickOS Co-Producer'}</span>
                 <span>•</span>
                 <span>{msg.timestamp}</span>
                 {msg.model && <span>({msg.model})</span>}
@@ -129,9 +147,32 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
             </div>
           ))}
           {isChatLoading && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-mono p-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
-              <span>Thinking with {chatModel}...</span>
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3 text-xs font-mono">
+              <div className="flex items-center gap-2.5 text-slate-300">
+                <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">Co-Producer reasoning with {chatModel}...</span>
+                    <span className="text-[11px] text-purple-400 font-bold">({chatElapsedTime}s elapsed)</span>
+                  </div>
+                  {chatElapsedTime >= 25 && (
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Complex songwriting and multi-block Suno prompt generation can take 45–75s to formulate.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {onAbortChat && (
+                <button
+                  type="button"
+                  onClick={onAbortChat}
+                  className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  title="Cancel current generation request"
+                >
+                  <Square className="w-3 h-3 fill-rose-300" />
+                  <span>Cancel</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -143,17 +184,29 @@ export const StudioCopilotTab: React.FC<StudioCopilotTabProps> = ({
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onSendMessage()}
-            placeholder={`Ask ${chatRole.replace('_', ' ')} anything about ${selectedTrack.title}...`}
-            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+            placeholder={`Ask Co-Producer anything about ${selectedTrack.title} (Suno prompts, lyric coaching, chords)...`}
+            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-mono"
+            disabled={isChatLoading}
           />
-          <button
-            onClick={onSendMessage}
-            disabled={isChatLoading || !chatInput.trim()}
-            className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Send</span>
-          </button>
+          {isChatLoading && onAbortChat ? (
+            <button
+              onClick={onAbortChat}
+              className="px-4 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
+              title="Cancel generation"
+            >
+              <Square className="w-3.5 h-3.5 fill-white" />
+              <span>Cancel</span>
+            </button>
+          ) : (
+            <button
+              onClick={onSendMessage}
+              disabled={isChatLoading || !chatInput.trim()}
+              className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md shadow-purple-950"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Send</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

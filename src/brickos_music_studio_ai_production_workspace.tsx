@@ -135,6 +135,8 @@ import {
   generateCatalogJsonManifest
 } from './data/relationalCatalogBridge';
 import { ECV_CANONICAL_ASSETS } from './data/nextcloudAssetIndex';
+import { CoProducerPromptEditorModal } from './components/CoProducerPromptEditorModal';
+import { buildCoProducerInstruction } from './data/canonicalCoProducerSOP';
 
 export default function BrickOSMusicStudioWorkspace() {
   const [tracks, setTracks] = useState<Track[]>(() => {
@@ -143,8 +145,28 @@ export default function BrickOSMusicStudioWorkspace() {
   });
   const [selectedTrack, setSelectedTrack] = useState<Track>(() => {
     const cached = getLocalCachedTracks();
-    return cached && cached.length > 0 ? cached[0] : CANONICAL_TRACKS[0];
+    const trackList = cached && cached.length > 0 ? cached : CANONICAL_TRACKS;
+    const lastId = typeof window !== 'undefined' ? localStorage.getItem('brickos_last_selected_track_id') : null;
+    if (lastId) {
+      const found = trackList.find(t => t.id === lastId);
+      if (found) return found;
+    }
+    // Default to TRK-29 (user's active focus) rather than defaulting to Track 1
+    const trk29 = trackList.find(t => t.id === 'TRK-29');
+    if (trk29) return trk29;
+    return trackList[0];
   });
+
+  // Persist active track selection so "Continue where you left off" never resets to Track 1
+  useEffect(() => {
+    if (selectedTrack?.id) {
+      try {
+        localStorage.setItem('brickos_last_selected_track_id', selectedTrack.id);
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+  }, [selectedTrack?.id]);
   const [activeTab, setActiveTab] = useState<
     'home' | 'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix' | 'brainstorming'
   >('home');
@@ -359,8 +381,13 @@ export default function BrickOSMusicStudioWorkspace() {
           setTracks(cloudTracks);
           setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
           setSelectedTrack(prev => {
-            const found = cloudTracks.find(t => t.id === prev?.id);
-            return found || cloudTracks[0];
+            const savedLastId = typeof window !== 'undefined' ? localStorage.getItem('brickos_last_selected_track_id') : null;
+            const targetId = savedLastId || prev?.id || 'TRK-29';
+            const matchedTarget = cloudTracks.find(t => t.id === targetId);
+            if (matchedTarget) return matchedTarget;
+            const trk29 = cloudTracks.find(t => t.id === 'TRK-29');
+            if (trk29) return trk29;
+            return cloudTracks[0];
           });
         }
 
@@ -379,7 +406,9 @@ export default function BrickOSMusicStudioWorkspace() {
               setCloudSyncError('');
               setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
               setSelectedTrack(prev => {
-                const found = realtimeTracks.find(t => t.id === prev?.id);
+                const savedLastId = typeof window !== 'undefined' ? localStorage.getItem('brickos_last_selected_track_id') : null;
+                const targetId = savedLastId || prev?.id || 'TRK-29';
+                const found = realtimeTracks.find(t => t.id === targetId);
                 return found || prev;
               });
             }
@@ -1340,18 +1369,61 @@ export default function BrickOSMusicStudioWorkspace() {
 
   // Gemini Chatbot State
   const [chatRole, setChatRole] = useState<'lyric_assistant' | 'mastering_engineer' | 'omnipost_strategist'>('lyric_assistant');
-  const [chatModel, setChatModel] = useState('gemini-3.8-flash');
+  const [chatModel, setChatModel] = useState('gemini-3.1-pro-preview');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
       role: 'assistant',
-      content: "Welcome to brickOS Master Studio. I am your Lead Theological & Lyrical Assistant powered by Gemini 3.8 Flash. Let's ensure every track passes the OBI Funnel, strips all tired 'Christianese' clichés, and drives home the Throne Room Pivot by the bridge.",
+      content: "Welcome to brickOS Master Studio. I am your Elite Nashville Producer & Songwriting Mentor running the official BrickOS v10 SOP (powered by Gemini 3.1 Pro Deep Reasoning). Grounded in conversational poetics, the OBI Funnel, authentic human grit, and 4-block Suno prompt architecture with strictly zero generic clichés. How can I help develop your track today?",
       timestamp: '01:00 AM',
-      model: 'gemini-3.8-flash'
+      model: 'gemini-3.1-pro-preview'
     }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatElapsedTime, setChatElapsedTime] = useState(0);
+  const [isPromptEditorOpen, setIsPromptEditorOpen] = useState(false);
+  const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const chatTimerRef = useRef<any>(null);
+
+  // Live timer for Co-Producer generation
+  useEffect(() => {
+    if (isChatLoading) {
+      setChatElapsedTime(0);
+      chatTimerRef.current = setInterval(() => {
+        setChatElapsedTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (chatTimerRef.current) {
+        clearInterval(chatTimerRef.current);
+        chatTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (chatTimerRef.current) {
+        clearInterval(chatTimerRef.current);
+      }
+    };
+  }, [isChatLoading]);
+
+  // Cancel / Abort active generation
+  const handleAbortChat = () => {
+    if (chatAbortControllerRef.current) {
+      chatAbortControllerRef.current.abort();
+      chatAbortControllerRef.current = null;
+    }
+    setIsChatLoading(false);
+    setChatMessages(prev => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: 'Generation cancelled by user.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        model: chatModel
+      }
+    ]);
+  };
 
   // Canvas visualizer ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1709,24 +1781,24 @@ export default function BrickOSMusicStudioWorkspace() {
     setChatInput('');
     setIsChatLoading(true);
 
-    let systemInstruction = '';
-    if (chatRole === 'lyric_assistant') {
-      systemInstruction = `You are the Lead Theological & Lyrical Assistant for brickOS Master Records.
-Enforce the OBI Funnel, eliminate Christianese cliches, demand the Throne Room Pivot by the bridge, and protect the 3:1 Sonic Scar rule. Currently working on: ${selectedTrack.title} (${selectedTrack.genre}, ${selectedTrack.bpm} BPM). Thesis: ${selectedTrack.thesis}`;
-    } else if (chatRole === 'mastering_engineer') {
-      systemInstruction = `You are the Senior Mastering Engineer for brickOS Studio.
-Enforce -12.0 LUFS integrated loudness, -1.0 dBTP true peak ceiling, phase correlation checks for mono-collapse on mobile phones, 80Hz subtractive high-pass filters, and 5-10% parallel Vox Smash busses. Current track: ${selectedTrack.title}.`;
-    } else {
-      systemInstruction = `You are the Omnipost Social Media & 60-Second Hook Strategist for BRICK Records.
-You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on TikTok/Reels, component storytelling around flutes/riffs, and gamified challenges. Current track: ${selectedTrack.title}.`;
-    }
+    const controller = new AbortController();
+    chatAbortControllerRef.current = controller;
+
+    // Build system instruction dynamically from active BrickOS v10 SOP (or custom saved SOP)
+    const systemInstruction = buildCoProducerInstruction(selectedTrack, chatRole);
+
+    // Sanitize conversation history: strip any prior error banners or cancellation notices
+    const cleanHistory = updatedMessages
+      .filter(m => !m.content.startsWith('⚠️ Gemini Response Notice') && !m.content.startsWith('Generation cancelled'))
+      .map(m => ({ role: m.role, content: m.content }));
 
     try {
       const res = await fetch('/api/gemini/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: cleanHistory,
           systemInstruction,
           model: chatModel,
         }),
@@ -1748,6 +1820,10 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         ]);
       }
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        // Handled cleanly in handleAbortChat
+        return;
+      }
       setChatMessages(prev => [
         ...prev,
         {
@@ -1759,6 +1835,7 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         }
       ]);
     } finally {
+      chatAbortControllerRef.current = null;
       setIsChatLoading(false);
     }
   };
@@ -2702,6 +2779,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
               chatModel={chatModel}
               setChatModel={setChatModel}
               onOpenSectionGuide={handleOpenSectionGuide}
+              onOpenPromptEditor={() => setIsPromptEditorOpen(true)}
+              chatElapsedTime={chatElapsedTime}
+              onAbortChat={handleAbortChat}
               isDarkMode={isDarkMode}
               studioTheme={studioTheme}
             />
@@ -3184,6 +3264,9 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         onSearchGrounding={handleSearchGrounding}
         isSearching={isSearching}
         searchResult={searchResult}
+        onOpenPromptEditor={() => setIsPromptEditorOpen(true)}
+        chatElapsedTime={chatElapsedTime}
+        onAbortChat={handleAbortChat}
         isDarkMode={isDarkMode}
       />
 
@@ -3248,6 +3331,13 @@ You specialize in 6:00 AM - 9:00 AM morning devotional algorithmic rollouts on T
         generatedVideos={generatedVideos}
         nightCafePrompts={nightCafePrompts}
         onSaveRename={handleRenameTrackAndSyncAssets}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* STUDIO CO-PRODUCER AI GEM INSTRUCTIONS & SOP EDITOR MODAL */}
+      <CoProducerPromptEditorModal
+        isOpen={isPromptEditorOpen}
+        onClose={() => setIsPromptEditorOpen(false)}
         isDarkMode={isDarkMode}
       />
 

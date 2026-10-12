@@ -108,7 +108,7 @@ export const LyricBrainstormingChatbot: React.FC<LyricBrainstormingChatbotProps>
   const [isLoading, setIsLoading] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [insertedMsgId, setInsertedMsgId] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<'gemini-3.8-flash' | 'gemini-3.1-pro-preview'>('gemini-3.8-flash');
+  const [selectedModel, setSelectedModel] = useState<'gemini-3.8-flash' | 'gemini-3.1-pro-preview'>('gemini-3.1-pro-preview');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -151,7 +151,7 @@ export const LyricBrainstormingChatbot: React.FC<LyricBrainstormingChatbotProps>
     setIsLoading(true);
 
     try {
-      const systemInstruction = `You are an elite Nashville master songwriter, lyricist, and theological songwriting partner inside brickOS Studio for Ted Moyer and BRICK Records.
+      const systemInstruction = `You are an elite Nashville master songwriter, lyricist, and creative songwriting partner inside brickOS Studio following the BrickOS v10 SOP.
 Current Track Context:
 - Title: "${track.title}"
 - ID: ${track.id}
@@ -162,8 +162,8 @@ Current Track Context:
 ${scratchpad.trim() ? `\nSongwriter's Raw Scratchpad Ideas:\n"${scratchpad}"\n` : ''}
 ${track.lyrics?.trim() ? `\nCurrent Draft Lyrics:\n"""\n${track.lyrics}\n"""\n` : '\n(The song is currently in early ideation - no draft lyrics locked in yet.)\n'}
 Guidelines:
-1. Brainstorm visceral, singable, and spiritually resonant lyrical concepts.
-2. Avoid generic contemporary Christian cliches (e.g. "shining so bright", "feel the spark", "let down your walls").
+1. Brainstorm visceral, singable, and emotionally resonant lyrical concepts.
+2. The 'Christianese' Filter: Strictly replace generic religious clichés, church buzzwords, and tired slogans with raw, conversational poetics grounded in real human experience.
 3. Emphasize Nashville craftsmanship: tangible sensory details, authentic narrative stakes, rhythmically locked meter, and memorable hooks.
 4. When writing lyric sections, format them cleanly with standard brackets like [Verse 1], [Chorus], [Bridge] so the writer can insert them straight into the workbench.
 5. Be concise, punchy, inspiring, and conversational.`;
@@ -273,8 +273,8 @@ Guidelines:
               onChange={(e) => setSelectedModel(e.target.value as any)}
               className="bg-transparent text-xs font-mono font-bold text-slate-300 focus:outline-hidden cursor-pointer"
             >
-              <option value="gemini-3.8-flash">gemini-3.8-flash (Recommended)</option>
-              <option value="gemini-3.1-pro-preview">gemini-3.1-pro (Deep Theological)</option>
+              <option value="gemini-3.1-pro-preview">gemini-3.1-pro (Deep Reasoning & Production Craft)</option>
+              <option value="gemini-3.8-flash">gemini-3.8-flash (Fast & Lightweight)</option>
             </select>
           </div>
 

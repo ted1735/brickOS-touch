@@ -983,6 +983,87 @@ Just meet me here…
     versions: THE_WORK_AINT_DONE_VERSIONS,
     selahPrayed: true,
   },
+  {
+    id: "TRK-28",
+    ep: "EP 3: War Room Anthems",
+    title: "Standing at the Breach",
+    status: "In Progress",
+    genre: "Cinematic CHH / Southern Rock Hybrid",
+    bpm: 84,
+    key: "A Minor",
+    vocal: "Brandon / Kane",
+    vocalCast: "Brandon (Frontline Grit) & Kane (Tectonic Powerhouse)",
+    thesis: "Holding the line in the gap when everything tries to pull family apart; raw battle-tested resilience.",
+    sunoPrompt: "Cinematic CHH, Southern Rock, 84 BPM, A Minor, heavy acoustic stomp, distorted slide guitar, raw raspy male vocal",
+    negativePrompt: "sibilance, high-frequency hiss, piercing treble, autotune, generic pop choir, motivational fluff",
+    engineSliders: { weirdness: 10, styleInfluence: 70, voiceAudio: 100 },
+    lyrics: `[Verse 1]
+Midnight oil burning in the kitchen glow.
+Tracing every bill and every note below.
+I won't let this foundation break in two...
+Standing in the gap for what is true.
+
+[Chorus]
+Who's standing at the breach when the wind blows hard?
+Keep the shield lifted up in the quiet dark.
+Not by might, not by pride in what we do...
+We're standing at the breach with You.`,
+    versions: [
+      { version: "v1.0", timestamp: "2026-10-01", reason: "Initial battle-tested arrangement draft", lyrics: "Standing at the breach when the wind blows hard..." }
+    ],
+    selahPrayed: false,
+  },
+  {
+    id: "TRK-29",
+    ep: "EP 4: Surrender Sessions",
+    title: "Track 29 (At the Last Line)",
+    status: "In Progress",
+    genre: "Slow-Burn Acoustic Roots / Cinematic CHH",
+    bpm: 78,
+    key: "E Minor",
+    vocal: "Brandon",
+    vocalCast: "Brandon (Unpolished 2 AM Truck Breakdown)",
+    thesis: "Raw 2 AM vulnerability; breaking through religious clichés into honest, conversational surrender at the foot of the cross.",
+    sunoPrompt: "Slow-Burn Acoustic Roots CHH, 78 BPM, Key of E Minor, flatpick acoustic guitar, warm sub-bass, unpolished raspy vocal, intimate room mic, zero reverb wash",
+    negativePrompt: "sibilance, high-frequency hiss, piercing treble, autotune, generic church cliches, clean radio pop, synthesizer pad wash",
+    engineSliders: { weirdness: 15, styleInfluence: 75, voiceAudio: 100 },
+    lyrics: `[Intro – Spoken, close mic, tired breath]
+No stage lights tonight.
+Just grease on my knuckles and gravel under my boots.
+I'm done pretending I've got it all figured out.
+
+[Verse 1]
+Two lane highway, dashboard glow at 3 AM.
+Tired of the phrases and the polished hymns.
+If I can't speak the truth when my chest is tight,
+Then what's the point of fighting through another night?
+
+[Chorus - 60-Second Refrain]
+Strip away the slogans, strip away the pride.
+I don't need a sermon just to feel alive.
+Meet me in the wreckage, meet me in the grit...
+Where the broken heart is where the healing fits.
+
+[Verse 2]
+Hands on the wheel, calloused and sore.
+Left my excuses right outside the door.
+Real faith isn't pretty words upon a page—
+It's breathing in the quiet when the storms still rage.
+
+[Bridge - Throne Room Pivot]
+Here at the bottom of the canyon floor...
+I'm not asking for an easy way out no more.
+Take the broken pieces, take this heavy breath...
+You are the life that overcomes the death.
+
+[Outro]
+Right here at the last line...
+Meet me here.`,
+    versions: [
+      { version: "v1.0 (Work in Progress)", timestamp: "2026-10-11", reason: "Active songwriting session with Co-Producer AI", lyrics: "Strip away the slogans, strip away the pride..." }
+    ],
+    selahPrayed: false,
+  },
 ];
 
 export const NIGHTCAFE_DEFAULT_PROMPTS: NightCafePrompt[] = ALL_CANONICAL_PROMPTS;

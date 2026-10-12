@@ -68,9 +68,9 @@ async function generateContentWithFallback(
   const candidateModels = Array.from(
     new Set([
       normalizedPreferred,
+      'gemini-3.1-pro-preview',
       'gemini-3.8-flash',
       'gemini-3.1-flash-lite',
-      'gemini-2.5-flash'
     ].filter(Boolean))
   );
 
@@ -295,7 +295,7 @@ Deliver your comprehensive comparative audit now:`;
 // 4. Multi-Turn Gemini Chatbot (with custom roles)
 app.post('/api/gemini/chat', async (req, res) => {
   try {
-    const { messages, systemInstruction, model = 'gemini-3.8-flash' } = req.body;
+    const { messages, systemInstruction, model = 'gemini-3.1-pro-preview' } = req.body;
     const ai = getGenAI();
 
     // Map conversation messages to GenAI format
@@ -304,11 +304,11 @@ app.post('/api/gemini/chat', async (req, res) => {
       parts: [{ text: m.content }],
     }));
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.1-pro-preview');
     const result = await generateContentWithFallback(ai, targetModel, {
       contents,
       config: {
-        systemInstruction: systemInstruction || 'You are an elite music producer and theologian inside brickOS Studio.',
+        systemInstruction: systemInstruction || 'You are an Elite Nashville Producer & Songwriting Mentor inside brickOS Studio following the BrickOS v10 SOP. Eliminate all Christianese clichés and focus on authentic conversational poetics.',
       },
     });
 

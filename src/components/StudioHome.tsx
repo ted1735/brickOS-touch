@@ -30,9 +30,9 @@ const workspaceCards: Array<{
 export const getSuggestedTrackStep = (track: Track) => {
   switch (track.status) {
     case 'Idea / Concept': return { label: 'Develop the song idea', tab: 'brainstorming', workspace: 'write' as const };
-    case 'Lyrics Finalized': return { label: 'Start production', tab: 'mixer', workspace: 'produce' as const };
-    case 'In Progress':
-    case 'UVR5 Stem Prep': return { label: 'Continue mixing', tab: 'mixer', workspace: 'produce' as const };
+    case 'Lyrics Finalized': return { label: 'Work on lyrics & Suno prompt', tab: 'lyrics', workspace: 'write' as const };
+    case 'In Progress': return { label: 'Continue lyrics & songwriting', tab: 'lyrics', workspace: 'write' as const };
+    case 'UVR5 Stem Prep': return { label: 'Continue stem mixing', tab: 'mixer', workspace: 'produce' as const };
     case 'Audio Master': return { label: 'Review the master', tab: 'mastering', workspace: 'release' as const };
     case 'Sent for Distribution': return { label: 'Finish release details', tab: 'youtube', workspace: 'release' as const };
     case 'Released': return { label: 'Open the production pipeline', tab: 'kanban', workspace: 'all' as const };
