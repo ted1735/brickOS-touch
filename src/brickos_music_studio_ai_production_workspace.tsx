@@ -147,13 +147,20 @@ export default function BrickOSMusicStudioWorkspace() {
     const cached = getLocalCachedTracks();
     const trackList = cached && cached.length > 0 ? cached : CANONICAL_TRACKS;
     const lastId = typeof window !== 'undefined' ? localStorage.getItem('brickos_last_selected_track_id') : null;
-    if (lastId) {
+    if (lastId && lastId !== 'TRK-01') {
       const found = trackList.find(t => t.id === lastId);
       if (found) return found;
     }
     // Default to TRK-29 (user's active focus) rather than defaulting to Track 1
     const trk29 = trackList.find(t => t.id === 'TRK-29');
-    if (trk29) return trk29;
+    if (trk29) {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('brickos_last_selected_track_id', 'TRK-29');
+        } catch (_) {}
+      }
+      return trk29;
+    }
     return trackList[0];
   });
 
@@ -382,7 +389,7 @@ export default function BrickOSMusicStudioWorkspace() {
           setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
           setSelectedTrack(prev => {
             const savedLastId = typeof window !== 'undefined' ? localStorage.getItem('brickos_last_selected_track_id') : null;
-            const targetId = savedLastId || prev?.id || 'TRK-29';
+            const targetId = (savedLastId && savedLastId !== 'TRK-01') ? savedLastId : (prev?.id && prev.id !== 'TRK-01' ? prev.id : 'TRK-29');
             const matchedTarget = cloudTracks.find(t => t.id === targetId);
             if (matchedTarget) return matchedTarget;
             const trk29 = cloudTracks.find(t => t.id === 'TRK-29');
@@ -407,7 +414,7 @@ export default function BrickOSMusicStudioWorkspace() {
               setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
               setSelectedTrack(prev => {
                 const savedLastId = typeof window !== 'undefined' ? localStorage.getItem('brickos_last_selected_track_id') : null;
-                const targetId = savedLastId || prev?.id || 'TRK-29';
+                const targetId = (savedLastId && savedLastId !== 'TRK-01') ? savedLastId : (prev?.id && prev.id !== 'TRK-01' ? prev.id : 'TRK-29');
                 const found = realtimeTracks.find(t => t.id === targetId);
                 return found || prev;
               });
@@ -2568,6 +2575,14 @@ export default function BrickOSMusicStudioWorkspace() {
               track={selectedTrack}
               sessions={sessions}
               isDarkMode={isDarkMode}
+              allTracks={tracks}
+              onSelectTrack={(t) => {
+                setSelectedTrack(t);
+                try {
+                  localStorage.setItem('brickos_last_selected_track_id', t.id);
+                } catch (_) {}
+                showToast(`Switched active track to: ${t.id} - ${t.title}`, 'info');
+              }}
               onContinue={() => {
                 const step = getSuggestedTrackStep(selectedTrack);
                 handleSetWorkspaceMode(step.workspace);

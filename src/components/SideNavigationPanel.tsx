@@ -1256,25 +1256,6 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
           </div>
         </div>
 
-        {/* Brand Logo Container (At least 150px) */}
-        <div className="flex flex-col items-center justify-center pt-1 pb-1">
-          <div className="w-[150px] h-[150px] min-w-[150px] min-h-[150px] rounded-2xl bg-slate-950/90 border border-slate-700/60 p-3 flex items-center justify-center shadow-xl shadow-indigo-950/50 overflow-hidden ring-1 ring-white/10 group hover:border-indigo-500/60 transition-all">
-            <img 
-              src="/brick-logo.webp" 
-              alt="brickOS Logo" 
-              className="w-full h-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300" 
-            />
-          </div>
-          <div className="text-center mt-2.5">
-            <h2 className={`text-xs font-black uppercase tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              brickOS Master Studio
-            </h2>
-            <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              Projects, Sessions & Assets
-            </p>
-          </div>
-        </div>
-
         {/* 3-WAY SUB-TAB NAVIGATION */}
         <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border text-[11px] font-bold ${
           isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
