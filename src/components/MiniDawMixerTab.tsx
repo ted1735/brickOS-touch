@@ -25,15 +25,23 @@ import {
   RefreshCw,
   GripVertical,
   FolderKanban,
-  Loader2
+  Loader2,
+  Users,
+  Link2,
+  Link2Off,
+  Plus,
+  Trash2,
+  Settings2,
+  X
 } from 'lucide-react';
-import { Track, MixerTrack, DawEffectsState, LufsMeasurementData } from '../types';
+import { Track, MixerTrack, DawEffectsState, LufsMeasurementData, TrackAutomationState, MixerGroup } from '../types';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { MiniDawRealtimeChart } from './MiniDawRealtimeChart';
 import { MiniDawSpectrumVisualizer } from './MiniDawSpectrumVisualizer';
 import { MasteringRack } from './MasteringRack';
 import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
+import { AutomationLaneEditor, interpolateAutomationValue } from './AutomationLaneEditor';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -47,8 +55,46 @@ interface MiniDawMixerTabProps {
   allTracks?: Track[];
 }
 
+const DEFAULT_MIXER_GROUPS: MixerGroup[] = [
+  { id: 'grp-vocal', name: 'Group A • Vocals', color: '#8B5CF6' },
+  { id: 'grp-music', name: 'Group B • Rhythm & Bed', color: '#06B6D4' },
+  { id: 'grp-lead',  name: 'Group C • Leads & Solo', color: '#F59E0B' },
+  { id: 'grp-aux',   name: 'Group D • FX & Ambience', color: '#10B981' }
+];
+
+const GROUP_PALETTE = [
+  { name: 'Purple', hex: '#8B5CF6' },
+  { name: 'Cyan', hex: '#06B6D4' },
+  { name: 'Amber', hex: '#F59E0B' },
+  { name: 'Emerald', hex: '#10B981' },
+  { name: 'Rose', hex: '#F43F5E' },
+  { name: 'Blue', hex: '#3B82F6' },
+  { name: 'Orange', hex: '#F97316' },
+  { name: 'Indigo', hex: '#6366F1' }
+];
+
+const assignDefaultGroupsToStems = (stems: MixerTrack[]): MixerTrack[] => {
+  return stems.map((s, idx) => {
+    if (s.groupId !== undefined) return s;
+    const nameLower = (s.name || '').toLowerCase();
+    const stemType = s.stemType || '';
+    if (
+      stemType === 'vocal' ||
+      stemType === 'choir' ||
+      nameLower.includes('vocal') ||
+      nameLower.includes('choir') ||
+      nameLower.includes('lead') ||
+      idx === 0 ||
+      idx === 1
+    ) {
+      return { ...s, groupId: 'grp-vocal' };
+    }
+    return { ...s, groupId: 'grp-music' };
+  });
+};
+
 const getTrackStems = (track: Track): MixerTrack[] => {
-  return getUniversalTrackStems(track);
+  return assignDefaultGroupsToStems(getUniversalTrackStems(track));
 };
 
 export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
@@ -64,7 +110,16 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [isMasterDimmed, setIsMasterDimmed] = useState(false);
   const [isMonoCollapsed, setIsMonoCollapsed] = useState(false);
   const [masterLevels, setMasterLevels] = useState<{ l: number; r: number }>({ l: 0, r: 0 });
-  const [tracks, setTracks] = useState<MixerTrack[]>(() => getUniversalTrackStems(track));
+  const [tracks, setTracks] = useState<MixerTrack[]>(() => getTrackStems(track));
+  const [groups, setGroups] = useState<MixerGroup[]>(DEFAULT_MIXER_GROUPS);
+  const [isGroupLinkingEnabled, setIsGroupLinkingEnabled] = useState<boolean>(true);
+  const [activeGroupMenuTrackId, setActiveGroupMenuTrackId] = useState<number | null>(null);
+  const [isCreatingGroup, setIsCreatingGroup] = useState<boolean>(false);
+  const [newGroupName, setNewGroupName] = useState<string>('');
+  const [newGroupColor, setNewGroupColor] = useState<string>('#8B5CF6');
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState<string>('');
+  const [editGroupColor, setEditGroupColor] = useState<string>('#8B5CF6');
   const [isExportingWav, setIsExportingWav] = useState(false);
   const [cropPreset, setCropPreset] = useState<'30s' | '60s' | 'full'>('60s');
   const [isNextcloudSyncing, setIsNextcloudSyncing] = useState<boolean>(false);
@@ -80,7 +135,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   }, []);
 
   useEffect(() => {
-    setTracks(getUniversalTrackStems(track));
+    setTracks(getTrackStems(track));
   }, [track.id]);
 
   // Assign any asset from Project Browser to a specific channel
@@ -193,37 +248,128 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   // Dynamic real-time stereo audio meters per stem channel
   const [channelLevels, setChannelLevels] = useState<{ [id: number]: { l: number; r: number } }>({});
 
+  // Expandable Volume & Pan Automation Lanes State
+  const [trackAutomation, setTrackAutomation] = useState<Record<number, TrackAutomationState>>(() => {
+    const initial: Record<number, TrackAutomationState> = {};
+    [1, 2, 3, 4].forEach((id) => {
+      initial[id] = {
+        isExpanded: false,
+        activeParam: 'vol',
+        volumeBypass: false,
+        panBypass: false,
+        volumeNodes: [
+          { id: `v-${id}-0`, timePercent: 0, value: 80 },
+          { id: `v-${id}-1`, timePercent: 100, value: 80 }
+        ],
+        panNodes: [
+          { id: `p-${id}-0`, timePercent: 0, value: 0 },
+          { id: `p-${id}-1`, timePercent: 100, value: 0 }
+        ]
+      };
+    });
+    return initial;
+  });
+
+  const [playbackProgressPercent, setPlaybackProgressPercent] = useState<number>(0);
+  const [liveDynamicValues, setLiveDynamicValues] = useState<Record<number, { vol: number; pan: number }>>({});
+  const playbackStartTimeRef = React.useRef<number | null>(null);
+
+  const defaultAutomationForTrack = (trk: MixerTrack): TrackAutomationState => ({
+    isExpanded: false,
+    activeParam: 'vol',
+    volumeBypass: false,
+    panBypass: false,
+    volumeNodes: [
+      { id: `v-${trk.id}-0`, timePercent: 0, value: trk.vol },
+      { id: `v-${trk.id}-1`, timePercent: 100, value: trk.vol }
+    ],
+    panNodes: [
+      { id: `p-${trk.id}-0`, timePercent: 0, value: trk.pan },
+      { id: `p-${trk.id}-1`, timePercent: 100, value: trk.pan }
+    ]
+  });
+
+  const handleToggleAutomationLane = (trackId: number) => {
+    setTrackAutomation((prev) => {
+      const cur = prev[trackId] || defaultAutomationForTrack(tracks.find((t) => t.id === trackId) || tracks[0]);
+      return {
+        ...prev,
+        [trackId]: {
+          ...cur,
+          isExpanded: !cur.isExpanded
+        }
+      };
+    });
+  };
+
+  const handleUpdateAutomation = (trackId: number, newState: TrackAutomationState) => {
+    setTrackAutomation((prev) => ({
+      ...prev,
+      [trackId]: newState
+    }));
+  };
+
   useEffect(() => {
     if (!isPlaying) {
       setChannelLevels({});
       setMasterLevels({ l: 0, r: 0 });
+      playbackStartTimeRef.current = null;
+      setPlaybackProgressPercent(0);
       return;
+    }
+
+    if (!playbackStartTimeRef.current) {
+      playbackStartTimeRef.current = Date.now();
     }
 
     let frameId: number;
     let tick = 0;
     const updateMeters = () => {
       tick++;
-      const anySolo = tracks.some(t => t.solo);
+      const now = Date.now();
+      const elapsedSec = ((now - (playbackStartTimeRef.current || now)) / 1000) % 60;
+      const progressPercent = (elapsedSec / 60) * 100;
+      setPlaybackProgressPercent(progressPercent);
+
+      const anySolo = tracks.some((t) => t.solo);
       const levels: { [id: number]: { l: number; r: number } } = {};
+      const dynamicVals: { [id: number]: { vol: number; pan: number } } = {};
       let sumL = 0;
       let sumR = 0;
       let audibleCount = 0;
 
       tracks.forEach((trk, idx) => {
+        const auto = trackAutomation[trk.id];
+        let effVol = trk.vol;
+        let effPan = trk.pan;
+
+        if (auto) {
+          if (!auto.volumeBypass && auto.volumeNodes && auto.volumeNodes.length > 0) {
+            effVol = Math.round(interpolateAutomationValue(auto.volumeNodes, progressPercent));
+          }
+          if (!auto.panBypass && auto.panNodes && auto.panNodes.length > 0) {
+            effPan = Math.round(interpolateAutomationValue(auto.panNodes, progressPercent));
+          }
+        }
+        dynamicVals[trk.id] = { vol: effVol, pan: effPan };
+
+        // Dispatch real-time automation to Web Audio engine
+        const hasSolo = tracks.some((t) => t.solo);
+        audioMiniDaw.updateTrackControls(trk.id, effVol, effPan, trk.muted, hasSolo, trk.solo);
+
         const isAudible = !trk.muted && (!anySolo || trk.solo);
         if (!isAudible) {
           levels[trk.id] = { l: 0, r: 0 };
           return;
         }
 
-        const baseAmp = (trk.vol / 100);
+        const baseAmp = (effVol / 100);
         const phaseOffset = idx * 1.35;
         const wave = 0.55 + 0.45 * Math.sin(tick * 0.15 + phaseOffset) * Math.cos(tick * 0.08);
         const flutter = (Math.random() * 0.16 - 0.08);
         const levelVal = Math.min(100, Math.max(0, Math.round(baseAmp * (wave + flutter) * 100)));
         
-        const panRatio = trk.pan / 100;
+        const panRatio = effPan / 100;
         const leftLevel = Math.round(levelVal * (panRatio > 0 ? (1 - panRatio * 0.55) : 1));
         const rightLevel = Math.round(levelVal * (panRatio < 0 ? (1 + panRatio * 0.55) : 1));
 
@@ -234,6 +380,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
       });
 
       setChannelLevels(levels);
+      setLiveDynamicValues(dynamicVals);
 
       // Compute Master Output Bus Summed Levels
       if (audibleCount > 0 && !isMasterMuted) {
@@ -256,7 +403,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
     frameId = requestAnimationFrame(updateMeters);
     return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, tracks, masterVolume, isMasterMuted, isMasterDimmed, isMonoCollapsed]);
+  }, [isPlaying, tracks, trackAutomation, masterVolume, isMasterMuted, isMasterDimmed, isMonoCollapsed]);
 
   // Sync isPlaying state with audioMiniDaw
   useEffect(() => {
@@ -349,16 +496,161 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     }
   };
 
+  // Synchronize audio engine for all tracks
+  const syncAudioEngineTracks = (updatedTracks: MixerTrack[]) => {
+    const hasSolo = updatedTracks.some((t) => t.solo);
+    updatedTracks.forEach((t) => {
+      audioMiniDaw.updateTrackControls(t.id, t.vol, t.pan, t.muted, hasSolo, t.solo);
+    });
+  };
+
   // Update track state
   const handleUpdateTrack = (id: number, field: keyof MixerTrack, val: any) => {
     const updated = tracks.map((t) => (t.id === id ? { ...t, [field]: val } : t));
     setTracks(updated);
 
-    const targetTrack = updated.find((t) => t.id === id);
-    if (targetTrack) {
-      const hasSolo = updated.some((t) => t.solo);
-      audioMiniDaw.updateTrackControls(id, targetTrack.vol, targetTrack.pan, targetTrack.muted, hasSolo, targetTrack.solo);
+    if (field === 'solo' || field === 'muted') {
+      syncAudioEngineTracks(updated);
+    } else {
+      const targetTrack = updated.find((t) => t.id === id);
+      if (targetTrack) {
+        const hasSolo = updated.some((t) => t.solo);
+        audioMiniDaw.updateTrackControls(id, targetTrack.vol, targetTrack.pan, targetTrack.muted, hasSolo, targetTrack.solo);
+      }
     }
+  };
+
+  // Handle click on channel Mute button with group linking
+  const handleTrackMuteClick = (trackId: number, e?: React.MouseEvent) => {
+    const target = tracks.find((t) => t.id === trackId);
+    if (!target) return;
+
+    const isAlt = e && (e.altKey || e.metaKey);
+    const shouldLink = isGroupLinkingEnabled && target.groupId && !isAlt;
+
+    if (shouldLink) {
+      const nextMuted = !target.muted;
+      const updated = tracks.map((t) => {
+        if (t.groupId === target.groupId) {
+          return { ...t, muted: nextMuted };
+        }
+        return t;
+      });
+      setTracks(updated);
+      syncAudioEngineTracks(updated);
+    } else {
+      handleUpdateTrack(trackId, 'muted', !target.muted);
+    }
+  };
+
+  // Handle click on channel Solo button with group linking
+  const handleTrackSoloClick = (trackId: number, e?: React.MouseEvent) => {
+    const target = tracks.find((t) => t.id === trackId);
+    if (!target) return;
+
+    const isAlt = e && (e.altKey || e.metaKey);
+    const shouldLink = isGroupLinkingEnabled && target.groupId && !isAlt;
+
+    if (shouldLink) {
+      const nextSolo = !target.solo;
+      const updated = tracks.map((t) => {
+        if (t.groupId === target.groupId) {
+          return { ...t, solo: nextSolo };
+        }
+        return t;
+      });
+      setTracks(updated);
+      syncAudioEngineTracks(updated);
+    } else {
+      handleUpdateTrack(trackId, 'solo', !target.solo);
+    }
+  };
+
+  // Toggle Mute for an entire group
+  const handleToggleGroupMute = (groupId: string) => {
+    const memberTracks = tracks.filter((t) => t.groupId === groupId);
+    if (memberTracks.length === 0) return;
+
+    const allMuted = memberTracks.every((t) => t.muted);
+    const nextMuted = !allMuted;
+
+    const updated = tracks.map((t) => {
+      if (t.groupId === groupId) {
+        return { ...t, muted: nextMuted };
+      }
+      return t;
+    });
+    setTracks(updated);
+    syncAudioEngineTracks(updated);
+  };
+
+  // Toggle Solo for an entire group
+  const handleToggleGroupSolo = (groupId: string) => {
+    const memberTracks = tracks.filter((t) => t.groupId === groupId);
+    if (memberTracks.length === 0) return;
+
+    const allSolo = memberTracks.every((t) => t.solo);
+    const nextSolo = !allSolo;
+
+    const updated = tracks.map((t) => {
+      if (t.groupId === groupId) {
+        return { ...t, solo: nextSolo };
+      }
+      return t;
+    });
+    setTracks(updated);
+    syncAudioEngineTracks(updated);
+  };
+
+  // Clear all solos in the mixer
+  const handleClearAllSolos = () => {
+    const updated = tracks.map((t) => ({ ...t, solo: false }));
+    setTracks(updated);
+    syncAudioEngineTracks(updated);
+  };
+
+  // Unmute all tracks in the mixer
+  const handleUnmuteAllTracks = () => {
+    const updated = tracks.map((t) => ({ ...t, muted: false }));
+    setTracks(updated);
+    syncAudioEngineTracks(updated);
+  };
+
+  // Assign track to group
+  const handleAssignTrackGroup = (trackId: number, groupId: string | null) => {
+    const updated = tracks.map((t) => (t.id === trackId ? { ...t, groupId } : t));
+    setTracks(updated);
+    setActiveGroupMenuTrackId(null);
+  };
+
+  // Create custom group
+  const handleCreateCustomGroup = () => {
+    if (!newGroupName.trim()) return;
+    const newId = `grp-${Date.now()}`;
+    const newGroup: MixerGroup = {
+      id: newId,
+      name: newGroupName.trim(),
+      color: newGroupColor
+    };
+    setGroups((prev) => [...prev, newGroup]);
+    setNewGroupName('');
+    setIsCreatingGroup(false);
+  };
+
+  // Delete custom group
+  const handleDeleteGroup = (groupId: string) => {
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    setTracks((prev) => prev.map((t) => (t.groupId === groupId ? { ...t, groupId: null } : t)));
+    if (editingGroupId === groupId) setEditingGroupId(null);
+  };
+
+  // Save edited group
+  const handleSaveEditGroup = (groupId: string) => {
+    if (!editGroupName.trim()) return;
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, name: editGroupName.trim(), color: editGroupColor } : g))
+    );
+    setEditingGroupId(null);
   };
 
   // Apply effective master gain considering Mute and Dim states
@@ -1013,6 +1305,330 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         </div>
       </div>
 
+      {/* CUSTOM MUTE & SOLO GROUPS (VCA / LINK) TOOLBAR */}
+      <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3 font-mono shadow-md">
+        {/* Header row */}
+        <div className="flex items-center justify-between flex-wrap gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Mute & Solo Groups (VCA / Link)
+                </h3>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700/50">
+                  {groups.length} Groups
+                </span>
+                <span className="text-[10px] text-slate-500 hidden sm:inline">
+                  • Group tracks for simultaneous Mute/Solo during playback
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Group Link Switch */}
+            <button
+              type="button"
+              onClick={() => setIsGroupLinkingEnabled(!isGroupLinkingEnabled)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                isGroupLinkingEnabled
+                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50 hover:bg-emerald-900'
+                  : 'bg-amber-950/80 text-amber-300 border-amber-600/50 hover:bg-amber-900'
+              }`}
+              title={
+                isGroupLinkingEnabled
+                  ? 'Channel M/S buttons synchronize across group members (Click to suspend)'
+                  : 'Group linking suspended: channel M/S clicks only affect that single track (Click to activate)'
+              }
+            >
+              {isGroupLinkingEnabled ? (
+                <>
+                  <Link2 className="w-3 h-3 text-emerald-400" />
+                  <span>Link: ACTIVE</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </>
+              ) : (
+                <>
+                  <Link2Off className="w-3 h-3 text-amber-400" />
+                  <span>Link: SUSPENDED</span>
+                </>
+              )}
+            </button>
+
+            {/* Quick shortcuts */}
+            {tracks.some((t) => t.solo) && (
+              <button
+                type="button"
+                onClick={handleClearAllSolos}
+                className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>Clear Solos</span>
+              </button>
+            )}
+
+            {tracks.some((t) => t.muted) && (
+              <button
+                type="button"
+                onClick={handleUnmuteAllTracks}
+                className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/40 transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>Unmute All</span>
+              </button>
+            )}
+
+            {/* Add Custom Group button */}
+            <button
+              type="button"
+              onClick={() => setIsCreatingGroup(true)}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 shadow-sm cursor-pointer"
+            >
+              <Plus className="w-3 h-3" />
+              <span>New Group</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal / inline form to create new custom group */}
+        {isCreatingGroup && (
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+              <span className="flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Create Custom Mute / Solo Group</span>
+              </span>
+              <button
+                onClick={() => setIsCreatingGroup(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <input
+                type="text"
+                placeholder="e.g. Group E • Drums & Percussion"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                className="flex-1 min-w-[200px] bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-white placeholder-slate-500 font-mono"
+                autoFocus
+              />
+              <div className="flex items-center gap-1.5">
+                {GROUP_PALETTE.map((pal) => (
+                  <button
+                    key={pal.hex}
+                    type="button"
+                    onClick={() => setNewGroupColor(pal.hex)}
+                    className={`w-5 h-5 rounded-full transition border cursor-pointer ${
+                      newGroupColor === pal.hex ? 'border-white scale-110 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: pal.hex }}
+                    title={pal.name}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCreateCustomGroup}
+                  disabled={!newGroupName.trim()}
+                  className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer"
+                >
+                  Create Group
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingGroup(false)}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal / inline form to edit an existing group */}
+        {editingGroupId && (
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+              <span className="flex items-center gap-1.5">
+                <Settings2 className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Edit Group Properties</span>
+              </span>
+              <button
+                onClick={() => setEditingGroupId(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <input
+                type="text"
+                value={editGroupName}
+                onChange={(e) => setEditGroupName(e.target.value)}
+                className="flex-1 min-w-[200px] bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-white font-mono"
+              />
+              <div className="flex items-center gap-1.5">
+                {GROUP_PALETTE.map((pal) => (
+                  <button
+                    key={pal.hex}
+                    type="button"
+                    onClick={() => setEditGroupColor(pal.hex)}
+                    className={`w-5 h-5 rounded-full transition border cursor-pointer ${
+                      editGroupColor === pal.hex ? 'border-white scale-110 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: pal.hex }}
+                    title={pal.name}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditGroup(editingGroupId)}
+                  className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteGroup(editingGroupId)}
+                  className="px-2.5 py-1 rounded bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs transition cursor-pointer"
+                >
+                  Delete Group
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingGroupId(null)}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Group Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {groups.map((grp) => {
+            const members = tracks.filter((t) => t.groupId === grp.id);
+            const isAllMuted = members.length > 0 && members.every((t) => t.muted);
+            const isSomeMuted = members.length > 0 && members.some((t) => t.muted) && !isAllMuted;
+            const isAllSolo = members.length > 0 && members.every((t) => t.solo);
+            const isSomeSolo = members.length > 0 && members.some((t) => t.solo) && !isAllSolo;
+
+            return (
+              <div
+                key={grp.id}
+                className="bg-slate-900/70 border border-slate-800/90 rounded-xl p-2.5 flex flex-col justify-between gap-2 transition hover:border-slate-700 relative overflow-hidden"
+              >
+                {/* Color strip accent on top */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-1"
+                  style={{ backgroundColor: grp.color }}
+                />
+
+                {/* Group Title and Info */}
+                <div className="flex items-center justify-between gap-1 pt-1">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
+                      style={{ backgroundColor: grp.color }}
+                    />
+                    <span className="text-[11px] font-bold text-white truncate" title={grp.name}>
+                      {grp.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono text-slate-400 bg-slate-800 border border-slate-700/50">
+                      {members.length} {members.length === 1 ? 'trk' : 'trks'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingGroupId(grp.id);
+                        setEditGroupName(grp.name);
+                        setEditGroupColor(grp.color);
+                      }}
+                      className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+                      title="Edit group"
+                    >
+                      <Settings2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Member Channels Pills */}
+                <div className="flex items-center gap-1 flex-wrap min-h-[22px]">
+                  {members.length === 0 ? (
+                    <span className="text-[10px] text-slate-600 italic">No channels assigned</span>
+                  ) : (
+                    members.map((m) => (
+                      <span
+                        key={m.id}
+                        className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-950 text-slate-300 border border-slate-800 truncate max-w-[100px]"
+                        title={`Channel ${m.id}: ${m.name}`}
+                      >
+                        Ch{m.id}: {m.name.split(':')[1]?.trim() || m.name.split(' ')[0]}
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                {/* Mute and Solo Control Buttons */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleGroupMute(grp.id)}
+                    disabled={members.length === 0}
+                    className={`py-1 rounded text-[10px] font-mono font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                      members.length === 0
+                        ? 'opacity-30 cursor-not-allowed bg-slate-800/50 text-slate-600'
+                        : isAllMuted
+                        ? 'bg-rose-600 text-white ring-1 ring-rose-400 shadow-sm'
+                        : isSomeMuted
+                        ? 'bg-rose-950 text-rose-300 border border-rose-700/50 hover:bg-rose-900'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                    }`}
+                    title={isAllMuted ? 'Unmute Group' : 'Mute Group'}
+                  >
+                    <span>MUTE</span>
+                    {isAllMuted && <span className="text-[8px] font-mono bg-rose-950/80 px-1 rounded">ALL</span>}
+                    {isSomeMuted && <span className="text-[8px] font-mono bg-rose-900/80 px-1 rounded">MIX</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleToggleGroupSolo(grp.id)}
+                    disabled={members.length === 0}
+                    className={`py-1 rounded text-[10px] font-mono font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                      members.length === 0
+                        ? 'opacity-30 cursor-not-allowed bg-slate-800/50 text-slate-600'
+                        : isAllSolo
+                        ? 'bg-amber-500 text-slate-950 font-black ring-1 ring-amber-300 shadow-sm'
+                        : isSomeSolo
+                        ? 'bg-amber-950 text-amber-300 border border-amber-600/50 hover:bg-amber-900'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                    }`}
+                    title={isAllSolo ? 'Clear Group Solo' : 'Solo Group'}
+                  >
+                    <span>SOLO</span>
+                    {isAllSolo && <span className="text-[8px] font-mono bg-amber-600 text-slate-950 px-1 rounded font-black">ALL</span>}
+                    {isSomeSolo && <span className="text-[8px] font-mono bg-amber-900/80 px-1 rounded">MIX</span>}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 4 Track Strips */}
       <div className="space-y-3">
         <div className="flex items-center justify-between text-xs text-slate-400 font-mono px-1">
@@ -1025,6 +1641,13 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
         {tracks.map((trk, i) => {
           const isDragTarget = dragOverChannelId === trk.id;
+          const autoState = trackAutomation[trk.id] || defaultAutomationForTrack(trk);
+          const isLaneExpanded = autoState.isExpanded;
+          const isLaneActive = !autoState.volumeBypass || !autoState.panBypass;
+          const dynamicVol = liveDynamicValues[trk.id]?.vol;
+          const dynamicPan = liveDynamicValues[trk.id]?.pan;
+          const trkGroup = groups.find((g) => g.id === trk.groupId);
+
           return (
             <div
               key={trk.id}
@@ -1037,11 +1660,12 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                 if (dragOverChannelId === trk.id) setDragOverChannelId(null);
               }}
               onDrop={(e) => handleDropOnChannel(trk.id, e)}
-              className={`relative rounded-xl p-4 flex items-center justify-between flex-wrap gap-4 transition border ${
+              className={`relative rounded-xl p-4 flex flex-col gap-3 transition border ${
                 isDragTarget
                   ? 'bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-500/60 shadow-xl shadow-cyan-950/60 scale-[1.01]'
                   : 'bg-slate-950 border-slate-800/90 hover:border-slate-700'
               }`}
+              style={trkGroup ? { borderLeft: `4px solid ${trkGroup.color}` } : undefined}
             >
               {isDragTarget && (
                 <div className="absolute inset-0 bg-cyan-950/95 rounded-xl border-2 border-dashed border-cyan-400 flex items-center justify-center gap-2 z-20 animate-pulse text-cyan-200 font-mono text-xs font-bold pointer-events-none">
@@ -1049,131 +1673,296 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   <span>DROP WEBDAV ASSET HERE TO ROUTE TO CHANNEL {trk.id}</span>
                 </div>
               )}
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-white text-xs shadow-md"
-                  style={{ backgroundColor: trk.color }}
-                >
-                  {i + 1}
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
-                    <span>{trk.name}</span>
-                  </h4>
-                  <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
-                    <span className="text-sky-400 font-bold">WebDAV:</span>
-                    <span className="truncate max-w-[280px]">
-                      {trk.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/${trk.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.wav`}
-                    </span>
-                    {trk.isRealAudio && (
-                      <span className="px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/40 text-[9px] font-bold">
-                        REAL STEM
-                      </span>
+
+              {/* Main Channel Controls Row */}
+              <div className="flex items-center justify-between flex-wrap gap-4 w-full">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-white text-xs shadow-md relative"
+                    style={{ backgroundColor: trk.color }}
+                  >
+                    {i + 1}
+                    {trkGroup && (
+                      <span
+                        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-slate-950 shadow-xs"
+                        style={{ backgroundColor: trkGroup.color }}
+                        title={`Assigned to ${trkGroup.name}`}
+                      />
                     )}
-                  </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                      <span>{trk.name}</span>
+                      {trkGroup && (
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase border flex items-center gap-1"
+                          style={{
+                            borderColor: `${trkGroup.color}60`,
+                            backgroundColor: `${trkGroup.color}15`,
+                            color: trkGroup.color
+                          }}
+                          title={`Track assigned to ${trkGroup.name}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: trkGroup.color }} />
+                          <span>{trkGroup.name.split('•')[0].trim()}</span>
+                        </span>
+                      )}
+                    </h4>
+                    <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
+                      <span className="text-sky-400 font-bold">WebDAV:</span>
+                      <span className="truncate max-w-[280px]">
+                        {trk.webdavPath || `/remote.php/dav/files/ncted/Music-Production/${track.id}/stems/${trk.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.wav`}
+                      </span>
+                      {trk.isRealAudio && (
+                        <span className="px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/40 text-[9px] font-bold">
+                          REAL STEM
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-            {/* Faders & Knobs */}
-            <div className="flex items-center gap-5 flex-wrap">
-              {/* Mute / Solo */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => handleUpdateTrack(trk.id, 'muted', !trk.muted)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono ${
-                    trk.muted
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
-                  }`}
-                  title="Mute Track"
-                >
-                  M
-                </button>
-                <button
-                  onClick={() => handleUpdateTrack(trk.id, 'solo', !trk.solo)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono ${
-                    trk.solo
-                      ? 'bg-amber-500 text-slate-950 font-black'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
-                  }`}
-                  title="Solo Track"
-                >
-                  S
-                </button>
-              </div>
+                {/* Faders & Knobs */}
+                <div className="flex items-center gap-4 sm:gap-5 flex-wrap">
+                  {/* Mute / Solo / Group */}
+                  <div className="flex items-center gap-1.5 relative">
+                    <button
+                      onClick={(e) => handleTrackMuteClick(trk.id, e)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono cursor-pointer ${
+                        trk.muted
+                          ? 'bg-rose-600 text-white ring-1 ring-rose-400 shadow-sm'
+                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                      }`}
+                      title={
+                        trk.groupId
+                          ? `Mute Track ${isGroupLinkingEnabled ? `(Linked with ${trkGroup?.name || 'group'} • Alt+Click to isolate)` : '(Group link suspended)'}`
+                          : 'Mute Track'
+                      }
+                    >
+                      M
+                    </button>
+                    <button
+                      onClick={(e) => handleTrackSoloClick(trk.id, e)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono cursor-pointer ${
+                        trk.solo
+                          ? 'bg-amber-500 text-slate-950 font-black ring-1 ring-amber-300 shadow-sm'
+                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                      }`}
+                      title={
+                        trk.groupId
+                          ? `Solo Track ${isGroupLinkingEnabled ? `(Linked with ${trkGroup?.name || 'group'} • Alt+Click to isolate)` : '(Group link suspended)'}`
+                          : 'Solo Track'
+                      }
+                    >
+                      S
+                    </button>
 
-              {/* Stereo Pan */}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono uppercase text-slate-500">Pan</span>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  value={trk.pan}
-                  onChange={(e) => handleUpdateTrack(trk.id, 'pan', parseInt(e.target.value))}
-                  className="w-16 accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                />
-                <span className="text-[10px] font-mono text-slate-400 w-8 text-center">
-                  {trk.pan === 0 ? 'C' : trk.pan < 0 ? `L${Math.abs(trk.pan)}` : `R${trk.pan}`}
-                </span>
-              </div>
+                    {/* Group Selector Dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setActiveGroupMenuTrackId(activeGroupMenuTrackId === trk.id ? null : trk.id)}
+                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition flex items-center gap-1 border cursor-pointer ${
+                          trkGroup
+                            ? 'bg-slate-900 hover:bg-slate-800 text-slate-200'
+                            : 'bg-slate-800/80 hover:bg-slate-800 text-slate-400 border-dashed border-slate-700'
+                        }`}
+                        style={trkGroup ? { borderColor: `${trkGroup.color}80` } : undefined}
+                        title="Assign channel to Mute/Solo Group"
+                      >
+                        {trkGroup ? (
+                          <>
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: trkGroup.color }} />
+                            <span className="truncate max-w-[70px]">{trkGroup.name.split('•')[0].trim()}</span>
+                            {isGroupLinkingEnabled && <Link2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
+                          </>
+                        ) : (
+                          <>
+                            <Users className="w-3 h-3 text-slate-500" />
+                            <span>+ Group</span>
+                          </>
+                        )}
+                        <ChevronDown className="w-2.5 h-2.5 text-slate-500" />
+                      </button>
 
-              {/* Volume Slider */}
-              <div className="flex items-center gap-2">
-                <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={trk.vol}
-                  onChange={(e) => handleUpdateTrack(trk.id, 'vol', parseInt(e.target.value))}
-                  className="w-24 accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-                <span className="text-xs font-mono text-slate-300 w-9 text-right font-bold">{trk.vol}%</span>
-              </div>
+                      {/* Group Picker Dropdown Menu */}
+                      {activeGroupMenuTrackId === trk.id && (
+                        <div className="absolute top-full left-0 mt-1.5 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-30 space-y-1 font-mono text-xs">
+                          <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800 text-[10px] text-slate-400 font-bold uppercase">
+                            <span>Assign Ch {trk.id} to Group</span>
+                            <button onClick={() => setActiveGroupMenuTrackId(null)} className="text-slate-500 hover:text-white cursor-pointer">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
 
-              {/* Live Stem Stereo LED Peak Meter */}
-              <div className="flex flex-col gap-0.5 w-16 bg-slate-950 p-1 rounded-md border border-slate-800 shrink-0">
-                <div className="flex items-center justify-between text-[7px] font-mono text-slate-500 px-0.5 font-bold">
-                  <span>L</span>
-                  <span>-12</span>
-                  <span>R</span>
-                </div>
-                {/* L Meter */}
-                <div className="w-full bg-slate-900 rounded-xs h-1.5 overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-75 rounded-xs ${
-                      (channelLevels[trk.id]?.l || 0) > 85
-                        ? 'bg-rose-500'
-                        : (channelLevels[trk.id]?.l || 0) > 65
-                        ? 'bg-amber-400'
-                        : 'bg-emerald-400'
+                          {/* None / Unassigned */}
+                          <button
+                            onClick={() => handleAssignTrackGroup(trk.id, null)}
+                            className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between text-[11px] transition cursor-pointer ${
+                              !trk.groupId ? 'bg-indigo-600/20 text-indigo-300 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <span>None (Independent)</span>
+                            {!trk.groupId && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                          </button>
+
+                          <div className="pt-1 border-t border-slate-800 text-[9px] text-slate-500 uppercase px-2 font-bold">
+                            Active Groups
+                          </div>
+
+                          {groups.map((g) => {
+                            const isCurrent = trk.groupId === g.id;
+                            const memberCount = tracks.filter((t) => t.groupId === g.id).length;
+                            return (
+                              <button
+                                key={g.id}
+                                onClick={() => handleAssignTrackGroup(trk.id, g.id)}
+                                className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between text-[11px] transition cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-slate-800 text-white font-bold ring-1 ring-slate-700'
+                                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                                  <span className="truncate">{g.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0">
+                                  <span>{memberCount} trk</span>
+                                  {isCurrent && <Check className="w-3.5 h-3.5 text-emerald-400 ml-1" />}
+                                </div>
+                              </button>
+                            );
+                          })}
+
+                          <div className="pt-1.5 border-t border-slate-800">
+                            <button
+                              onClick={() => {
+                                setActiveGroupMenuTrackId(null);
+                                setIsCreatingGroup(true);
+                              }}
+                              className="w-full text-left px-2 py-1.5 rounded-lg text-[10px] text-indigo-400 hover:bg-indigo-950/50 flex items-center gap-1.5 transition cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Create New Custom Group...</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stereo Pan */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono uppercase text-slate-500">Pan</span>
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={trk.pan}
+                      onChange={(e) => handleUpdateTrack(trk.id, 'pan', parseInt(e.target.value))}
+                      className="w-16 accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                    <span className="text-[10px] font-mono text-slate-400 w-8 text-center">
+                      {(() => {
+                        const effectivePan = (!autoState.panBypass && dynamicPan !== undefined) ? dynamicPan : trk.pan;
+                        return effectivePan === 0 ? 'C' : effectivePan < 0 ? `L${Math.abs(effectivePan)}` : `R${effectivePan}`;
+                      })()}
+                    </span>
+                  </div>
+
+                  {/* Volume Slider */}
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={trk.vol}
+                      onChange={(e) => handleUpdateTrack(trk.id, 'vol', parseInt(e.target.value))}
+                      className="w-24 accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-300 w-9 text-right font-bold">
+                      {(!autoState.volumeBypass && dynamicVol !== undefined) ? dynamicVol : trk.vol}%
+                    </span>
+                  </div>
+
+                  {/* Live Stem Stereo LED Peak Meter */}
+                  <div className="flex flex-col gap-0.5 w-16 bg-slate-950 p-1 rounded-md border border-slate-800 shrink-0">
+                    <div className="flex items-center justify-between text-[7px] font-mono text-slate-500 px-0.5 font-bold">
+                      <span>L</span>
+                      <span>-12</span>
+                      <span>R</span>
+                    </div>
+                    {/* L Meter */}
+                    <div className="w-full bg-slate-900 rounded-xs h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-75 rounded-xs ${
+                          (channelLevels[trk.id]?.l || 0) > 85
+                            ? 'bg-rose-500'
+                            : (channelLevels[trk.id]?.l || 0) > 65
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${channelLevels[trk.id]?.l || 0}%` }}
+                      />
+                    </div>
+                    {/* R Meter */}
+                    <div className="w-full bg-slate-900 rounded-xs h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-75 rounded-xs ${
+                          (channelLevels[trk.id]?.r || 0) > 85
+                            ? 'bg-rose-500'
+                            : (channelLevels[trk.id]?.r || 0) > 65
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${channelLevels[trk.id]?.r || 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Trim Markers */}
+                  <div className="flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded-md border border-slate-800">
+                    <Scissors className="w-3 h-3 text-slate-400" />
+                    <span>0.0s – 60.0s</span>
+                  </div>
+
+                  {/* Expandable Automation Lane Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleAutomationLane(trk.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition cursor-pointer border ${
+                      isLaneExpanded
+                        ? 'bg-indigo-600 text-white border-indigo-400 shadow-md ring-1 ring-indigo-400/40'
+                        : isLaneActive
+                        ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600/60 hover:bg-emerald-900/60'
+                        : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border-slate-800'
                     }`}
-                    style={{ width: `${channelLevels[trk.id]?.l || 0}%` }}
+                    title={isLaneExpanded ? 'Collapse Automation Lane' : 'Expand Volume & Pan Automation Lane'}
+                  >
+                    <Activity className={`w-3.5 h-3.5 ${isLaneActive ? 'text-emerald-400 animate-pulse' : 'text-indigo-400'}`} />
+                    <span>AUTO</span>
+                    {isLaneActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                    {isLaneExpanded ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Expandable Automation Lane Drawer */}
+              {isLaneExpanded && (
+                <div className="w-full pt-1 border-t border-slate-800/80 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <AutomationLaneEditor
+                    track={trk}
+                    automationState={autoState}
+                    onChangeAutomation={(newState) => handleUpdateAutomation(trk.id, newState)}
+                    playbackProgressPercent={playbackProgressPercent}
+                    currentLiveVol={dynamicVol}
+                    currentLivePan={dynamicPan}
+                    isDarkMode={isDarkMode}
                   />
                 </div>
-                {/* R Meter */}
-                <div className="w-full bg-slate-900 rounded-xs h-1.5 overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-75 rounded-xs ${
-                      (channelLevels[trk.id]?.r || 0) > 85
-                        ? 'bg-rose-500'
-                        : (channelLevels[trk.id]?.r || 0) > 65
-                        ? 'bg-amber-400'
-                        : 'bg-emerald-400'
-                    }`}
-                    style={{ width: `${channelLevels[trk.id]?.r || 0}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Trim Markers */}
-              <div className="flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded-md border border-slate-800">
-                <Scissors className="w-3 h-3 text-slate-400" />
-                <span>0.0s – 60.0s (Hook)</span>
-              </div>
+              )}
             </div>
-          </div>
           );
         })}
 

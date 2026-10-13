@@ -177,6 +177,30 @@ export interface ChatMessage {
   model: string;
 }
 
+export interface AutomationNode {
+  id: string;
+  timePercent: number; // 0 to 100
+  value: number;       // For volume: 0 to 100 (%). For pan: -100 (Left) to +100 (Right)
+}
+
+export interface TrackAutomationState {
+  isExpanded: boolean;
+  activeParam: 'vol' | 'pan';
+  volumeBypass: boolean;
+  panBypass: boolean;
+  volumeNodes: AutomationNode[];
+  panNodes: AutomationNode[];
+}
+
+export interface MixerGroup {
+  id: string;
+  name: string;
+  color: string;
+  muted?: boolean;
+  solo?: boolean;
+  suspended?: boolean;
+}
+
 export interface MixerTrack {
   id: number;
   name: string;
@@ -194,6 +218,8 @@ export interface MixerTrack {
   stemType?: 'vocal' | 'choir' | 'organ' | 'piano' | 'guitar' | 'drums' | 'bass' | 'master';
   isRealAudio?: boolean;
   assetId?: string;
+  automation?: TrackAutomationState;
+  groupId?: string | null;
 }
 
 export interface GeneratedImage {
