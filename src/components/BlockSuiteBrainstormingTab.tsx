@@ -68,6 +68,7 @@ import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
 import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { BlockSuiteGuideModal } from './BlockSuiteGuideModal';
 import { BlockSuiteThreeSongComparatorModal } from './BlockSuiteThreeSongComparatorModal';
+import { getSubstantiveLyrics, parseLyricSections, ParsedLyricSection } from '../utils/lyricParser';
 
 interface BlockSuiteBrainstormingTabProps {
   tracks: Track[];
@@ -229,60 +230,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     panToBlock(matchingBlocks[prevIdx].id);
   };
 
-  // Robust lyric section parser: extracts [Intro], [Verse], [Chorus], [Bridge], [STOP ALL SOUND], etc.
-  const parseLyricSections = (rawLyrics: string): Array<{ tag: string; content: string }> => {
-    if (!rawLyrics || !rawLyrics.trim()) return [];
-
-    const bracketRegex = /\[([^\]]+)\]/g;
-    const sections: Array<{ tag: string; content: string }> = [];
-    const matches: Array<{ tag: string; index: number; fullTag: string }> = [];
-
-    let match: RegExpExecArray | null;
-    while ((match = bracketRegex.exec(rawLyrics)) !== null) {
-      matches.push({
-        tag: `[${match[1]}]`,
-        index: match.index,
-        fullTag: match[0]
-      });
-    }
-
-    if (matches.length > 0) {
-      if (matches[0].index > 0) {
-        const preamble = rawLyrics.slice(0, matches[0].index).trim();
-        if (preamble) {
-          sections.push({ tag: '[Intro / Title]', content: preamble });
-        }
-      }
-
-      for (let i = 0; i < matches.length; i++) {
-        const start = matches[i].index + matches[i].fullTag.length;
-        const end = i + 1 < matches.length ? matches[i + 1].index : rawLyrics.length;
-        const body = rawLyrics.slice(start, end).trim();
-        sections.push({
-          tag: matches[i].tag,
-          content: body
-        });
-      }
-    } else {
-      const chunks = rawLyrics.split(/\n\n+/).filter(c => c.trim().length > 0);
-      chunks.forEach((chunk, i) => {
-        sections.push({
-          tag: `[Section ${i + 1}]`,
-          content: chunk.trim()
-        });
-      });
-    }
-
-    return sections;
-  };
-
   // Helper to generate default blocks from track lyrics (and specific style/version)
   const generateInitialBlocksFromTrack = (
     track: Track,
     customLyrics?: string,
     styleLabel?: string
   ): { blocks: BlockSuiteBlock[]; connectors: BlockSuiteConnector[] } => {
-    const rawLyrics = customLyrics || track.lyrics || (track.versions && track.versions[0]?.lyrics) || '';
+    const rawLyrics = customLyrics || getSubstantiveLyrics(track, activeStyleIndex);
     const parsedSections = parseLyricSections(rawLyrics);
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
@@ -469,7 +423,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   // Synchronize canvas to a specific song style / version
   const handleSyncStyleLyricsToWhiteboard = (styleIdx: number) => {
     const targetVer = selectedTrack.versions?.[styleIdx];
-    const targetLyrics = targetVer?.lyrics || selectedTrack.lyrics || '';
+    const targetLyrics = getSubstantiveLyrics(selectedTrack, styleIdx);
     const initial = generateInitialBlocksFromTrack(selectedTrack, targetLyrics, targetVer?.version);
     setBlocks(initial.blocks);
     setConnectors(initial.connectors);
@@ -763,9 +717,9 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     trackC: Track,
     options?: { styleA?: number; styleB?: number; styleC?: number }
   ) => {
-    const rawA = (trackA.versions && options?.styleA !== undefined && trackA.versions[options.styleA]?.lyrics) || trackA.lyrics || '';
-    const rawB = (trackB.versions && options?.styleB !== undefined && trackB.versions[options.styleB]?.lyrics) || trackB.lyrics || '';
-    const rawC = (trackC.versions && options?.styleC !== undefined && trackC.versions[options.styleC]?.lyrics) || trackC.lyrics || '';
+    const rawA = getSubstantiveLyrics(trackA, options?.styleA);
+    const rawB = getSubstantiveLyrics(trackB, options?.styleB);
+    const rawC = getSubstantiveLyrics(trackC, options?.styleC);
 
     const secA = parseLyricSections(rawA);
     const secB = parseLyricSections(rawB);
@@ -774,6 +728,12 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
     const timestamp = Date.now();
+
+    // Helper to calculate card height so vertical stacks never collide or overlap
+    const calcCardHeight = (content: string) => {
+      const lineCount = content.split('\n').filter(l => l.trim().length > 0).length;
+      return Math.max(260, 110 + (lineCount * 22));
+    };
 
     // Helper to build column header
     const buildColHeader = (
@@ -804,7 +764,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     newBlocks.push(buildColHeader(
       `col_a_${timestamp}`,
       `SONG A • ${trackA.title}`,
-      `${trackA.id} • ${trackA.bpm} BPM • ${trackA.key} • ${trackA.genre}`,
+      `${trackA.id} • ${trackA.bpm} BPM • ${trackA.key} • ${secA.length} sections (${secA.reduce((sum, s) => sum + s.lineCount, 0)} lines)`,
       80,
       'indigo',
       'Song A',
@@ -817,24 +777,24 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         id: `blk_a_${idx}_${timestamp}`,
         type: 'song_section',
         title: `Song A • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.content.split('\n').filter(l => l.trim()).length} lines)`,
+        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
         content: sec.content,
         x: 80,
         y: yA,
         width: 340,
         color: 'indigo',
         sectionTag: sec.tag,
-        tags: ['Song A', trackA.id, sec.tag],
+        tags: ['Song A', trackA.id, sec.cleanTag],
         orderIndex: idx + 1
       });
-      yA += 260;
+      yA += calcCardHeight(sec.content) + 24;
     });
 
     // 2. Column 2: Song B (x = 460, Emerald)
     newBlocks.push(buildColHeader(
       `col_b_${timestamp}`,
       `SONG B • ${trackB.title}`,
-      `${trackB.id} • ${trackB.bpm} BPM • ${trackB.key} • ${trackB.genre}`,
+      `${trackB.id} • ${trackB.bpm} BPM • ${trackB.key} • ${secB.length} sections (${secB.reduce((sum, s) => sum + s.lineCount, 0)} lines)`,
       460,
       'emerald',
       'Song B',
@@ -847,24 +807,24 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         id: `blk_b_${idx}_${timestamp}`,
         type: 'song_section',
         title: `Song B • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.content.split('\n').filter(l => l.trim()).length} lines)`,
+        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
         content: sec.content,
         x: 460,
         y: yB,
         width: 340,
         color: 'emerald',
         sectionTag: sec.tag,
-        tags: ['Song B', trackB.id, sec.tag],
+        tags: ['Song B', trackB.id, sec.cleanTag],
         orderIndex: idx + 1
       });
-      yB += 260;
+      yB += calcCardHeight(sec.content) + 24;
     });
 
     // 3. Column 3: Song C (x = 840, Purple)
     newBlocks.push(buildColHeader(
       `col_c_${timestamp}`,
       `SONG C • ${trackC.title}`,
-      `${trackC.id} • ${trackC.bpm} BPM • ${trackC.key} • ${trackC.genre}`,
+      `${trackC.id} • ${trackC.bpm} BPM • ${trackC.key} • ${secC.length} sections (${secC.reduce((sum, s) => sum + s.lineCount, 0)} lines)`,
       840,
       'purple',
       'Song C',
@@ -877,17 +837,17 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         id: `blk_c_${idx}_${timestamp}`,
         type: 'song_section',
         title: `Song C • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.content.split('\n').filter(l => l.trim()).length} lines)`,
+        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
         content: sec.content,
         x: 840,
         y: yC,
         width: 340,
         color: 'purple',
         sectionTag: sec.tag,
-        tags: ['Song C', trackC.id, sec.tag],
+        tags: ['Song C', trackC.id, sec.cleanTag],
         orderIndex: idx + 1
       });
-      yC += 260;
+      yC += calcCardHeight(sec.content) + 24;
     });
 
     // 4. Column 4: ★ Master Best Version (x = 1220, Amber)
@@ -902,24 +862,24 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     ));
 
     // Populate Master column initially with Song A's or selectedTrack's sections as baseline
-    const baselineSections = secA.length > 0 ? secA : (parseLyricSections(selectedTrack.lyrics || ''));
+    const baselineSections = secA.length > 0 ? secA : (parseLyricSections(getSubstantiveLyrics(selectedTrack)));
     let yM = 240;
     baselineSections.forEach((sec, idx) => {
       newBlocks.push({
         id: `blk_m_${idx}_${timestamp}`,
         type: 'song_section',
         title: `★ Master • ${sec.tag}`,
-        subtitle: `Baseline Draft from ${trackA.title}`,
+        subtitle: `Baseline Draft from ${trackA.title} (${sec.lineCount} lines)`,
         content: sec.content,
         x: 1220,
         y: yM,
         width: 380,
         color: 'amber',
         sectionTag: sec.tag,
-        tags: ['Master', 'Active', sec.tag],
+        tags: ['Master', 'Active', sec.cleanTag],
         orderIndex: idx + 1
       });
-      yM += 260;
+      yM += calcCardHeight(sec.content) + 24;
     });
 
     setBlocks(newBlocks);
@@ -931,7 +891,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       handleFitToContent();
     }, 150);
 
-    showToast(`Loaded 3 songs for comparison! Drag cards into Master column or click ★ Copy to Master.`);
+    showToast(`Loaded 3 songs in full (${secA.length} sections for ${trackA.title}, ${secB.length} for ${trackB.title}, ${secC.length} for ${trackC.title})!`, 'success');
   };
 
   // 1-Click Copy any section into Master Column
@@ -2013,7 +1973,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                       <textarea
                         value={block.content}
                         onChange={(e) => handleUpdateBlock(block.id, { content: e.target.value })}
-                        rows={block.type === 'thumbnail_asset' ? 2 : Math.max(3, Math.min(10, block.content.split('\n').length))}
+                        rows={block.type === 'thumbnail_asset' ? 2 : Math.max(4, Math.min(20, block.content.split('\n').length + 1))}
                         className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed selection:bg-indigo-900"
                         placeholder={block.type === 'thumbnail_asset' ? "Scene prompt / shot notes..." : "Enter lyrics, chords, or notes..."}
                         spellCheck={false}
@@ -2051,8 +2011,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
                       {/* Optional Subtitle / Tags / Chords Badge */}
                       <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-slate-400 pt-2 border-t border-slate-800/60 mt-auto">
-                        <span className="truncate max-w-[150px]">{block.subtitle || block.type}</span>
-                        <div className="flex items-center gap-1">
+                        <span className="truncate max-w-[130px]">{block.subtitle || block.type}</span>
+                        <div className="flex items-center gap-1.5">
+                          {block.type === 'song_section' && (
+                            <span className="text-[9px] text-emerald-400 font-mono font-bold bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/40">
+                              {block.content.split('\n').filter(l => l.trim().length > 0).length} lines
+                            </span>
+                          )}
                           {block.sectionTag && (
                             <span className="px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/40">
                               {block.sectionTag}

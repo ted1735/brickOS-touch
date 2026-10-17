@@ -18,6 +18,7 @@ import {
   Award
 } from 'lucide-react';
 import { Track } from '../types';
+import { getSubstantiveLyrics, parseLyricSections, ParsedLyricSection } from '../utils/lyricParser';
 
 interface BlockSuiteThreeSongComparatorModalProps {
   isOpen: boolean;
@@ -64,73 +65,31 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
   const trackB = useMemo(() => tracks.find(t => t.id === trackBId) || tracks[0], [tracks, trackBId]);
   const trackC = useMemo(() => tracks.find(t => t.id === trackCId) || tracks[1] || tracks[0], [tracks, trackCId]);
 
-  // Helper to extract lyrics for a track given style index
-  const getLyricsForTrack = (trk: Track, styleIdx: number): string => {
-    if (trk.versions && trk.versions[styleIdx]?.lyrics) {
-      return trk.versions[styleIdx].lyrics;
-    }
-    return trk.lyrics || '';
-  };
+  // Quick in-modal preview state to inspect parsed sections of Song A, B, or C
+  const [expandedPreview, setExpandedPreview] = useState<'A' | 'B' | 'C' | null>(null);
 
-  const lyricsA = useMemo(() => getLyricsForTrack(trackA, styleAIndex), [trackA, styleAIndex]);
-  const lyricsB = useMemo(() => getLyricsForTrack(trackB, styleBIndex), [trackB, styleBIndex]);
-  const lyricsC = useMemo(() => getLyricsForTrack(trackC, styleCIndex), [trackC, styleCIndex]);
+  // Substantive complete lyrics for each selected song & style
+  const lyricsA = useMemo(() => getSubstantiveLyrics(trackA, styleAIndex), [trackA, styleAIndex]);
+  const lyricsB = useMemo(() => getSubstantiveLyrics(trackB, styleBIndex), [trackB, styleBIndex]);
+  const lyricsC = useMemo(() => getSubstantiveLyrics(trackC, styleCIndex), [trackC, styleCIndex]);
 
-  // Parse sections
-  const parseSections = (rawText: string): Array<{ tag: string; cleanTag: string; content: string; lineCount: number }> => {
-    if (!rawText.trim()) return [];
-    const bracketRegex = /\[([^\]]+)\]/g;
-    const list: Array<{ tag: string; cleanTag: string; content: string; lineCount: number }> = [];
-    const matches: Array<{ tag: string; cleanTag: string; index: number; fullTag: string }> = [];
+  // Robust parsed sections with line counts and character metrics
+  const sectionsA = useMemo(() => parseLyricSections(lyricsA), [lyricsA]);
+  const sectionsB = useMemo(() => parseLyricSections(lyricsB), [lyricsB]);
+  const sectionsC = useMemo(() => parseLyricSections(lyricsC), [lyricsC]);
 
-    let match: RegExpExecArray | null;
-    while ((match = bracketRegex.exec(rawText)) !== null) {
-      matches.push({
-        tag: `[${match[1]}]`,
-        cleanTag: match[1].trim(),
-        index: match.index,
-        fullTag: match[0]
-      });
-    }
-
-    if (matches.length > 0) {
-      for (let i = 0; i < matches.length; i++) {
-        const start = matches[i].index + matches[i].fullTag.length;
-        const end = i + 1 < matches.length ? matches[i + 1].index : rawText.length;
-        const body = rawText.slice(start, end).trim();
-        const lineCount = body.split('\n').filter(l => l.trim().length > 0).length;
-        list.push({
-          tag: matches[i].tag,
-          cleanTag: matches[i].cleanTag,
-          content: body,
-          lineCount
-        });
-      }
-    } else {
-      const chunks = rawText.split(/\n\n+/).filter(c => c.trim().length > 0);
-      chunks.forEach((chunk, i) => {
-        list.push({
-          tag: `[Section ${i + 1}]`,
-          cleanTag: `Section ${i + 1}`,
-          content: chunk.trim(),
-          lineCount: chunk.trim().split('\n').length
-        });
-      });
-    }
-    return list;
-  };
-
-  const sectionsA = useMemo(() => parseSections(lyricsA), [lyricsA]);
-  const sectionsB = useMemo(() => parseSections(lyricsB), [lyricsB]);
-  const sectionsC = useMemo(() => parseSections(lyricsC), [lyricsC]);
-
-  // Combined unique section tags across all 3 songs
+  // Combined unique section tags across all 3 songs (normalized)
   const allUniqueTags = useMemo(() => {
-    const set = new Set<string>();
-    sectionsA.forEach(s => set.add(s.tag));
-    sectionsB.forEach(s => set.add(s.tag));
-    sectionsC.forEach(s => set.add(s.tag));
-    return Array.from(set);
+    const list: string[] = [];
+    const seen = new Set<string>();
+    [...sectionsA, ...sectionsB, ...sectionsC].forEach(s => {
+      const key = s.cleanTag.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(s.tag);
+      }
+    });
+    return list;
   }, [sectionsA, sectionsB, sectionsC]);
 
   // Winner selection state for direct section compilation
@@ -229,122 +188,194 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
         </div>
 
         {/* Song Selectors Bar (Always visible) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-          
-          {/* SONG A */}
-          <div className="space-y-2 p-3 rounded-lg bg-indigo-950/20 border border-indigo-500/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold text-indigo-400 px-2 py-0.5 rounded bg-indigo-950 border border-indigo-800">
-                SONG A (Primary Column)
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">{sectionsA.length} sections</span>
-            </div>
-            <select
-              value={trackAId}
-              onChange={(e) => setTrackAId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none cursor-pointer"
-            >
-              {tracks.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.id}: {t.title} ({t.ep})
-                </option>
-              ))}
-            </select>
-            {trackA.versions && trackA.versions.length > 1 && (
+        <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            
+            {/* SONG A */}
+            <div className="space-y-2 p-3 rounded-lg bg-indigo-950/20 border border-indigo-500/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-indigo-400 px-2 py-0.5 rounded bg-indigo-950 border border-indigo-800">
+                  SONG A (Primary Column)
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                  ✓ {sectionsA.length} sections ({sectionsA.reduce((sum, s) => sum + s.lineCount, 0)} lines)
+                </span>
+              </div>
               <select
-                value={styleAIndex}
-                onChange={(e) => setStyleAIndex(Number(e.target.value))}
-                className="w-full bg-slate-900/80 border border-slate-800 rounded px-2 py-1 text-[11px] text-indigo-300 outline-none"
+                value={trackAId}
+                onChange={(e) => {
+                  setTrackAId(e.target.value);
+                  setStyleAIndex(0);
+                }}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none cursor-pointer"
               >
-                {trackA.versions.map((v, i) => (
-                  <option key={i} value={i}>
-                    Style {i + 1}: {v.version} ({v.genre})
+                {tracks.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.id}: {t.title} ({t.ep})
                   </option>
                 ))}
               </select>
-            )}
-            <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
-              <span>{trackA.bpm} BPM • {trackA.key}</span>
-              <span className="text-indigo-400 truncate max-w-[140px]">{trackA.genre}</span>
+              {trackA.versions && trackA.versions.length > 1 && (
+                <select
+                  value={styleAIndex}
+                  onChange={(e) => setStyleAIndex(Number(e.target.value))}
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded px-2 py-1 text-[11px] text-indigo-300 outline-none"
+                >
+                  {trackA.versions.map((v, i) => (
+                    <option key={i} value={i}>
+                      Style {i + 1}: {v.version} ({v.genre})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                <span>{trackA.bpm} BPM • {trackA.key}</span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPreview(expandedPreview === 'A' ? null : 'A')}
+                  className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>{expandedPreview === 'A' ? 'Hide' : `Inspect ${sectionsA.length} Sections`}</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* SONG B */}
-          <div className="space-y-2 p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold text-emerald-400 px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800">
-                SONG B (Comparison Take)
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">{sectionsB.length} sections</span>
-            </div>
-            <select
-              value={trackBId}
-              onChange={(e) => setTrackBId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none cursor-pointer"
-            >
-              {tracks.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.id}: {t.title} ({t.ep})
-                </option>
-              ))}
-            </select>
-            {trackB.versions && trackB.versions.length > 1 && (
+            {/* SONG B */}
+            <div className="space-y-2 p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-emerald-400 px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800">
+                  SONG B (Comparison Take)
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                  ✓ {sectionsB.length} sections ({sectionsB.reduce((sum, s) => sum + s.lineCount, 0)} lines)
+                </span>
+              </div>
               <select
-                value={styleBIndex}
-                onChange={(e) => setStyleBIndex(Number(e.target.value))}
-                className="w-full bg-slate-900/80 border border-slate-800 rounded px-2 py-1 text-[11px] text-emerald-300 outline-none"
+                value={trackBId}
+                onChange={(e) => {
+                  setTrackBId(e.target.value);
+                  setStyleBIndex(0);
+                }}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none cursor-pointer"
               >
-                {trackB.versions.map((v, i) => (
-                  <option key={i} value={i}>
-                    Style {i + 1}: {v.version} ({v.genre})
+                {tracks.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.id}: {t.title} ({t.ep})
                   </option>
                 ))}
               </select>
-            )}
-            <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
-              <span>{trackB.bpm} BPM • {trackB.key}</span>
-              <span className="text-emerald-400 truncate max-w-[140px]">{trackB.genre}</span>
+              {trackB.versions && trackB.versions.length > 1 && (
+                <select
+                  value={styleBIndex}
+                  onChange={(e) => setStyleBIndex(Number(e.target.value))}
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded px-2 py-1 text-[11px] text-emerald-300 outline-none"
+                >
+                  {trackB.versions.map((v, i) => (
+                    <option key={i} value={i}>
+                      Style {i + 1}: {v.version} ({v.genre})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                <span>{trackB.bpm} BPM • {trackB.key}</span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPreview(expandedPreview === 'B' ? null : 'B')}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>{expandedPreview === 'B' ? 'Hide' : `Inspect ${sectionsB.length} Sections`}</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* SONG C */}
-          <div className="space-y-2 p-3 rounded-lg bg-purple-950/20 border border-purple-500/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold text-purple-400 px-2 py-0.5 rounded bg-purple-950 border border-purple-800">
-                SONG C (Alternative Draft)
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">{sectionsC.length} sections</span>
-            </div>
-            <select
-              value={trackCId}
-              onChange={(e) => setTrackCId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none cursor-pointer"
-            >
-              {tracks.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.id}: {t.title} ({t.ep})
-                </option>
-              ))}
-            </select>
-            {trackC.versions && trackC.versions.length > 1 && (
+            {/* SONG C */}
+            <div className="space-y-2 p-3 rounded-lg bg-purple-950/20 border border-purple-500/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold text-purple-400 px-2 py-0.5 rounded bg-purple-950 border border-purple-800">
+                  SONG C (Alternative Draft)
+                </span>
+                <span className="text-[10px] text-purple-400 font-mono font-bold flex items-center gap-1">
+                  ✓ {sectionsC.length} sections ({sectionsC.reduce((sum, s) => sum + s.lineCount, 0)} lines)
+                </span>
+              </div>
               <select
-                value={styleCIndex}
-                onChange={(e) => setStyleCIndex(Number(e.target.value))}
-                className="w-full bg-slate-900/80 border border-slate-800 rounded px-2 py-1 text-[11px] text-purple-300 outline-none"
+                value={trackCId}
+                onChange={(e) => {
+                  setTrackCId(e.target.value);
+                  setStyleCIndex(0);
+                }}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white outline-none cursor-pointer"
               >
-                {trackC.versions.map((v, i) => (
-                  <option key={i} value={i}>
-                    Style {i + 1}: {v.version} ({v.genre})
+                {tracks.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.id}: {t.title} ({t.ep})
                   </option>
                 ))}
               </select>
-            )}
-            <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
-              <span>{trackC.bpm} BPM • {trackC.key}</span>
-              <span className="text-purple-400 truncate max-w-[140px]">{trackC.genre}</span>
+              {trackC.versions && trackC.versions.length > 1 && (
+                <select
+                  value={styleCIndex}
+                  onChange={(e) => setStyleCIndex(Number(e.target.value))}
+                  className="w-full bg-slate-900/80 border border-slate-800 rounded px-2 py-1 text-[11px] text-purple-300 outline-none"
+                >
+                  {trackC.versions.map((v, i) => (
+                    <option key={i} value={i}>
+                      Style {i + 1}: {v.version} ({v.genre})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                <span>{trackC.bpm} BPM • {trackC.key}</span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPreview(expandedPreview === 'C' ? null : 'C')}
+                  className="text-purple-400 hover:text-purple-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>{expandedPreview === 'C' ? 'Hide' : `Inspect ${sectionsC.length} Sections`}</span>
+                </button>
+              </div>
             </div>
+
           </div>
 
+          {/* Collapsible Inspection Panel for Full Lyrics Verification */}
+          {expandedPreview && (
+            <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-700/80 space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-300 font-mono flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    Full Lyrics Inspector — Song {expandedPreview}: {expandedPreview === 'A' ? trackA.title : expandedPreview === 'B' ? trackB.title : trackC.title} ({expandedPreview === 'A' ? sectionsA.length : expandedPreview === 'B' ? sectionsB.length : sectionsC.length} sections)
+                  </span>
+                </span>
+                <button
+                  onClick={() => setExpandedPreview(null)}
+                  className="text-[10px] text-slate-400 hover:text-white"
+                >
+                  ✕ Close Inspector
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                {(expandedPreview === 'A' ? sectionsA : expandedPreview === 'B' ? sectionsB : sectionsC).map((s, idx) => (
+                  <div key={idx} className="p-2 rounded bg-slate-950/70 border border-slate-800 text-[11px] font-mono space-y-1">
+                    <div className="flex items-center justify-between text-indigo-300 font-bold">
+                      <span>{s.tag}</span>
+                      <span className="text-slate-500 text-[9px]">{s.lineCount} lines</span>
+                    </div>
+                    <p className="text-slate-300 text-[10px] line-clamp-3 leading-snug whitespace-pre-line">
+                      {s.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* VIEW 1: SETUP & CANVAS BOARD ACTIONS */}
@@ -462,9 +493,10 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
               {allUniqueTags
                 .filter(tag => selectedSectionTag === 'all' || selectedSectionTag === tag)
                 .map((tag) => {
-                  const secA = sectionsA.find(s => s.tag.toLowerCase() === tag.toLowerCase());
-                  const secB = sectionsB.find(s => s.tag.toLowerCase() === tag.toLowerCase());
-                  const secC = sectionsC.find(s => s.tag.toLowerCase() === tag.toLowerCase());
+                  const clean = tag.replace(/[[\]]/g, '').trim().toLowerCase();
+                  const secA = sectionsA.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+                  const secB = sectionsB.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+                  const secC = sectionsC.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
                   const currentWinner = sectionWinners[tag];
 
                   return (
@@ -503,7 +535,7 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                               <span>Song A • {trackA.title}</span>
                               <span className="text-slate-500">{secA ? `${secA.lineCount} lines` : 'Missing'}</span>
                             </div>
-                            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">
+                            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                               {secA?.content || <span className="text-slate-600 italic">No {tag} in this version</span>}
                             </pre>
                           </div>
@@ -535,7 +567,7 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                               <span>Song B • {trackB.title}</span>
                               <span className="text-slate-500">{secB ? `${secB.lineCount} lines` : 'Missing'}</span>
                             </div>
-                            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">
+                            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                               {secB?.content || <span className="text-slate-600 italic">No {tag} in this version</span>}
                             </pre>
                           </div>
@@ -567,7 +599,7 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                               <span>Song C • {trackC.title}</span>
                               <span className="text-slate-500">{secC ? `${secC.lineCount} lines` : 'Missing'}</span>
                             </div>
-                            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">
+                            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                               {secC?.content || <span className="text-slate-600 italic">No {tag} in this version</span>}
                             </pre>
                           </div>

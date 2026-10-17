@@ -51,11 +51,13 @@ export const CANONICAL_TRACKS: Track[] = [
     sunoPrompt: "Christian Hip Hop, 88 BPM, Key of D Minor, boom-bap drums, gritty MPC swing, warm upright bass, authentic male rap vocal",
     negativePrompt: "sibilance, high-frequency hiss, piercing treble, digital artifacts, muddy bass, synthetic choir, autotune",
     engineSliders: { weirdness: 12, styleInfluence: 65, voiceAudio: 100 },
-    lyrics: `They see ruins, 
+    lyrics: `[Intro]
+They see ruins, 
 I see the blueprint. 
 B-R-I-C-K, 
 Yeah, let’s build.
 
+[Verse 1]
 Streets hum a hymn, 
 But the chords ring hollow. 
 Lost sheep move, 
@@ -65,6 +67,7 @@ Under weights of sorrow,
 But we’re grabbing the hammer, 
 For a new tomorrow.
 
+[Verse 2]
 Alleyway prayers, 
 On the cracked cement. 
 Grace spilled like oil, 
@@ -74,6 +77,7 @@ It’s a soul-level wrestle,
 But the Architect’s here, 
 And He’s making a statement.
 
+[Chorus]
 Kingdom Come, 
 Kingdom Come. 
 Where the broken hearts run, 
@@ -83,6 +87,7 @@ We’re starting the fix,
 Building the hope, 
 Brick by brick.
 
+[Verse 3]
 Brokenness Redeemed, 
 In Christ’s Kingdom. 
 That’s the code, 
@@ -93,6 +98,7 @@ For the proud and the vain,
 But a shelter for the weary, 
 In the pouring rain.
 
+[Bridge]
 You’re a brick, 
 I’m a brick, 
 Weathered and worn. 
@@ -103,6 +109,7 @@ Let the old walls fall,
 The Master is building, 
 A house for us all!
 
+[Chorus]
 Kingdom Come, 
 Kingdom Come. 
 Where the broken hearts run, 
@@ -112,8 +119,96 @@ We’re starting the fix,
 Building the hope, 
 Brick by brick.`,
     versions: [
-      { version: "v3.0", timestamp: "2026-09-01", reason: "Brick by Brick v3 Master Boom-Bap Cut", lyrics: "They see ruins, I see the blueprint. B-R-I-C-K..." },
-      { version: "v1.0", timestamp: "2026-08-20", reason: "Initial sketch", lyrics: "They see ruins..." }
+      {
+        version: "v3.0",
+        timestamp: "2026-09-01",
+        reason: "Brick by Brick v3 Master Boom-Bap Cut",
+        lyrics: `[Intro]
+They see ruins, 
+I see the blueprint. 
+B-R-I-C-K, 
+Yeah, let’s build.
+
+[Verse 1]
+Streets hum a hymn, 
+But the chords ring hollow. 
+Lost sheep move, 
+In the paths they follow. 
+Stones start to crack, 
+Under weights of sorrow, 
+But we’re grabbing the hammer, 
+For a new tomorrow.
+
+[Verse 2]
+Alleyway prayers, 
+On the cracked cement. 
+Grace spilled like oil, 
+From a jagged vessel. 
+It’s a heavy lift, 
+It’s a soul-level wrestle, 
+But the Architect’s here, 
+And He’s making a statement.
+
+[Chorus]
+Kingdom Come, 
+Kingdom Come. 
+Where the broken hearts run, 
+Where the lost find home. 
+Yeah, we’re stacking the stones, 
+We’re starting the fix, 
+Building the hope, 
+Brick by brick.
+
+[Verse 3]
+Brokenness Redeemed, 
+In Christ’s Kingdom. 
+That’s the code, 
+That’s the life, 
+That’s the freedom. 
+Not a polished palace, 
+For the proud and the vain, 
+But a shelter for the weary, 
+In the pouring rain.
+
+[Bridge]
+You’re a brick, 
+I’m a brick, 
+Weathered and worn. 
+Mortar made of mercy, 
+Since the day we were born. 
+Put the pride in the dirt, 
+Let the old walls fall, 
+The Master is building, 
+A house for us all!
+
+[Chorus]
+Kingdom Come, 
+Kingdom Come. 
+Where the broken hearts run, 
+Where the lost find home. 
+Yeah, we’re stacking the stones, 
+We’re starting the fix, 
+Building the hope, 
+Brick by brick.`
+      },
+      {
+        version: "v1.0",
+        timestamp: "2026-08-20",
+        reason: "Initial sketch",
+        lyrics: `[Intro]
+They see ruins, I see the blueprint. B-R-I-C-K, Yeah, let’s build.
+
+[Verse 1]
+Streets hum a hymn, but the chords ring hollow.
+Lost sheep move in the paths they follow.
+Stones start to crack under weights of sorrow,
+We’re grabbing the hammer for a new tomorrow.
+
+[Chorus]
+Kingdom Come, Kingdom Come.
+Where the broken hearts run, where the lost find home.
+Building the hope, brick by brick.`
+      }
     ],
     selahPrayed: true,
   },

@@ -1922,8 +1922,12 @@ export default function BrickOSMusicStudioWorkspace() {
               >
                 brickOS
               </h1>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold border border-indigo-500/30">
-                {CURRENT_STUDIO_VERSION}
+              <span 
+                className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-xs font-black border border-indigo-500/40 shadow-xs shadow-indigo-500/10 flex items-center gap-1.5"
+                title={`Active Studio Revision: ${CURRENT_STUDIO_VERSION} (Whiteboard Full Lyrics & 3-Song Comparator)`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                <span>{CURRENT_STUDIO_VERSION}</span>
               </span>
               <button
                 type="button"
