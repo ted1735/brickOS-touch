@@ -45,7 +45,9 @@ import {
   ChevronDown,
   Database,
   Radio,
-  ExternalLink
+  ExternalLink,
+  X,
+  GitCompare
 } from 'lucide-react';
 import {
   Track,
@@ -64,6 +66,8 @@ import {
 } from '../lib/firebase';
 import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
 import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
+import { BlockSuiteGuideModal } from './BlockSuiteGuideModal';
+import { BlockSuiteThreeSongComparatorModal } from './BlockSuiteThreeSongComparatorModal';
 
 interface BlockSuiteBrainstormingTabProps {
   tracks: Track[];
@@ -152,6 +156,17 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   const [searchFilterType, setSearchFilterType] = useState<'all' | 'lyrics' | 'notes' | 'chords' | 'images'>('all');
   const [focusedMatchIndex, setFocusedMatchIndex] = useState<number>(0);
   const [showSearchResultsList, setShowSearchResultsList] = useState<boolean>(false);
+
+  // 3-Song Multi-Comparison & Whiteboard Instructions Modals
+  const [isThreeSongModalOpen, setIsThreeSongModalOpen] = useState<boolean>(false);
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState<boolean>(false);
+  const [showQuickGuideBanner, setShowQuickGuideBanner] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('brickos_whiteboard_quick_guide');
+      return saved !== 'hidden';
+    }
+    return true;
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<any>(null);
@@ -717,22 +732,253 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
   // Compile whiteboard blocks into standard song lyrics
   const handleCompileToLyrics = () => {
-    // Sort song_section blocks by orderIndex or X coordinate
-    const songSections = blocks
-      .filter(b => b.type === 'song_section')
-      .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0) || a.x - b.x);
+    // If master column exists, compile from master column; otherwise compile all song_sections
+    const masterSections = blocks
+      .filter(b => (b.x >= 1150 || b.tags?.includes('Master')) && b.type === 'song_section')
+      .sort((a, b) => a.y - b.y);
 
-    if (songSections.length === 0) {
+    const targetSections = masterSections.length > 0 
+      ? masterSections 
+      : blocks
+          .filter(b => b.type === 'song_section')
+          .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0) || a.x - b.x);
+
+    if (targetSections.length === 0) {
       showToast('No song section blocks found to compile');
       return;
     }
 
-    const compiledText = songSections
-      .map(b => `${b.sectionTag || b.title}\n${b.content.trim()}`)
+    const compiledText = targetSections
+      .map(b => `${b.sectionTag || b.title.replace('★ Master • ', '')}\n${b.content.trim()}`)
       .join('\n\n');
 
-    onUpdateTrackLyrics(compiledText, `Whiteboard Draft (${new Date().toLocaleDateString()})`);
-    showToast('Compiled whiteboard sections to active track lyrics!');
+    onUpdateTrackLyrics(compiledText, masterSections.length > 0 ? `Master Synthesis (${new Date().toLocaleDateString()})` : `Whiteboard Draft (${new Date().toLocaleDateString()})`);
+    showToast(`Compiled ${targetSections.length} whiteboard sections to active track lyrics!`);
+  };
+
+  // Load 3 songs side-by-side into 4 parallel columns: Song A, Song B, Song C, and Master Best Version
+  const handleLoadThreeSongsToCanvas = (
+    trackA: Track,
+    trackB: Track,
+    trackC: Track,
+    options?: { styleA?: number; styleB?: number; styleC?: number }
+  ) => {
+    const rawA = (trackA.versions && options?.styleA !== undefined && trackA.versions[options.styleA]?.lyrics) || trackA.lyrics || '';
+    const rawB = (trackB.versions && options?.styleB !== undefined && trackB.versions[options.styleB]?.lyrics) || trackB.lyrics || '';
+    const rawC = (trackC.versions && options?.styleC !== undefined && trackC.versions[options.styleC]?.lyrics) || trackC.lyrics || '';
+
+    const secA = parseLyricSections(rawA);
+    const secB = parseLyricSections(rawB);
+    const secC = parseLyricSections(rawC);
+
+    const newBlocks: BlockSuiteBlock[] = [];
+    const newConnectors: BlockSuiteConnector[] = [];
+    const timestamp = Date.now();
+
+    // Helper to build column header
+    const buildColHeader = (
+      id: string,
+      title: string,
+      subtitle: string,
+      x: number,
+      color: string,
+      tag: string,
+      actionType: 'copyAll' | 'masterHeader'
+    ): BlockSuiteBlock => ({
+      id,
+      type: 'theology_sop',
+      title,
+      subtitle,
+      content: actionType === 'copyAll'
+        ? `Drag any section across to Column 4 (Master Lane), or click ★ Copy to Master on any card.\nKey: ${tag} • BPM synced`
+        : `DROP ZONE: Assemble your winning sections here.\nReorder cards vertically, edit lines, then click Compile to lock into ${selectedTrack.title}.`,
+      x,
+      y: 60,
+      width: actionType === 'masterHeader' ? 380 : 340,
+      color,
+      tags: [tag, 'Header'],
+      orderIndex: 0
+    });
+
+    // 1. Column 1: Song A (x = 80, Indigo)
+    newBlocks.push(buildColHeader(
+      `col_a_${timestamp}`,
+      `SONG A • ${trackA.title}`,
+      `${trackA.id} • ${trackA.bpm} BPM • ${trackA.key} • ${trackA.genre}`,
+      80,
+      'indigo',
+      'Song A',
+      'copyAll'
+    ));
+
+    let yA = 240;
+    secA.forEach((sec, idx) => {
+      newBlocks.push({
+        id: `blk_a_${idx}_${timestamp}`,
+        type: 'song_section',
+        title: `Song A • ${sec.tag}`,
+        subtitle: `Arrangement Part #${idx + 1} (${sec.content.split('\n').filter(l => l.trim()).length} lines)`,
+        content: sec.content,
+        x: 80,
+        y: yA,
+        width: 340,
+        color: 'indigo',
+        sectionTag: sec.tag,
+        tags: ['Song A', trackA.id, sec.tag],
+        orderIndex: idx + 1
+      });
+      yA += 260;
+    });
+
+    // 2. Column 2: Song B (x = 460, Emerald)
+    newBlocks.push(buildColHeader(
+      `col_b_${timestamp}`,
+      `SONG B • ${trackB.title}`,
+      `${trackB.id} • ${trackB.bpm} BPM • ${trackB.key} • ${trackB.genre}`,
+      460,
+      'emerald',
+      'Song B',
+      'copyAll'
+    ));
+
+    let yB = 240;
+    secB.forEach((sec, idx) => {
+      newBlocks.push({
+        id: `blk_b_${idx}_${timestamp}`,
+        type: 'song_section',
+        title: `Song B • ${sec.tag}`,
+        subtitle: `Arrangement Part #${idx + 1} (${sec.content.split('\n').filter(l => l.trim()).length} lines)`,
+        content: sec.content,
+        x: 460,
+        y: yB,
+        width: 340,
+        color: 'emerald',
+        sectionTag: sec.tag,
+        tags: ['Song B', trackB.id, sec.tag],
+        orderIndex: idx + 1
+      });
+      yB += 260;
+    });
+
+    // 3. Column 3: Song C (x = 840, Purple)
+    newBlocks.push(buildColHeader(
+      `col_c_${timestamp}`,
+      `SONG C • ${trackC.title}`,
+      `${trackC.id} • ${trackC.bpm} BPM • ${trackC.key} • ${trackC.genre}`,
+      840,
+      'purple',
+      'Song C',
+      'copyAll'
+    ));
+
+    let yC = 240;
+    secC.forEach((sec, idx) => {
+      newBlocks.push({
+        id: `blk_c_${idx}_${timestamp}`,
+        type: 'song_section',
+        title: `Song C • ${sec.tag}`,
+        subtitle: `Arrangement Part #${idx + 1} (${sec.content.split('\n').filter(l => l.trim()).length} lines)`,
+        content: sec.content,
+        x: 840,
+        y: yC,
+        width: 340,
+        color: 'purple',
+        sectionTag: sec.tag,
+        tags: ['Song C', trackC.id, sec.tag],
+        orderIndex: idx + 1
+      });
+      yC += 260;
+    });
+
+    // 4. Column 4: ★ Master Best Version (x = 1220, Amber)
+    newBlocks.push(buildColHeader(
+      `col_master_${timestamp}`,
+      `★ MASTER BEST VERSION LANE`,
+      `Synthesized for ${selectedTrack.title} (${selectedTrack.id})`,
+      1220,
+      'amber',
+      'Master',
+      'masterHeader'
+    ));
+
+    // Populate Master column initially with Song A's or selectedTrack's sections as baseline
+    const baselineSections = secA.length > 0 ? secA : (parseLyricSections(selectedTrack.lyrics || ''));
+    let yM = 240;
+    baselineSections.forEach((sec, idx) => {
+      newBlocks.push({
+        id: `blk_m_${idx}_${timestamp}`,
+        type: 'song_section',
+        title: `★ Master • ${sec.tag}`,
+        subtitle: `Baseline Draft from ${trackA.title}`,
+        content: sec.content,
+        x: 1220,
+        y: yM,
+        width: 380,
+        color: 'amber',
+        sectionTag: sec.tag,
+        tags: ['Master', 'Active', sec.tag],
+        orderIndex: idx + 1
+      });
+      yM += 260;
+    });
+
+    setBlocks(newBlocks);
+    setConnectors(newConnectors);
+    setViewMode('edgeless');
+    triggerAutoSave(newBlocks, newConnectors, 'edgeless');
+
+    setTimeout(() => {
+      handleFitToContent();
+    }, 150);
+
+    showToast(`Loaded 3 songs for comparison! Drag cards into Master column or click ★ Copy to Master.`);
+  };
+
+  // 1-Click Copy any section into Master Column
+  const handleCopySectionToMaster = (sourceBlock: BlockSuiteBlock) => {
+    const masterBlocks = blocks.filter(b => b.x >= 1150 || b.tags?.includes('Master'));
+    const maxY = masterBlocks.length > 0
+      ? Math.max(...masterBlocks.map(b => b.y)) + 260
+      : 240;
+
+    const newBlock: BlockSuiteBlock = {
+      id: `blk_master_${Date.now()}`,
+      type: 'song_section',
+      title: `★ Master • ${sourceBlock.sectionTag || sourceBlock.title.replace(/Song [ABC] • /, '')}`,
+      subtitle: `Copied from ${sourceBlock.tags?.find(t => t.startsWith('Song')) || sourceBlock.title}`,
+      content: sourceBlock.content,
+      x: 1220,
+      y: maxY,
+      width: 380,
+      color: 'amber',
+      sectionTag: sourceBlock.sectionTag || sourceBlock.title.replace(/Song [ABC] • /, ''),
+      tags: ['Master', 'Active', sourceBlock.sectionTag || 'Section'],
+      orderIndex: masterBlocks.length + 1
+    };
+
+    const updated = [...blocks, newBlock];
+    setBlocks(updated);
+    triggerAutoSave(updated, connectors, viewMode);
+    showToast(`Copied ${sourceBlock.title} into Master Best Version Lane!`);
+  };
+
+  // Compile Master Column into Active Track Lyrics
+  const handleCompileMasterToActiveLyrics = () => {
+    const masterSections = blocks
+      .filter(b => (b.x >= 1150 || b.tags?.includes('Master')) && b.type === 'song_section')
+      .sort((a, b) => a.y - b.y);
+
+    if (masterSections.length === 0) {
+      showToast('No section cards found in the Master column (right side of canvas).', 'error');
+      return;
+    }
+
+    const compiledText = masterSections
+      .map(b => `${b.sectionTag || b.title.replace('★ Master • ', '')}\n${b.content.trim()}`)
+      .join('\n\n');
+
+    onUpdateTrackLyrics(compiledText, `Master Synthesis (${new Date().toLocaleDateString()})`);
+    showToast(`Compiled ${masterSections.length} master sections to ${selectedTrack.title} lyrics!`, 'success');
   };
 
   // Export as Markdown File Download
@@ -919,6 +1165,69 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     });
   };
 
+  // Native non-passive mouse wheel zoom centered on cursor
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || viewMode !== 'edgeless') return;
+
+    const onNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.08 : -0.08;
+      
+      setZoom(prevZoom => {
+        const newZoom = Math.min(2.5, Math.max(0.25, Math.round((prevZoom + delta) * 100) / 100));
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomRatio = newZoom / prevZoom;
+
+        setPan(prevPan => ({
+          x: mouseX - (mouseX - prevPan.x) * zoomRatio,
+          y: mouseY - (mouseY - prevPan.y) * zoomRatio
+        }));
+
+        return newZoom;
+      });
+    };
+
+    container.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', onNativeWheel);
+    };
+  }, [viewMode]);
+
+  // Global Keyboard shortcuts for canvas manipulation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        handleZoom(0.15);
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        handleZoom(-0.15);
+      } else if (e.key === '0') {
+        e.preventDefault();
+        handleResetZoom();
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        handleFitToContent();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [blocks]);
+
   // Grid styling background
   const getGridBgClass = () => {
     if (gridStyle === 'dots') {
@@ -932,7 +1241,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] bg-slate-950 text-slate-100 rounded-2xl border border-slate-800/80 shadow-2xl overflow-hidden">
+    <div className="flex flex-col h-full min-h-[550px] bg-slate-950 text-slate-100 rounded-2xl border border-slate-800/80 shadow-2xl overflow-hidden relative">
       {/* ========================================================================= */}
       {/* STUDIO HEADER: BLOCKSUITE ISOMORPHIC CONTROLS & STATUS BAR */}
       {/* ========================================================================= */}
@@ -1019,21 +1328,25 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         </div>
 
         {/* Center: Isomorphic Mode Switcher (Edgeless Infinite Whiteboard vs Page Document) */}
-        <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
           <button
             type="button"
             onClick={() => {
               setViewMode('edgeless');
               triggerAutoSave(blocks, connectors, 'edgeless');
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
               viewMode === 'edgeless'
-                ? 'bg-indigo-600 text-white shadow-md'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
+            title="Edgeless Infinite 2D Spatial Whiteboard (Default)"
           >
-            <Grid className="w-3.5 h-3.5" />
-            <span>Edgeless Whiteboard</span>
+            <Grid className="w-4 h-4 text-indigo-300" />
+            <span>✦ EDGELESS WHITEBOARD</span>
+            {viewMode === 'edgeless' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+            )}
           </button>
           <button
             type="button"
@@ -1041,19 +1354,45 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
               setViewMode('page');
               triggerAutoSave(blocks, connectors, 'page');
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
               viewMode === 'page'
-                ? 'bg-indigo-600 text-white shadow-md'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
+            title="Linear Document Flow"
           >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Page Document</span>
+            <FileText className="w-4 h-4 text-indigo-300" />
+            <span>PAGE DOCUMENT</span>
           </button>
         </div>
 
         {/* Right: Actions, Sync Badges & Nextcloud Backups */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* 3-Song Multi-Comparison Matrix Button */}
+          <button
+            type="button"
+            onClick={() => setIsThreeSongModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-mono font-black transition shadow-lg shadow-amber-950/50 border border-amber-400/40 cursor-pointer"
+            title="Load 3 songs side-by-side with drag & drop comparison into Master version"
+          >
+            <Columns className="w-3.5 h-3.5 text-slate-950" />
+            <span>Compare 3 Songs</span>
+            <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 text-[9px]">
+              MATRIX
+            </span>
+          </button>
+
+          {/* Whiteboard Guide / Instructions Button */}
+          <button
+            type="button"
+            onClick={() => setIsGuideModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold transition border border-slate-700 cursor-pointer"
+            title="Whiteboard instructions, zoom shortcuts, and 3-song comparison guide"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Instructions</span>
+          </button>
+
           {/* Firestore Sync Badge */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono">
             <span
@@ -1114,6 +1453,49 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </div>
         </div>
       </div>
+
+      {/* QUICK START INSTRUCTIONS BANNER */}
+      {showQuickGuideBanner && (
+        <div className="px-4 py-2 bg-gradient-to-r from-indigo-950/90 via-slate-900 to-amber-950/40 border-b border-indigo-500/30 flex items-center justify-between gap-3 text-xs shrink-0 animate-in slide-in-from-top-1 duration-150">
+          <div className="flex items-center gap-2 flex-wrap text-slate-300">
+            <span className="px-2 py-0.5 rounded bg-indigo-600 text-white font-mono text-[10px] font-bold">
+              QUICK START
+            </span>
+            <span>
+              <strong>1.</strong> Click <span className="text-amber-400 font-bold">"Compare 3 Songs"</span> to load 3 tracks into parallel columns.
+            </span>
+            <span className="hidden md:inline">•</span>
+            <span className="hidden md:inline">
+              <strong>2.</strong> Drag sections across or click <span className="text-amber-300 font-bold">"★ Master"</span> on cards to assemble best lyrics.
+            </span>
+            <span className="hidden lg:inline">•</span>
+            <span className="hidden lg:inline">
+              <strong>3.</strong> Scroll mouse wheel to zoom, drag empty canvas to pan.
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsGuideModalOpen(true)}
+              className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+            >
+              Full Guide & Hotkeys
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowQuickGuideBanner(false);
+                if (typeof window !== 'undefined') localStorage.setItem('brickos_whiteboard_quick_guide', 'hidden');
+              }}
+              className="p-1 text-slate-400 hover:text-white cursor-pointer"
+              title="Dismiss quick banner"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* SECONDARY TOOLBAR: PALETTE, VIEWPORT & INSERTION */}
@@ -1473,6 +1855,9 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 const isMatch = matchingBlockIds.includes(block.id);
                 const isFocusedMatch = matchingBlocks[focusedMatchIndex]?.id === block.id;
                 const isSearchActive = searchQuery.trim().length > 0;
+                const isMasterBlock = block.x >= 1150 || block.tags?.includes('Master');
+                const isSourceSection = !isMasterBlock && block.type === 'song_section';
+                const isMasterHeader = isMasterBlock && block.tags?.includes('Header');
 
                 return (
                   <div
@@ -1495,8 +1880,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                       });
                     }}
                     className={`absolute pointer-events-auto rounded-xl border backdrop-blur-md shadow-2xl transition-all flex flex-col ${
-                      colorConfig.bg
-                    } ${colorConfig.border} ${
+                      isMasterBlock ? 'bg-amber-950/40 border-amber-500/80 ring-2 ring-amber-400/60 shadow-[0_0_25px_rgba(245,158,11,0.2)]' : colorConfig.bg
+                    } ${isMasterBlock ? 'border-amber-500/80' : colorConfig.border} ${
                       isFocusedMatch
                         ? 'ring-4 ring-amber-300 shadow-[0_0_35px_rgba(251,191,36,0.7)] z-20 scale-[1.02]'
                         : isMatch
@@ -1515,11 +1900,16 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                       <div className="flex items-center gap-1.5 overflow-hidden">
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: colorConfig.hex }}
+                          style={{ backgroundColor: isMasterBlock ? '#f59e0b' : colorConfig.hex }}
                         />
                         {isMatch && (
                           <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-black text-[8px] uppercase tracking-wider shrink-0 animate-pulse">
                             MATCH
+                          </span>
+                        )}
+                        {isMasterBlock && (
+                          <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-black text-[8px] uppercase tracking-wider shrink-0">
+                            ★ MASTER
                           </span>
                         )}
                         <input
@@ -1532,6 +1922,22 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
                       {/* Card Header Actions */}
                       <div className="flex items-center gap-1 shrink-0">
+                        {/* Quick Copy to Master button for source comparison blocks */}
+                        {isSourceSection && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopySectionToMaster(block);
+                            }}
+                            className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-bold text-[10px] border border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                            title="Copy this section into the Master Best Version assembly lane"
+                          >
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>★ Master</span>
+                          </button>
+                        )}
+
                         {/* Connect Arrow button */}
                         <button
                           type="button"
@@ -1613,6 +2019,36 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                         spellCheck={false}
                       />
 
+                      {/* Master Column Quick Actions on Header Card */}
+                      {isMasterHeader && (
+                        <div className="flex items-center gap-1.5 pt-2 border-t border-amber-500/40 mt-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCompileMasterToActiveLyrics();
+                            }}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-[10px] flex items-center justify-center gap-1 shadow-sm transition cursor-pointer"
+                            title="Compile all assembled master sections to active track lyrics"
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>Compile to Track</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsThreeSongModalOpen(true);
+                            }}
+                            className="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-mono font-bold text-[10px] flex items-center gap-1 transition cursor-pointer"
+                            title="Open 3-song side-by-side section comparison matrix"
+                          >
+                            <GitCompare className="w-3 h-3" />
+                            <span>Diff Matrix</span>
+                          </button>
+                        </div>
+                      )}
+
                       {/* Optional Subtitle / Tags / Chords Badge */}
                       <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-slate-400 pt-2 border-t border-slate-800/60 mt-auto">
                         <span className="truncate max-w-[150px]">{block.subtitle || block.type}</span>
@@ -1649,28 +2085,79 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
               })}
             </div>
 
-            {/* Bottom-Right Whiteboard Minimap / Viewport Indicator */}
-            <div className="absolute bottom-4 right-4 z-40 bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 shadow-2xl backdrop-blur-md flex flex-col gap-1.5 text-[10px] font-mono">
-              <div className="flex items-center justify-between text-slate-400 font-bold">
-                <span>CANVAS RADAR</span>
-                <span>{Math.round(zoom * 100)}%</span>
+            {/* FLOATING CANVAS ZOOM & NAVIGATION HUD (Figma/Miro style - Always accessible in Edgeless Mode) */}
+            <div className="absolute bottom-4 right-4 z-40 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-2 shadow-2xl backdrop-blur-xl flex flex-col gap-2 font-mono ring-1 ring-white/10">
+              {/* Zoom Controls Bar */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleZoom(-0.15)}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  title="Zoom Out (Key: -)"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetZoom}
+                  className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs font-bold text-amber-300 hover:text-white hover:bg-slate-850 transition cursor-pointer min-w-[52px] text-center"
+                  title="Reset to 100% (Key: 0)"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleZoom(0.15)}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  title="Zoom In (Key: +)"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+
+                <div className="w-[1px] h-4 bg-slate-700 mx-0.5" />
+
+                <button
+                  type="button"
+                  onClick={handleFitToContent}
+                  className="px-2 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  title="Fit all blocks into viewport (Key: F)"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  <span>Fit All</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetZoom}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  title="Reset 100% (0)"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+
+                <div className="w-[1px] h-4 bg-slate-700 mx-0.5" />
+
+                <button
+                  type="button"
+                  onClick={() => setIsGuideModalOpen(true)}
+                  className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  title="Open Whiteboard Guide & Navigation Help"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                  <span>Guide</span>
+                </button>
               </div>
-              <div className="w-32 h-20 bg-slate-950 rounded border border-slate-800 relative overflow-hidden">
-                {/* Tiny representation of cards */}
-                {blocks.map(b => (
-                  <div
-                    key={b.id}
-                    className="absolute bg-indigo-400 rounded-[1px] opacity-70"
-                    style={{
-                      left: `${Math.min(120, Math.max(2, (b.x / 2000) * 128))}px`,
-                      top: `${Math.min(70, Math.max(2, (b.y / 2000) * 80))}px`,
-                      width: '10px',
-                      height: '6px'
-                    }}
-                  />
-                ))}
+
+              {/* Mini radar preview & hint */}
+              <div className="flex items-center justify-between text-[9px] text-slate-400 px-1 border-t border-slate-800 pt-1">
+                <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  ✦ Edgeless Canvas
+                </span>
+                <span className="text-slate-500">Wheel: Zoom • Drag: Pan</span>
               </div>
-              <span className="text-[9px] text-slate-500 text-center">Drag canvas to pan</span>
             </div>
           </div>
         ) : (
@@ -2085,6 +2572,27 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </button>
         </div>
       </div>
+
+      {/* BLOCKSUITE WHITEBOARD INTERACTIVE GUIDE & INSTRUCTIONS MODAL */}
+      <BlockSuiteGuideModal
+        isOpen={isGuideModalOpen}
+        onClose={() => setIsGuideModalOpen(false)}
+        onOpenThreeSongCompare={() => setIsThreeSongModalOpen(true)}
+        onFitScreen={handleFitToContent}
+      />
+
+      {/* 3-SONG MULTI-COMPARISON & STAGING MATRIX MODAL */}
+      <BlockSuiteThreeSongComparatorModal
+        isOpen={isThreeSongModalOpen}
+        onClose={() => setIsThreeSongModalOpen(false)}
+        tracks={tracks}
+        selectedTrack={selectedTrack}
+        onLoadThreeSongsToCanvas={handleLoadThreeSongsToCanvas}
+        onApplyDirectMasterLyrics={(compiled) => {
+          onUpdateTrackLyrics(compiled, `3-Song Composite (${new Date().toLocaleDateString()})`);
+          showToast(`Applied composite lyrics directly to ${selectedTrack.title}!`, 'success');
+        }}
+      />
     </div>
   );
 };

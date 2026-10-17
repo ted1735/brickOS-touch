@@ -59,7 +59,8 @@ import {
   HelpCircle,
   Keyboard,
   Edit3,
-  Trash2
+  Trash2,
+  Grid
 } from 'lucide-react';
 import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem, UniversalAssetItem, StudioTheme } from './types';
 import { StudioWorkflowGuide } from './components/StudioWorkflowGuide';
@@ -2069,7 +2070,7 @@ export default function BrickOSMusicStudioWorkspace() {
             </div>
           </div>
 
-          {/* Primary View Switches: Home & Pipeline */}
+          {/* Primary View Switches: Home, Pipeline & Whiteboard */}
           <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
             <button
               onClick={() => setActiveTab('home')}
@@ -2095,6 +2096,22 @@ export default function BrickOSMusicStudioWorkspace() {
             >
               <Compass className="w-3.5 h-3.5 text-indigo-400" />
               <span>Pipeline</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('brainstorming')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'brainstorming'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="BlockSuite Edgeless Whiteboard & 3-Song Lyric Comparison (Alt+B)"
+            >
+              <Grid className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Whiteboard</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] bg-indigo-500/25 text-indigo-200 border border-indigo-400/30 font-mono">
+                Edgeless
+              </span>
             </button>
           </div>
 
@@ -2213,10 +2230,10 @@ export default function BrickOSMusicStudioWorkspace() {
         )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' ? 'h-[calc(100vh-65px)] overflow-hidden p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
+        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
           
-          {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics mode for clean distraction-free view) */}
-          {activeTab !== 'home' && activeTab !== 'lyrics' && workspaceMode !== 'write' && (
+          {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
+          {activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div className="flex-shrink-0">
               <StudioWorkflowGuide
                 activeTab={activeTab}
@@ -2226,8 +2243,8 @@ export default function BrickOSMusicStudioWorkspace() {
             </div>
           )}
 
-          {/* TRACK HEADER BANNER (Shown on single-track workbench views, hidden in Write/Lyrics mode) */}
-          {activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && workspaceMode !== 'write' && (
+          {/* TRACK HEADER BANNER (Shown on single-track workbench views, hidden in Write/Lyrics/Whiteboard mode) */}
+          {activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div
               className={`bento-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 transition-all duration-200 ${
                 isDarkMode
@@ -2430,8 +2447,8 @@ export default function BrickOSMusicStudioWorkspace() {
             </div>
           )}
 
-          {/* SOP TRACK LIFECYCLE STEPPER (Hidden in Write/Lyrics mode) */}
-          {activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && workspaceMode !== 'write' && !focusMode && (
+          {/* SOP TRACK LIFECYCLE STEPPER (Hidden in Write/Lyrics/Whiteboard mode) */}
+          {activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && !focusMode && (
             <TrackLifecycleStepper
               selectedTrack={selectedTrack}
               onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
@@ -2441,7 +2458,7 @@ export default function BrickOSMusicStudioWorkspace() {
           )}
 
           {/* ACTIVE SECTION CONTEXT BANNER & ESSENTIAL UTILITY ACTIONS */}
-          {activeTab !== 'home' && <>
+          {activeTab !== 'home' && activeTab !== 'brainstorming' && <>
           <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-1.5 ${isDarkMode ? 'border-slate-800 bg-slate-900/70' : 'border-slate-200 bg-white'}`} aria-label="Choose workspace">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`mr-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Workspace</span>
