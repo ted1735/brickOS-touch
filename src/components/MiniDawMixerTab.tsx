@@ -1660,13 +1660,33 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                 if (dragOverChannelId === trk.id) setDragOverChannelId(null);
               }}
               onDrop={(e) => handleDropOnChannel(trk.id, e)}
-              className={`relative rounded-xl p-4 flex flex-col gap-3 transition border ${
+              className={`relative rounded-xl p-4 flex flex-col gap-3 transition-all duration-200 border ${
                 isDragTarget
                   ? 'bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-500/60 shadow-xl shadow-cyan-950/60 scale-[1.01]'
+                  : trkGroup
+                  ? 'bg-slate-950/95 hover:bg-slate-900/60'
                   : 'bg-slate-950 border-slate-800/90 hover:border-slate-700'
               }`}
-              style={trkGroup ? { borderLeft: `4px solid ${trkGroup.color}` } : undefined}
+              style={
+                trkGroup
+                  ? {
+                      borderLeft: `6px solid ${trkGroup.color}`,
+                      borderColor: `${trkGroup.color}50`,
+                      boxShadow: `0 0 18px -4px ${trkGroup.color}25, inset 2px 0 0 0 ${trkGroup.color}70`
+                    }
+                  : undefined
+              }
             >
+              {/* Colored top-edge accent line matching group color */}
+              {trkGroup && (
+                <div
+                  className="absolute top-0 left-0 right-0 h-[2.5px] rounded-t-xl transition-all pointer-events-none"
+                  style={{
+                    background: `linear-gradient(90deg, ${trkGroup.color} 0%, ${trkGroup.color}80 30%, transparent 85%)`
+                  }}
+                />
+              )}
+
               {isDragTarget && (
                 <div className="absolute inset-0 bg-cyan-950/95 rounded-xl border-2 border-dashed border-cyan-400 flex items-center justify-center gap-2 z-20 animate-pulse text-cyan-200 font-mono text-xs font-bold pointer-events-none">
                   <GripVertical className="w-5 h-5 text-cyan-400" />
@@ -1674,40 +1694,82 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                 </div>
               )}
 
-              {/* Main Channel Controls Row */}
+              {/* Main Channel Controls Row / Track Header */}
               <div className="flex items-center justify-between flex-wrap gap-4 w-full">
                 <div className="flex items-center gap-3">
+                  {/* Track Channel Number with Group Accent Collar */}
                   <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-white text-xs shadow-md relative"
-                    style={{ backgroundColor: trk.color }}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-white text-xs shadow-md relative transition-transform"
+                    style={{
+                      backgroundColor: trk.color,
+                      ...(trkGroup
+                        ? {
+                            boxShadow: `0 0 0 2px ${trkGroup.color}, 0 2px 8px ${trkGroup.color}50`
+                          }
+                        : {})
+                    }}
                   >
                     {i + 1}
                     {trkGroup && (
                       <span
-                        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-slate-950 shadow-xs"
+                        className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 shadow-xs flex items-center justify-center animate-pulse"
                         style={{ backgroundColor: trkGroup.color }}
-                        title={`Assigned to ${trkGroup.name}`}
+                        title={`Group: ${trkGroup.name}`}
                       />
                     )}
                   </div>
+
+                  {/* Track Header Details: Title, Group Visual Indicator, WebDAV Path */}
                   <div>
-                    <h4 className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2 flex-wrap font-mono">
                       <span>{trk.name}</span>
-                      {trkGroup && (
-                        <span
-                          className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase border flex items-center gap-1"
+
+                      {/* Visual Indicator in Track Header for Assigned Group */}
+                      {trkGroup ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveGroupMenuTrackId(activeGroupMenuTrackId === trk.id ? null : trk.id)}
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border transition hover:brightness-125 shadow-xs cursor-pointer group/grpbadge"
                           style={{
-                            borderColor: `${trkGroup.color}60`,
-                            backgroundColor: `${trkGroup.color}15`,
+                            borderColor: `${trkGroup.color}75`,
+                            backgroundColor: `${trkGroup.color}18`,
                             color: trkGroup.color
                           }}
-                          title={`Track assigned to ${trkGroup.name}`}
+                          title={`Track assigned to ${trkGroup.name} • Click to change group`}
                         >
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: trkGroup.color }} />
-                          <span>{trkGroup.name.split('•')[0].trim()}</span>
-                        </span>
+                          <span
+                            className="w-2 h-2 rounded-full shadow-xs shrink-0 ring-1 ring-white/40"
+                            style={{ backgroundColor: trkGroup.color }}
+                          />
+                          <span className="uppercase tracking-wide font-extrabold">{trkGroup.name}</span>
+                          <span className="text-[8px] font-mono opacity-85 px-1 py-0.2 rounded bg-slate-950/70 border border-current flex items-center gap-0.5">
+                            {isGroupLinkingEnabled ? (
+                              <>
+                                <Link2 className="w-2.5 h-2.5 text-emerald-400" />
+                                <span className="text-slate-200">M/S LINK</span>
+                              </>
+                            ) : (
+                              <>
+                                <Link2Off className="w-2.5 h-2.5 text-amber-400" />
+                                <span className="text-amber-200">ISO</span>
+                              </>
+                            )}
+                          </span>
+                          <ChevronDown className="w-2.5 h-2.5 opacity-60 group-hover/grpbadge:opacity-100 transition-opacity" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActiveGroupMenuTrackId(activeGroupMenuTrackId === trk.id ? null : trk.id)}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono text-slate-500 hover:text-slate-300 bg-slate-900/90 hover:bg-slate-800 border border-dashed border-slate-700/80 transition cursor-pointer"
+                          title="Not assigned to any Mute/Solo group • Click to assign"
+                        >
+                          <Users className="w-2.5 h-2.5 text-slate-500" />
+                          <span>NO GROUP</span>
+                        </button>
                       )}
                     </h4>
+
                     <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
                       <span className="text-sky-400 font-bold">WebDAV:</span>
                       <span className="truncate max-w-[280px]">
@@ -1950,7 +2012,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
               {/* Expandable Automation Lane Drawer */}
               {isLaneExpanded && (
-                <div className="w-full pt-1 border-t border-slate-800/80 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div
+                  className="w-full pt-1 border-t border-slate-800/80 animate-in fade-in slide-in-from-top-2 duration-150"
+                  style={trkGroup ? { borderTopColor: `${trkGroup.color}40` } : undefined}
+                >
                   <AutomationLaneEditor
                     track={trk}
                     automationState={autoState}
