@@ -108,6 +108,7 @@ import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
 import type { StudioWorkspace } from './components/StudioHome';
 import { TailscaleVpnModal } from './components/TailscaleVpnModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SongTitleRenameModal } from './components/SongTitleRenameModal';
 import { syncTrackTitleAcrossAllAssets } from './utils/trackTitleSync';
 import { getNextVersionString, CURRENT_STUDIO_VERSION } from './utils/versioning';
@@ -2669,21 +2670,23 @@ export default function BrickOSMusicStudioWorkspace() {
 
           {/* TAB: BLOCKSUITE INFINITE WHITEBOARD & BRAINSTORMING */}
           {activeTab === 'brainstorming' && (
-            <BlockSuiteBrainstormingTab
-              tracks={tracks}
-              selectedTrack={selectedTrack}
-              onSelectTrack={setSelectedTrack}
-              onUpdateTrackLyrics={(lyrics, versionTag) => {
-                handleTrackUpdate('lyrics', lyrics);
-                showToast(`Compiled Whiteboard into ${selectedTrack.title} Lyrics!`, 'success');
-              }}
-              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
-              onSendToVideoExpress={(prompt) => {
-                setActiveTab('video_express');
-                showToast('Loaded Whiteboard scene into VideoExpress.ai!', 'info');
-              }}
-              isDarkMode={isDarkMode}
-            />
+            <ErrorBoundary fallbackTitle="BlockSuite Whiteboard Canvas Encountered an Issue">
+              <BlockSuiteBrainstormingTab
+                tracks={tracks}
+                selectedTrack={selectedTrack}
+                onSelectTrack={setSelectedTrack}
+                onUpdateTrackLyrics={(lyrics, versionTag) => {
+                  handleTrackUpdate('lyrics', lyrics);
+                  showToast(`Compiled Whiteboard into ${selectedTrack.title} Lyrics!`, 'success');
+                }}
+                onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
+                onSendToVideoExpress={(prompt) => {
+                  setActiveTab('video_express');
+                  showToast('Loaded Whiteboard scene into VideoExpress.ai!', 'info');
+                }}
+                isDarkMode={isDarkMode}
+              />
+            </ErrorBoundary>
           )}
 
           {/* TAB 2: MINI-DAW MIXER & TRIMMER */}
