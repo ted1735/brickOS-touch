@@ -3,10 +3,43 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  :root {
+    --safe-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+    --safe-top: env(safe-area-inset-top, 0px);
+  }
+
   body {
     transition-property: color, background-color, border-color;
     transition-duration: 200ms;
     -webkit-font-smoothing: antialiased;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  button, a, input, select, textarea {
+    touch-action: manipulation;
+  }
+}
+
+/* Touch-First Ergonomic Utilities (Foldable & Large Tablet) */
+.touch-target {
+  min-width: 48px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-dock-safe {
+  padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+}
+
+/* Flex Mode & Dual-Screen Support for Foldable Devices (e.g. Galaxy Z Fold) */
+@media (horizontal-viewport-segments: 2) {
+  .fold-dual-screen {
+    display: grid !important;
+    grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
   }
 }
 

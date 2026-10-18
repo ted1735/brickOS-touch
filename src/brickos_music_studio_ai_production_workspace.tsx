@@ -139,6 +139,13 @@ import {
 import { ECV_CANONICAL_ASSETS } from './data/nextcloudAssetIndex';
 import { CoProducerPromptEditorModal } from './components/CoProducerPromptEditorModal';
 import { buildCoProducerInstruction } from './data/canonicalCoProducerSOP';
+import { TouchBottomDock, TouchStudioMode } from './components/TouchBottomDock';
+import { TouchHeader } from './components/TouchHeader';
+import { TouchTrackDrawer } from './components/TouchTrackDrawer';
+import { TouchToolsDrawer } from './components/TouchToolsDrawer';
+import { TouchListenLounge } from './components/TouchListenLounge';
+import { TouchMixConsole } from './components/TouchMixConsole';
+import { TouchWriteStudio } from './components/TouchWriteStudio';
 
 export default function BrickOSMusicStudioWorkspace() {
   const [tracks, setTracks] = useState<Track[]>(() => {
@@ -247,6 +254,33 @@ export default function BrickOSMusicStudioWorkspace() {
 
   const isDarkMode = studioTheme !== 'sun' && studioTheme !== 'clean';
   const [focusMode, setFocusMode] = useState<boolean>(false);
+
+  // Touch-First Ergonomics & 3 Intent Modes (Listen, Write, Mix, Pro)
+  const [touchMode, setTouchMode] = useState<TouchStudioMode>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('brickos_touch_mode') as TouchStudioMode;
+      if (saved && ['listen', 'write', 'mix', 'pro'].includes(saved)) return saved;
+    }
+    return 'listen';
+  });
+  const [isTracksDrawerOpen, setIsTracksDrawerOpen] = useState(false);
+  const [isToolsDrawerOpen, setIsToolsDrawerOpen] = useState(false);
+
+  const handleSelectTouchMode = (mode: TouchStudioMode) => {
+    setTouchMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('brickos_touch_mode', mode);
+    }
+    if (mode === 'listen') {
+      showToast('🎧 Switched to Listen & Curate Mode', 'info');
+    } else if (mode === 'write') {
+      showToast('✍️ Switched to Write & Generate Mode', 'info');
+    } else if (mode === 'mix') {
+      showToast('🎚️ Switched to 4-Track Mix & Deliver Console', 'info');
+    } else {
+      showToast('🎛️ Pro Studio Workbench Active', 'info');
+    }
+  };
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -1904,272 +1938,29 @@ export default function BrickOSMusicStudioWorkspace() {
         </button>
       )}
 
-      {/* TOP NAVIGATION HEADER (hidden in focus mode) */}
+      {/* TOUCH NAVIGATION HEADER (Adaptive sleek 48px header for tablet/foldable) */}
       {!focusMode && (
-      <header
-        className={`px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
-          isDarkMode
-            ? 'bg-slate-900/95 border-b border-slate-800 text-white'
-            : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
-        }`}
-      >
-        {/* BRAND ZONE: 150x150 PROMINENT HERO LOGO & IDENTITY */}
-        <div className="flex items-center gap-4 flex-shrink-0">
-          <button
-            onClick={() => setActiveTab('home')}
-            className="w-[150px] h-[150px] min-w-[150px] min-h-[150px] rounded-2xl bg-slate-950 border-2 border-indigo-500/30 p-2.5 flex items-center justify-center shadow-2xl shadow-indigo-500/20 ring-1 ring-white/10 hover:border-indigo-400 hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer overflow-hidden group shrink-0 relative"
-            title="Return to Studio Home"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 opacity-70 group-hover:opacity-100 transition" />
-            <img 
-              src="/brick-logo.webp" 
-              alt="brickOS Studio Logo" 
-              className="w-full h-full object-contain drop-shadow-lg group-hover:brightness-110 transition relative z-10" 
-            />
-          </button>
-
-          <div className="flex flex-col justify-center space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 
-                onClick={() => setActiveTab('home')}
-                className={`text-2xl sm:text-3xl font-black tracking-wider transition cursor-pointer ${
-                  isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
-                }`}
-                title="Return to Studio Home"
-              >
-                brickOS
-              </h1>
-              <span 
-                className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-xs font-black border border-indigo-500/40 shadow-xs shadow-indigo-500/10 flex items-center gap-1.5"
-                title={`Active Studio Revision: ${CURRENT_STUDIO_VERSION} (Whiteboard Full Lyrics & 3-Song Comparator)`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                <span>{CURRENT_STUDIO_VERSION}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setActiveTab('nextcloud_sync')}
-                className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
-                title="Nextcloud Live WebDAV & Folder 207332 Matcher"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>WebDAV / 207332</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleManualSyncDatabase}
-                className={`hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border transition cursor-pointer ${
-                  cloudSyncError
-                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
-                    : isDbSyncing
-                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                    : isDbConnected
-                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
-                    : 'bg-slate-500/10 text-slate-400 border-slate-500/30 hover:bg-slate-500/20'
-                }`}
-                title={`${cloudSyncError || (isDbConnected ? `Cloud synced${lastSyncedAt ? ` at ${lastSyncedAt}` : ''}` : isFirebaseConfigured() ? 'Connecting to cloud' : 'Saved locally in this browser')}. Click to sync now.`}
-              >
-                <Database className={`w-3 h-3 ${isDbSyncing ? 'animate-spin text-amber-400' : cloudSyncError ? 'text-rose-400' : isDbConnected ? 'text-cyan-400' : 'text-slate-400'}`} />
-                <span>{isDbSyncing ? 'Saving...' : cloudSyncError ? 'Local copy • sync issue' : isDbConnected ? 'Cloud synced' : isFirebaseConfigured() ? 'Connecting...' : 'Saved locally'}</span>
-                {lastSyncedAt && isDbConnected && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
-              </button>
-            </div>
-            
-            <p className={`text-xs flex items-center gap-2 flex-wrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              <span className="font-semibold text-slate-300">Ted Moyer (Primary Artist / OAC)</span>
-              <span>•</span>
-              <span className="text-indigo-400 font-medium">BRICK Records</span>
-              <span>•</span>
-              {activeTab === 'home' ? (
-                <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">Studio Home</span>
-              ) : activeTab === 'kanban' ? (
-                <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                  {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <span className="text-indigo-400 font-bold">{selectedTrack.id}: {selectedTrack.title}</span>
-                  <span>•</span>
-                  <span className="text-amber-400 font-medium">{selectedTrack.ep}</span>
-                </span>
-              )}
-            </p>
-
-            {/* Quick 1-Click Command Palette trigger */}
-            <div className="pt-1 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCommandPaletteOpen(true)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer shadow-sm group ${
-                  isDarkMode
-                    ? 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white hover:border-indigo-500/50'
-                    : 'bg-slate-100 hover:bg-white border-slate-300 text-slate-700'
-                }`}
-                title="Open Command Palette (Cmd+K or Ctrl+K)"
-              >
-                <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300" />
-                <span className="text-slate-400">Search 26 tracks, stages, or stems...</span>
-                <kbd className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-700 text-indigo-400 font-bold">
-                  ⌘K
-                </kbd>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT ZONE: STICKY MINI-TRANSPORT WITH A/B AUDITIONING + STREAMLINED ACTIONS */}
-        <div className="flex items-center gap-3 flex-wrap justify-end">
-          {/* Integrated Mini-Transport with 1-Click A/B Auditioning */}
-          <div className={`p-2 rounded-2xl border flex items-center gap-2.5 shadow-md backdrop-blur-md ${
-            isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
-          }`}>
-            {/* Play/Pause Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (!isLoadingAudio) handleTogglePlayPauseAudio();
-              }}
-              disabled={isLoadingAudio}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-md transition cursor-pointer ${
-                isLoadingAudio
-                  ? 'bg-amber-500/90 text-slate-950 ring-2 ring-amber-400/50 cursor-wait'
-                  : isPlaying
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
-              }`}
-              title={isLoadingAudio ? 'Buffering Nextcloud audio...' : isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-            >
-              {isLoadingAudio ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-              ) : isPlaying ? (
-                <Pause className="w-4 h-4 fill-current" />
-              ) : (
-                <Play className="w-4 h-4 fill-current ml-0.5" />
-              )}
-            </button>
-
-            {/* Track Info & Visualizer */}
-            <div className="flex flex-col min-w-[120px] max-w-[160px]">
-              <span className="text-[11px] font-bold truncate text-white" title={selectedTrack.title}>
-                {selectedTrack.id}: {selectedTrack.title}
-              </span>
-              <div className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400">
-                <span className="text-emerald-400 font-bold">24-bit Lossless</span>
-                <span>•</span>
-                <span>{selectedTrack.bpm} BPM</span>
-              </div>
-            </div>
-
-            {/* 1-Click A/B Auditioning Bus Toggle */}
-            <div className="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800">
-              <button
-                type="button"
-                onClick={handleToggleAuditionBus}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer ${
-                  auditionBus === 'A'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="Audition Bus A: Full Master Mix"
-              >
-                <span>A</span>
-                <span className="text-[9px] opacity-75">Master</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleAuditionBus}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer ${
-                  auditionBus === 'B'
-                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="Audition Bus B: Isolated UVR5 Stems"
-              >
-                <span>B</span>
-                <span className="text-[9px] opacity-75">Stems</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Primary View Switches: Home, Pipeline & Whiteboard */}
-          <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setActiveTab('home')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'home'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-              title="Studio Home Hub"
-            >
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Home</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('kanban')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'kanban'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-              title="Pipeline Kanban"
-            >
-              <Compass className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Pipeline</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('brainstorming')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'brainstorming'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-              title="BlockSuite Edgeless Whiteboard & 3-Song Lyric Comparison (Alt+B)"
-            >
-              <Grid className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Whiteboard</span>
-              <span className="px-1.5 py-0.2 rounded text-[9px] bg-indigo-500/25 text-indigo-200 border border-indigo-400/30 font-mono">
-                Edgeless
-              </span>
-            </button>
-          </div>
-
-          {/* New Project Quick Button */}
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition border border-emerald-400/30 cursor-pointer"
-            title="Create New Track Project"
-          >
-            <Plus className="w-3.5 h-3.5 text-white" />
-            <span className="hidden sm:inline">+ New Project</span>
-          </button>
-
-          {/* Studio Quick Tools Drawer Trigger (Groups secondary tools cleanly) */}
-          <button
-            type="button"
-            onClick={() => setIsQuickToolsDrawerOpen(true)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-2 transition shadow-md cursor-pointer ${
-              isQuickToolsDrawerOpen
-                ? 'bg-purple-600 border-purple-500 text-white shadow-purple-950/60'
-                : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700 hover:border-purple-500/50 hover:text-white'
-                : 'bg-slate-100 hover:bg-slate-200 text-purple-700 border-slate-300'
-            }`}
-            title="Open Studio Quick Tools Drawer (Co-Producer, Search Grounding, Suno Bridge, Shortcuts, VPN, Cloud Sync)"
-            aria-label="Open Studio Quick Tools Drawer"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
-            <span>Studio Tools</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          </button>
-        </div>
-      </header>
+        <TouchHeader
+          selectedTrack={selectedTrack}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onToggleFocusMode={handleToggleFocusMode}
+          isFocusMode={focusMode}
+          onToggleTheme={handleToggleTheme}
+          isDarkMode={isDarkMode}
+          isDbConnected={isDbConnected}
+          isDbSyncing={isDbSyncing}
+          cloudSyncError={cloudSyncError}
+          onNavigateHome={() => {
+            handleSelectTouchMode('listen');
+            setActiveTab('home');
+          }}
+          onOpenCreateProject={() => setIsCreateModalOpen(true)}
+          onOpenThemeModal={() => setIsThemeModalOpen(true)}
+        />
       )}
 
-      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Adaptive 1-click stage shortcuts, hidden in focus mode) */}
-      {!focusMode && (
+      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Available in Pro Mode, hidden in clean intent modes) */}
+      {!focusMode && touchMode === 'pro' && (
         <SmartContextActionBar
           activeTab={activeTab}
           selectedTrack={selectedTrack}
@@ -2254,8 +2045,64 @@ export default function BrickOSMusicStudioWorkspace() {
         )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen overflow-hidden p-0' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto')}`}>
-          
+        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 pb-24 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen overflow-hidden p-0' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-3 sm:p-5 space-y-4 overflow-y-auto')}`}>
+
+          {/* TOUCH INTENT MODE 1: LISTEN & CURATE LOUNGE */}
+          {touchMode === 'listen' && (
+            <TouchListenLounge
+              track={selectedTrack}
+              isPlaying={isPlaying}
+              isLoadingAudio={isLoadingAudio}
+              onTogglePlayPause={handleTogglePlayPauseAudio}
+              onPreviousTrack={handlePreviousTrack}
+              onNextTrack={handleNextTrack}
+              auditionBus={auditionBus}
+              onToggleAuditionBus={handleToggleAuditionBus}
+              onOpenSelahModal={() => setIsSelahGateOpen(true)}
+              onNavigateToWrite={() => handleSelectTouchMode('write')}
+              onNavigateToMix={() => handleSelectTouchMode('mix')}
+              isDarkMode={isDarkMode}
+            />
+          )}
+
+          {/* TOUCH INTENT MODE 2: WRITE LYRICS & SUNO PROMPT STUDIO */}
+          {touchMode === 'write' && (
+            <TouchWriteStudio
+              track={selectedTrack}
+              onUpdateTrackLyrics={(newLyrics) => {
+                const updated = { ...selectedTrack, lyrics: newLyrics };
+                setSelectedTrack(updated);
+                setTracks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+              }}
+              onToggleWhiteboard={() => {
+                handleSelectTouchMode('pro');
+                setActiveTab('brainstorming');
+              }}
+              isWhiteboardActive={activeTab === 'brainstorming' && touchMode === 'pro'}
+              onOpenCoProducerModal={() => setIsCoProducerModalOpen(true)}
+              isDarkMode={isDarkMode}
+            />
+          )}
+
+          {/* TOUCH INTENT MODE 3: 4-TRACK MIX & DELIVER CONSOLE */}
+          {touchMode === 'mix' && (
+            <TouchMixConsole
+              track={selectedTrack}
+              isPlaying={isPlaying}
+              onTogglePlay={handleTogglePlayPauseAudio}
+              masterVolume={masterVolume}
+              onMasterVolumeChange={(vol) => {
+                setMasterVolume(vol);
+                audioMiniDaw.setMasterVolume(vol);
+              }}
+              onOpenExportModal={() => setIsExportModalOpen(true)}
+              isDarkMode={isDarkMode}
+            />
+          )}
+
+          {/* TOUCH INTENT MODE 4: FULL PRO STUDIO WORKBENCH */}
+          {touchMode === 'pro' && (
+            <>
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
           {activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div className="flex-shrink-0">
@@ -2910,6 +2757,7 @@ export default function BrickOSMusicStudioWorkspace() {
               onOpenSectionGuide={handleOpenSectionGuide}
             />
           )}
+          </>)}
 
         </main>
       </div>
@@ -3236,27 +3084,62 @@ export default function BrickOSMusicStudioWorkspace() {
         activeTab={activeTab}
       />
 
-      {/* PERSISTENT FLOATING AUDIO TRANSPORT (hidden in focus mode) */}
+      {/* TOUCH BOTTOM DOCK (Thumb-Zone Audio Transport & Intent Mode Switcher) */}
       {!focusMode && (
-        <GlobalAudioTransport
+        <TouchBottomDock
+          currentMode={touchMode}
+          onSelectMode={handleSelectTouchMode}
           isPlaying={isPlaying}
           isLoadingAudio={isLoadingAudio}
           onTogglePlayPause={handleTogglePlayPauseAudio}
-          isMuted={isMutedAudio}
-          onToggleMute={handleToggleMuteAudio}
-          masterVolume={masterVolume}
-          onVolumeChange={(vol) => {
-            setMasterVolume(vol);
-            audioMiniDaw.setMasterVolume(vol);
-          }}
           selectedTrack={selectedTrack}
           onPreviousTrack={handlePreviousTrack}
           onNextTrack={handleNextTrack}
-          onOpenMiniDaw={() => setActiveTab('mixer')}
-          onResetAudio={handleResetAudioEngine}
+          auditionBus={auditionBus}
+          onToggleAuditionBus={handleToggleAuditionBus}
+          onOpenTracksDrawer={() => setIsTracksDrawerOpen(true)}
+          onOpenToolsDrawer={() => setIsToolsDrawerOpen(true)}
+          onToggleWhiteboard={() => {
+            if (activeTab === 'brainstorming' && touchMode === 'pro') {
+              handleSelectTouchMode('write');
+            } else {
+              handleSelectTouchMode('pro');
+              setActiveTab('brainstorming');
+            }
+          }}
+          isWhiteboardActive={activeTab === 'brainstorming' && touchMode === 'pro'}
           isDarkMode={isDarkMode}
         />
       )}
+
+      {/* TOUCH TRACKS DRAWER SHEET (1-Tap Track Switching & Auditioning) */}
+      <TouchTrackDrawer
+        isOpen={isTracksDrawerOpen}
+        onClose={() => setIsTracksDrawerOpen(false)}
+        tracks={tracks}
+        selectedTrack={selectedTrack}
+        onSelectTrack={(trk) => {
+          setSelectedTrack(trk);
+          showToast(`Selected: ${trk.id} - ${trk.title}`, 'info');
+        }}
+        isPlaying={isPlaying}
+        onTogglePlayPause={handleTogglePlayPauseAudio}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* TOUCH TOOLS DRAWER SHEET (NightCafe, Veo, YouTube SEO, VPN, Themes) */}
+      <TouchToolsDrawer
+        isOpen={isToolsDrawerOpen}
+        onClose={() => setIsToolsDrawerOpen(false)}
+        onNavigateToTab={(tab) => {
+          handleSelectTouchMode('pro');
+          setActiveTab(tab as any);
+        }}
+        onOpenSelahModal={() => setIsSelahGateOpen(true)}
+        onOpenVpnModal={() => setIsTailscaleModalOpen(true)}
+        onOpenThemeModal={() => setIsThemeModalOpen(true)}
+        isDarkMode={isDarkMode}
+      />
 
       {/* WORKSPACE UNIVERSAL ASSET EDITOR MODAL: ADD, EDIT, ASK GEMINI, REASSIGN, LINK, DELETE */}
       <UniversalAssetEditorModal
