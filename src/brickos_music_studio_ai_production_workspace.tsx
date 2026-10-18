@@ -328,6 +328,7 @@ export default function BrickOSMusicStudioWorkspace() {
         if (isCopilotDrawerOpen) setIsCopilotDrawerOpen(false);
         if (isQuickToolsDrawerOpen) setIsQuickToolsDrawerOpen(false);
         if (isThemeModalOpen) setIsThemeModalOpen(false);
+        if (focusMode && !isCommandPaletteOpen && !isCopilotDrawerOpen && !isQuickToolsDrawerOpen && !isThemeModalOpen) handleToggleFocusMode();
       }
     };
 
@@ -1889,7 +1890,22 @@ export default function BrickOSMusicStudioWorkspace() {
         </div>
       )}
 
-      {/* TOP NAVIGATION HEADER */}
+      {/* FOCUS MODE: minimal floating exit button (only UI visible in focus mode) */}
+      {focusMode && (
+        <button
+          type="button"
+          onClick={handleToggleFocusMode}
+          className="fixed top-3 right-3 z-[100] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold shadow-lg backdrop-blur-md opacity-60 hover:opacity-100 transition cursor-pointer"
+          title="Exit Focus Mode (Esc or Z)"
+          aria-label="Exit Focus Mode"
+        >
+          <span aria-hidden="true">✕</span>
+          <span>Exit Focus</span>
+        </button>
+      )}
+
+      {/* TOP NAVIGATION HEADER (hidden in focus mode) */}
+      {!focusMode && (
       <header
         className={`px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
           isDarkMode
@@ -2150,11 +2166,13 @@ export default function BrickOSMusicStudioWorkspace() {
           </button>
         </div>
       </header>
+      )}
 
-      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Adaptive 1-click stage shortcuts) */}
-      <SmartContextActionBar
-        activeTab={activeTab}
-        selectedTrack={selectedTrack}
+      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Adaptive 1-click stage shortcuts, hidden in focus mode) */}
+      {!focusMode && (
+        <SmartContextActionBar
+          activeTab={activeTab}
+          selectedTrack={selectedTrack}
         onNavigateToTab={(tab) => {
           setActiveTab(tab as any);
           showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
@@ -2176,14 +2194,15 @@ export default function BrickOSMusicStudioWorkspace() {
             showToast('Refreshed Folder 207332 WebDAV assets', 'info');
           }
         }}
-        isDarkMode={isDarkMode}
-      />
+          isDarkMode={isDarkMode}
+        />
+      )}
 
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* COLLAPSIBLE / PINNABLE SIDE NAVIGATION PANEL */}
-        {isSideNavOpen && (
+        {/* COLLAPSIBLE / PINNABLE SIDE NAVIGATION PANEL (hidden in focus mode) */}
+        {!focusMode && isSideNavOpen && (
           <>
             {/* Backdrop on mobile screens */}
             <div 
@@ -2235,7 +2254,7 @@ export default function BrickOSMusicStudioWorkspace() {
         )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
+        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen overflow-hidden p-0' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto')}`}>
           
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
           {activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
@@ -2685,6 +2704,7 @@ export default function BrickOSMusicStudioWorkspace() {
                   showToast('Loaded Whiteboard scene into VideoExpress.ai!', 'info');
                 }}
                 isDarkMode={isDarkMode}
+                focusMode={focusMode}
               />
             </ErrorBoundary>
           )}
@@ -3216,25 +3236,27 @@ export default function BrickOSMusicStudioWorkspace() {
         activeTab={activeTab}
       />
 
-      {/* PERSISTENT FLOATING AUDIO TRANSPORT */}
-      <GlobalAudioTransport
-        isPlaying={isPlaying}
-        isLoadingAudio={isLoadingAudio}
-        onTogglePlayPause={handleTogglePlayPauseAudio}
-        isMuted={isMutedAudio}
-        onToggleMute={handleToggleMuteAudio}
-        masterVolume={masterVolume}
-        onVolumeChange={(vol) => {
-          setMasterVolume(vol);
-          audioMiniDaw.setMasterVolume(vol);
-        }}
-        selectedTrack={selectedTrack}
-        onPreviousTrack={handlePreviousTrack}
-        onNextTrack={handleNextTrack}
-        onOpenMiniDaw={() => setActiveTab('mixer')}
-        onResetAudio={handleResetAudioEngine}
-        isDarkMode={isDarkMode}
-      />
+      {/* PERSISTENT FLOATING AUDIO TRANSPORT (hidden in focus mode) */}
+      {!focusMode && (
+        <GlobalAudioTransport
+          isPlaying={isPlaying}
+          isLoadingAudio={isLoadingAudio}
+          onTogglePlayPause={handleTogglePlayPauseAudio}
+          isMuted={isMutedAudio}
+          onToggleMute={handleToggleMuteAudio}
+          masterVolume={masterVolume}
+          onVolumeChange={(vol) => {
+            setMasterVolume(vol);
+            audioMiniDaw.setMasterVolume(vol);
+          }}
+          selectedTrack={selectedTrack}
+          onPreviousTrack={handlePreviousTrack}
+          onNextTrack={handleNextTrack}
+          onOpenMiniDaw={() => setActiveTab('mixer')}
+          onResetAudio={handleResetAudioEngine}
+          isDarkMode={isDarkMode}
+        />
+      )}
 
       {/* WORKSPACE UNIVERSAL ASSET EDITOR MODAL: ADD, EDIT, ASK GEMINI, REASSIGN, LINK, DELETE */}
       <UniversalAssetEditorModal
