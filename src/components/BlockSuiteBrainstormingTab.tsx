@@ -26,6 +26,7 @@ import {
   Link as LinkIcon,
   Unlink,
   Move,
+  GripVertical,
   Lock,
   Unlock,
   Sliders,
@@ -120,6 +121,10 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   // Dragging single block
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Touch Drag & Pinch-to-Zoom Gesture Tracking
+  const pinchDistanceRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef<number>(1);
 
   // Connector drawing state
   const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
@@ -1096,6 +1101,86 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     }
   };
 
+  // Canvas Touch Handlers (Single finger pan/drag, 2-finger pinch zoom)
+  const handleCanvasTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const target = e.target as HTMLElement;
+      // If tapping directly on canvas background, SVG, or anywhere outside a block card, start panning
+      if (
+        target === containerRef.current ||
+        target.tagName === 'svg' ||
+        target.id === 'canvas-bg' ||
+        (!target.closest('[data-block="true"]') && !target.closest('button') && !target.closest('input') && !target.closest('textarea'))
+      ) {
+        setIsPanning(true);
+        setStartPan({ x: touch.clientX - pan.x, y: touch.clientY - pan.y });
+        setSelectedBlockId(null);
+      }
+    } else if (e.touches.length === 2) {
+      // 2 fingers: Pinch to zoom
+      setIsPanning(false);
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      pinchDistanceRef.current = dist;
+      pinchStartZoomRef.current = zoom;
+    }
+  };
+
+  const handleCanvasTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchDistanceRef.current !== null) {
+      // Pinch zooming
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const scaleFactor = dist / pinchDistanceRef.current;
+      const targetZoom = Math.min(2.0, Math.max(0.25, Math.round(pinchStartZoomRef.current * scaleFactor * 100) / 100));
+      setZoom(targetZoom);
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      if (draggingBlockId) {
+        // Dragging block via touch gesture
+        const newX = Math.round((touch.clientX - pan.x) / zoom - dragOffset.x);
+        const newY = Math.round((touch.clientY - pan.y) / zoom - dragOffset.y);
+        setBlocks(prev => prev.map(b => b.id === draggingBlockId ? { ...b, x: Math.max(10, newX), y: Math.max(10, newY) } : b));
+      } else if (isPanning) {
+        // Panning canvas via touch gesture
+        setPan({ x: touch.clientX - startPan.x, y: touch.clientY - startPan.y });
+      }
+    }
+  };
+
+  const handleCanvasTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      if (isPanning) setIsPanning(false);
+      pinchDistanceRef.current = null;
+      if (draggingBlockId) {
+        setDraggingBlockId(null);
+        triggerAutoSave(blocks, connectors, viewMode);
+      }
+    } else if (e.touches.length === 1 && pinchDistanceRef.current !== null) {
+      pinchDistanceRef.current = null;
+    }
+  };
+
+  // Block Touch Start Handler
+  const handleBlockTouchStart = (e: React.TouchEvent, blockId: string, blockX: number, blockY: number) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      if (connectingSourceId) {
+        handleCompleteConnector(blockId);
+        return;
+      }
+      setSelectedBlockId(blockId);
+      setDraggingBlockId(blockId);
+      setDragOffset({
+        x: (touch.clientX - pan.x) / zoom - blockX,
+        y: (touch.clientY - pan.y) / zoom - blockY
+      });
+    }
+  };
+
   // Zoom handlers
   const handleZoom = (delta: number) => {
     setZoom(prev => Math.min(2.0, Math.max(0.25, Math.round((prev + delta) * 100) / 100)));
@@ -1735,10 +1820,15 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           /* ===================================================================== */
           <div
             ref={containerRef}
+            id="canvas-bg"
             onMouseDown={handleCanvasMouseDown}
             onMouseMove={handleCanvasMouseMove}
             onMouseUp={handleCanvasMouseUp}
-            className={`w-full h-full relative cursor-grab active:cursor-grabbing overflow-hidden ${getGridBgClass()}`}
+            onTouchStart={handleCanvasTouchStart}
+            onTouchMove={handleCanvasTouchMove}
+            onTouchEnd={handleCanvasTouchEnd}
+            onTouchCancel={handleCanvasTouchEnd}
+            className={`w-full h-full relative cursor-grab active:cursor-grabbing overflow-hidden touch-none ${getGridBgClass()}`}
           >
             {/* Infinite World Coordinate Space */}
             <div
@@ -1825,6 +1915,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 return (
                   <div
                     key={block.id}
+                    data-block="true"
+                    data-block-id={block.id}
                     style={{
                       transform: `translate(${block.x}px, ${block.y}px)`,
                       width: `${block.width}px`
@@ -1842,7 +1934,11 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                         y: (e.clientY - pan.y) / zoom - block.y
                       });
                     }}
-                    className={`absolute pointer-events-auto rounded-xl border backdrop-blur-md shadow-2xl transition-all flex flex-col ${
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      handleBlockTouchStart(e, block.id, block.x, block.y);
+                    }}
+                    className={`absolute pointer-events-auto rounded-xl border backdrop-blur-md shadow-2xl transition-all flex flex-col touch-none ${
                       isMasterBlock ? 'bg-amber-950/40 border-amber-500/80 ring-2 ring-amber-400/60 shadow-[0_0_25px_rgba(245,158,11,0.2)]' : colorConfig.bg
                     } ${isMasterBlock ? 'border-amber-500/80' : colorConfig.border} ${
                       isFocusedMatch
@@ -1858,9 +1954,28 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                       isSearchActive && !isMatch ? 'opacity-35 hover:opacity-90' : 'opacity-100'
                     }`}
                   >
-                    {/* Block Header & Drag Handle */}
-                    <div className="px-3 py-2 bg-slate-950/70 border-b border-slate-800/80 rounded-t-xl flex items-center justify-between gap-2 cursor-move">
-                      <div className="flex items-center gap-1.5 overflow-hidden">
+                    {/* Block Header & Tactile Drag Handle */}
+                    <div
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        handleBlockTouchStart(e, block.id, block.x, block.y);
+                      }}
+                      className="px-2.5 py-2 bg-slate-950/80 border-b border-slate-800/80 rounded-t-xl flex items-center justify-between gap-1.5 cursor-move touch-none"
+                    >
+                      <div className="flex items-center gap-1.5 overflow-hidden flex-1">
+                        {/* Dedicated Tactile Touch Drag Handle */}
+                        <div
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                            handleBlockTouchStart(e, block.id, block.x, block.y);
+                          }}
+                          className="touch-target w-7 h-7 -ml-0.5 rounded-md bg-slate-900 border border-slate-700/60 flex items-center justify-center text-slate-400 active:text-amber-400 active:bg-amber-500/20 active:scale-110 cursor-move shrink-0 touch-none shadow-xs"
+                          title="Touch & Drag to move card"
+                          aria-label="Drag Handle"
+                        >
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: isMasterBlock ? '#f59e0b' : colorConfig.hex }}
@@ -1879,6 +1994,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                           type="text"
                           value={block.title}
                           onChange={(e) => handleUpdateBlock(block.id, { title: e.target.value })}
+                          onTouchStart={(e) => e.stopPropagation()}
                           className="bg-transparent text-xs font-bold font-mono text-white outline-none w-full truncate"
                         />
                       </div>
@@ -1976,6 +2092,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                       <textarea
                         value={block.content}
                         onChange={(e) => handleUpdateBlock(block.id, { content: e.target.value })}
+                        onTouchStart={(e) => e.stopPropagation()}
                         rows={block.type === 'thumbnail_asset' ? 2 : Math.max(4, Math.min(20, block.content.split('\n').length + 1))}
                         className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none resize-none leading-relaxed selection:bg-indigo-900"
                         placeholder={block.type === 'thumbnail_asset' ? "Scene prompt / shot notes..." : "Enter lyrics, chords, or notes..."}
