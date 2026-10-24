@@ -351,10 +351,14 @@ html.light ::-webkit-scrollbar-thumb {
   border-radius: 9999px;
 }
 
-/* Focus Mode: completely hide workspace chrome and ensure edge-to-edge view */
-.focus-mode header,
+/* Compact workspace chrome when Focus Mode is active. */
+.focus-mode header > .workspace-header-actions > :not(.focus-mode-toggle),
 .focus-mode .section-utility-actions,
 .focus-mode .track-header-actions {
+  display: none !important;
+}
+
+.focus-mode header > div:first-child > div > div > button {
   display: none !important;
 }
 

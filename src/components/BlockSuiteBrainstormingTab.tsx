@@ -78,8 +78,8 @@ interface BlockSuiteBrainstormingTabProps {
   onNavigateToTab?: (tab: string) => void;
   onSendToVideoExpress?: (sceneData: { title: string; prompt: string; shotNumber?: string; imageUrl?: string }) => void;
   isDarkMode?: boolean;
-  /** When true, all whiteboard chrome (headers, toolbars, footer) is hidden — canvas only. */
   focusMode?: boolean;
+  onToggleFocusMode?: () => void;
 }
 
 const COLOR_OPTIONS = [
@@ -100,7 +100,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   onNavigateToTab,
   onSendToVideoExpress,
   isDarkMode = true,
-  focusMode = false
+  focusMode = false,
+  onToggleFocusMode
 }) => {
   // Isomorphic BlockSuite View Mode: 'edgeless' (infinite whiteboard) vs 'page' (linear document)
   const [viewMode, setViewMode] = useState<'edgeless' | 'page'>('edgeless');
@@ -1204,221 +1205,239 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   };
 
   return (
-    <div className={`flex flex-col h-full min-h-[550px] bg-slate-950 text-slate-100 overflow-hidden relative ${focusMode ? '' : 'rounded-2xl border border-slate-800/80 shadow-2xl'}`}>
+    <div className={`flex flex-col h-full ${focusMode ? 'min-h-screen rounded-none border-0' : 'min-h-[550px] rounded-2xl border border-slate-800/80'} bg-slate-950 text-slate-100 shadow-2xl overflow-hidden relative`}>
       {/* ========================================================================= */}
       {/* STUDIO HEADER: BLOCKSUITE ISOMORPHIC CONTROLS & STATUS BAR */}
       {/* ========================================================================= */}
-      <div className={`px-4 py-3 bg-slate-900/95 border-b border-slate-800 flex-wrap items-center justify-between gap-3 shrink-0 ${focusMode ? 'hidden' : 'flex'}`}>
-        {/* Left: Studio Branding & Track Selector */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black tracking-wide text-white uppercase font-mono">
-                BlockSuite Brainstorming Canvas
-              </h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                AFFiNE CORE
-              </span>
+      {!focusMode && (
+        <div className="px-4 py-3 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          {/* Left: Studio Branding & Track Selector */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+              <Layers className="w-5 h-5" />
             </div>
-            <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 font-mono">
-              <span>Track:</span>
-              <select
-                value={selectedTrack.id}
-                onChange={(e) => {
-                  const t = tracks.find(trk => trk.id === e.target.value);
-                  if (t) onSelectTrack(t);
-                }}
-                className="bg-slate-850 border border-slate-750 text-indigo-300 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
-              >
-                {tracks.map(t => (
-                  <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                    {t.id}: {t.title} ({t.ep})
-                  </option>
-                ))}
-              </select>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black tracking-wide text-white uppercase font-mono">
+                  BlockSuite Brainstorming Canvas
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  AFFiNE CORE
+                </span>
+              </div>
+              <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 font-mono">
+                <span>Track:</span>
+                <select
+                  value={selectedTrack.id}
+                  onChange={(e) => {
+                    const t = tracks.find(trk => trk.id === e.target.value);
+                    if (t) onSelectTrack(t);
+                  }}
+                  className="bg-slate-850 border border-slate-750 text-indigo-300 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
+                >
+                  {tracks.map(t => (
+                    <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                      {t.id}: {t.title} ({t.ep})
+                    </option>
+                  ))}
+                </select>
 
-              {/* Style / Version Selector for Dual-Style Songs like Every Candle's Victory */}
-              {selectedTrack.versions && selectedTrack.versions.length > 1 && (
-                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
-                  <span className="text-amber-400 font-bold">Style:</span>
-                  <select
-                    value={activeStyleIndex}
-                    onChange={(e) => handleSyncStyleLyricsToWhiteboard(Number(e.target.value))}
-                    className="bg-amber-950/60 border border-amber-600/50 text-amber-200 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
-                  >
-                    {selectedTrack.versions.map((ver, idx) => (
-                      <option key={idx} value={idx} className="bg-slate-900 text-white">
-                        Style {idx + 1}: {ver.version} ({ver.genre || selectedTrack.genre})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => handleSyncStyleLyricsToWhiteboard(activeStyleIndex)}
-                    title="Populate or reload this style's lyrics into whiteboard arrangement cards"
-                    className="px-2 py-0.5 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Sync Style Lyrics</span>
-                  </button>
-                </div>
+                {/* Style / Version Selector for Dual-Style Songs like Every Candle's Victory */}
+                {selectedTrack.versions && selectedTrack.versions.length > 1 && (
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+                    <span className="text-amber-400 font-bold">Style:</span>
+                    <select
+                      value={activeStyleIndex}
+                      onChange={(e) => handleSyncStyleLyricsToWhiteboard(Number(e.target.value))}
+                      className="bg-amber-950/60 border border-amber-600/50 text-amber-200 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
+                    >
+                      {selectedTrack.versions.map((ver, idx) => (
+                        <option key={idx} value={idx} className="bg-slate-900 text-white">
+                          Style {idx + 1}: {ver.version} ({ver.genre || selectedTrack.genre})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleSyncStyleLyricsToWhiteboard(activeStyleIndex)}
+                      title="Populate or reload this style's lyrics into whiteboard arrangement cards"
+                      className="px-2 py-0.5 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Sync Style Lyrics</span>
+                    </button>
+                  </div>
+                )}
+
+                <span className="text-slate-600">•</span>
+                <span>{blocks.length} Blocks</span>
+                <span>•</span>
+                <span>{connectors.length} Connectors</span>
+
+                {/* Nextcloud Fiber Assets Badge Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsNextcloudDrawerOpen(prev => !prev)}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition cursor-pointer ${
+                    isNextcloudDrawerOpen
+                      ? 'bg-sky-600 text-white border-sky-400'
+                      : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border-sky-700/50'
+                  }`}
+                  title="View linked audio, video, image, and stem assets from Nextcloud fiber server"
+                >
+                  <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
+                  <span>Nextcloud Assets ({linkedNextcloudAssets.length})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Isomorphic Mode Switcher (Edgeless Infinite Whiteboard vs Page Document) */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('edgeless');
+                triggerAutoSave(blocks, connectors, 'edgeless');
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                viewMode === 'edgeless'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Edgeless Infinite 2D Spatial Whiteboard (Default)"
+            >
+              <Grid className="w-4 h-4 text-indigo-300" />
+              <span>✦ EDGELESS WHITEBOARD</span>
+              {viewMode === 'edgeless' && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('page');
+                triggerAutoSave(blocks, connectors, 'page');
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                viewMode === 'page'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Linear Document Flow"
+            >
+              <FileText className="w-4 h-4 text-indigo-300" />
+              <span>PAGE DOCUMENT</span>
+            </button>
+          </div>
 
-              <span className="text-slate-600">•</span>
-              <span>{blocks.length} Blocks</span>
-              <span>•</span>
-              <span>{connectors.length} Connectors</span>
+          {/* Right: Actions, Sync Badges & Nextcloud Backups */}
+          <div className="flex items-center flex-wrap gap-2">
+            {/* 3-Song Multi-Comparison Matrix Button */}
+            <button
+              type="button"
+              onClick={() => setIsThreeSongModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-mono font-black transition shadow-lg shadow-amber-950/50 border border-amber-400/40 cursor-pointer"
+              title="Load 3 songs side-by-side with drag & drop comparison into Master version"
+            >
+              <Columns className="w-3.5 h-3.5 text-slate-950" />
+              <span>Compare 3 Songs</span>
+              <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 text-[9px]">
+                MATRIX
+              </span>
+            </button>
 
-              {/* Nextcloud Fiber Assets Badge Button */}
+            {/* Focus Mode Whiteboard Quick Action */}
+            {onToggleFocusMode && (
               <button
                 type="button"
-                onClick={() => setIsNextcloudDrawerOpen(prev => !prev)}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition cursor-pointer ${
-                  isNextcloudDrawerOpen
-                    ? 'bg-sky-600 text-white border-sky-400'
-                    : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border-sky-700/50'
-                }`}
-                title="View linked audio, video, image, and stem assets from Nextcloud fiber server"
+                onClick={onToggleFocusMode}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white text-xs font-mono font-bold transition border border-purple-700/60 shadow-xs cursor-pointer group"
+                title="Enter Fullscreen Focus Mode (Hides all headers & toolbars - press Esc to exit)"
               >
-                <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
-                <span>Nextcloud Assets ({linkedNextcloudAssets.length})</span>
+                <Maximize2 className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Focus Mode</span>
+                <span className="px-1.5 py-0.2 rounded bg-purple-900/90 text-purple-200 text-[9px]">
+                  Z
+                </span>
+              </button>
+            )}
+
+            {/* Whiteboard Guide / Instructions Button */}
+            <button
+              type="button"
+              onClick={() => setIsGuideModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold transition border border-slate-700 cursor-pointer"
+              title="Whiteboard instructions, zoom shortcuts, and 3-song comparison guide"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Instructions</span>
+            </button>
+
+            {/* Firestore Sync Badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  firestoreStatus === 'saved'
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
+                    : firestoreStatus === 'saving'
+                    ? 'bg-amber-400 animate-ping'
+                    : 'bg-rose-500'
+                }`}
+              />
+              <span className="text-slate-300">
+                {firestoreStatus === 'saved' ? `Firestore: Synced` : firestoreStatus === 'saving' ? 'Saving...' : 'Offline'}
+              </span>
+            </div>
+
+            {/* Compile to Lyrics Button */}
+            <button
+              type="button"
+              onClick={handleCompileToLyrics}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer"
+              title="Compile whiteboard arrangement cards into active song lyrics"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Compile to Lyrics</span>
+            </button>
+
+            {/* Backup to Nextcloud Button */}
+            <button
+              type="button"
+              onClick={handleBackupToNextcloud}
+              disabled={isExportingNextcloud}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+              title="Backup Markdown and BlockSuite JSON directly to Nextcloud WebDAV"
+            >
+              <FolderSync className={`w-3.5 h-3.5 ${isExportingNextcloud ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline">Backup Nextcloud</span>
+            </button>
+
+            {/* Export Dropdown */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleDownloadMarkdown}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                title="Download Markdown (.md)"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadJson}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                title="Download BlockSuite JSON (.json)"
+              >
+                <FileText className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
-
-        {/* Center: Isomorphic Mode Switcher (Edgeless Infinite Whiteboard vs Page Document) */}
-        <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('edgeless');
-              triggerAutoSave(blocks, connectors, 'edgeless');
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
-              viewMode === 'edgeless'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Edgeless Infinite 2D Spatial Whiteboard (Default)"
-          >
-            <Grid className="w-4 h-4 text-indigo-300" />
-            <span>✦ EDGELESS WHITEBOARD</span>
-            {viewMode === 'edgeless' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('page');
-              triggerAutoSave(blocks, connectors, 'page');
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
-              viewMode === 'page'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Linear Document Flow"
-          >
-            <FileText className="w-4 h-4 text-indigo-300" />
-            <span>PAGE DOCUMENT</span>
-          </button>
-        </div>
-
-        {/* Right: Actions, Sync Badges & Nextcloud Backups */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* 3-Song Multi-Comparison Matrix Button */}
-          <button
-            type="button"
-            onClick={() => setIsThreeSongModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-mono font-black transition shadow-lg shadow-amber-950/50 border border-amber-400/40 cursor-pointer"
-            title="Load 3 songs side-by-side with drag & drop comparison into Master version"
-          >
-            <Columns className="w-3.5 h-3.5 text-slate-950" />
-            <span>Compare 3 Songs</span>
-            <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 text-[9px]">
-              MATRIX
-            </span>
-          </button>
-
-          {/* Whiteboard Guide / Instructions Button */}
-          <button
-            type="button"
-            onClick={() => setIsGuideModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold transition border border-slate-700 cursor-pointer"
-            title="Whiteboard instructions, zoom shortcuts, and 3-song comparison guide"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Instructions</span>
-          </button>
-
-          {/* Firestore Sync Badge */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                firestoreStatus === 'saved'
-                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
-                  : firestoreStatus === 'saving'
-                  ? 'bg-amber-400 animate-ping'
-                  : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-slate-300">
-              {firestoreStatus === 'saved' ? `Firestore: Synced` : firestoreStatus === 'saving' ? 'Saving...' : 'Offline'}
-            </span>
-          </div>
-
-          {/* Compile to Lyrics Button */}
-          <button
-            type="button"
-            onClick={handleCompileToLyrics}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer"
-            title="Compile whiteboard arrangement cards into active song lyrics"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Compile to Lyrics</span>
-          </button>
-
-          {/* Backup to Nextcloud Button */}
-          <button
-            type="button"
-            onClick={handleBackupToNextcloud}
-            disabled={isExportingNextcloud}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
-            title="Backup Markdown and BlockSuite JSON directly to Nextcloud WebDAV"
-          >
-            <FolderSync className={`w-3.5 h-3.5 ${isExportingNextcloud ? 'animate-spin' : ''}`} />
-            <span className="hidden md:inline">Backup Nextcloud</span>
-          </button>
-
-          {/* Export Dropdown */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleDownloadMarkdown}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-              title="Download Markdown (.md)"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadJson}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-              title="Download BlockSuite JSON (.json)"
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* QUICK START INSTRUCTIONS BANNER */}
-      {showQuickGuideBanner && !focusMode && (
+      {!focusMode && showQuickGuideBanner && (
         <div className="px-4 py-2 bg-gradient-to-r from-indigo-950/90 via-slate-900 to-amber-950/40 border-b border-indigo-500/30 flex items-center justify-between gap-3 text-xs shrink-0 animate-in slide-in-from-top-1 duration-150">
           <div className="flex items-center gap-2 flex-wrap text-slate-300">
             <span className="px-2 py-0.5 rounded bg-indigo-600 text-white font-mono text-[10px] font-bold">
@@ -1463,7 +1482,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       {/* ========================================================================= */}
       {/* SECONDARY TOOLBAR: PALETTE, VIEWPORT & INSERTION */}
       {/* ========================================================================= */}
-      <div className={`px-4 py-2 bg-slate-900/80 border-b border-slate-800/80 flex-wrap items-center justify-between gap-2 text-xs font-mono ${focusMode ? 'hidden' : 'flex'}`}>
+      {!focusMode && (
+        <div className="px-4 py-2 bg-slate-900/80 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
         {/* Left: Quick Insert Block Palette */}
         <div className="flex items-center flex-wrap gap-1.5">
           <span className="text-slate-400 text-[10px] uppercase font-bold mr-1">Insert Block:</span>
@@ -1683,9 +1703,10 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </div>
         )}
       </div>
+      )}
 
       {/* SEARCH RESULTS MATCHES DRAWER (WHEN SEARCH IS ACTIVE) */}
-      {showSearchResultsList && matchingBlocks.length > 0 && (
+      {!focusMode && showSearchResultsList && matchingBlocks.length > 0 && (
         <div className="px-4 py-2 bg-slate-950/95 border-b border-amber-500/30 flex items-center gap-2 overflow-x-auto custom-scrollbar z-30 text-xs font-mono animate-in slide-in-from-top-1 duration-150">
           <span className="text-[10px] uppercase font-bold text-amber-400 shrink-0">Matching Cards:</span>
           {matchingBlocks.map((b, idx) => (
@@ -2505,7 +2526,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       {/* ========================================================================= */}
       {/* FOOTER: STATS & QUICK NAVIGATION SHORTCUTS */}
       {/* ========================================================================= */}
-      <div className={`px-4 py-2 bg-slate-900 border-t border-slate-800 items-center justify-between text-[11px] font-mono text-slate-400 ${focusMode ? 'hidden' : 'flex'}`}>
+      <div className="px-4 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-400">
         <div className="flex items-center gap-3">
           <span>Active Track: <strong className="text-white">{selectedTrack.title}</strong></span>
           <span>•</span>
