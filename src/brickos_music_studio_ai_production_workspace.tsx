@@ -1953,7 +1953,7 @@ export default function BrickOSMusicStudioWorkspace() {
                 </h1>
                 <span 
                   className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-xs font-black border border-indigo-500/40 shadow-xs shadow-indigo-500/10 flex items-center gap-1.5"
-                  title={`Active Studio Revision: ${CURRENT_STUDIO_VERSION} (Fullscreen Focus Mode & Whiteboard Canvas Immersion)`}
+                  title={`Active Studio Revision: ${CURRENT_STUDIO_VERSION} (Whiteboard Verse-to-Verse Audio Snippet Shootout & Section Matrix)`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
                   <span>{CURRENT_STUDIO_VERSION}</span>

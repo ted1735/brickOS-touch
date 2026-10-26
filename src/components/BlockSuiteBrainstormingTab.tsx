@@ -47,7 +47,14 @@ import {
   Radio,
   ExternalLink,
   X,
-  GitCompare
+  GitCompare,
+  Play,
+  Pause,
+  Volume2,
+  FastForward,
+  Rewind,
+  Rows,
+  AlignHorizontalDistributeCenter
 } from 'lucide-react';
 import {
   Track,
@@ -69,6 +76,13 @@ import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { BlockSuiteGuideModal } from './BlockSuiteGuideModal';
 import { BlockSuiteThreeSongComparatorModal } from './BlockSuiteThreeSongComparatorModal';
 import { getSubstantiveLyrics, parseLyricSections, ParsedLyricSection } from '../utils/lyricParser';
+import {
+  sectionSnippetPlayer,
+  getEstimatedSectionTime,
+  getTrackAudioSnippetUrl,
+  formatTimeMMSS,
+  SnippetPlaybackState
+} from '../utils/sectionAudioHelper';
 
 interface BlockSuiteBrainstormingTabProps {
   tracks: Track[];
@@ -364,6 +378,45 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   const linkedNextcloudAssets = useMemo(() => {
     return getTrackNextcloudAssets(selectedTrack.id, selectedTrack.title);
   }, [selectedTrack.id, selectedTrack.title]);
+
+  // Section Audio Snippet Shootout Player State
+  const [playbackState, setPlaybackState] = useState<SnippetPlaybackState>(sectionSnippetPlayer.getState());
+
+  useEffect(() => {
+    const unsub = sectionSnippetPlayer.subscribe((st) => setPlaybackState({ ...st }));
+    return () => unsub();
+  }, []);
+
+  // Helper to play/stop snippet for any card block
+  const handlePlayBlockSnippet = (block: BlockSuiteBlock) => {
+    const blockTag = block.sectionTag || block.title;
+    const isThisPlaying =
+      playbackState.isPlaying &&
+      ((block.audioUrl && playbackState.audioUrl === block.audioUrl && playbackState.currentSectionTag === blockTag) ||
+       (playbackState.currentTrackId === (block.trackId || selectedTrack.id) && playbackState.currentSectionTag === blockTag));
+
+    if (isThisPlaying) {
+      sectionSnippetPlayer.stop();
+      return;
+    }
+
+    const trackObj = tracks.find(t => t.id === block.trackId) || selectedTrack;
+    const styleIdx = block.styleIndex ?? activeStyleIndex;
+    const audioUrl = block.audioUrl || getTrackAudioSnippetUrl(trackObj, styleIdx, block.stemCategory || 'master');
+    const timing = (block.sectionStartTimeSec !== undefined && block.sectionDurationSec !== undefined)
+      ? { startTimeSec: block.sectionStartTimeSec, durationSec: block.sectionDurationSec }
+      : getEstimatedSectionTime(blockTag, block.orderIndex || 0, trackObj.bpm);
+
+    sectionSnippetPlayer.playSnippet({
+      url: audioUrl,
+      trackId: trackObj.id,
+      trackTitle: block.trackTitle || trackObj.title,
+      sectionTag: blockTag,
+      startTimeSec: timing.startTimeSec,
+      durationSec: timing.durationSec,
+      loop: false
+    });
+  };
 
   // Load from Firestore or initialize when selectedTrack changes
   useEffect(() => {
@@ -714,12 +767,12 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     showToast(`Compiled ${targetSections.length} whiteboard sections to active track lyrics!`);
   };
 
-  // Load 3 songs side-by-side into 4 parallel columns: Song A, Song B, Song C, and Master Best Version
+  // Load 3 songs side-by-side: Section Rows (Verse-to-Verse Matrix) or Parallel Columns
   const handleLoadThreeSongsToCanvas = (
     trackA: Track,
     trackB: Track,
     trackC: Track,
-    options?: { styleA?: number; styleB?: number; styleC?: number }
+    options?: { styleA?: number; styleB?: number; styleC?: number; layoutMode?: 'sectionRows' | 'songColumns' }
   ) => {
     const rawA = getSubstantiveLyrics(trackA, options?.styleA);
     const rawB = getSubstantiveLyrics(trackB, options?.styleB);
@@ -729,17 +782,23 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const secB = parseLyricSections(rawB);
     const secC = parseLyricSections(rawC);
 
+    const audioUrlA = getTrackAudioSnippetUrl(trackA, options?.styleA, 'master');
+    const audioUrlB = getTrackAudioSnippetUrl(trackB, options?.styleB, 'master');
+    const audioUrlC = getTrackAudioSnippetUrl(trackC, options?.styleC, 'master');
+    const audioUrlM = getTrackAudioSnippetUrl(selectedTrack, 0, 'master');
+
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
     const timestamp = Date.now();
+    const layout = options?.layoutMode || 'sectionRows';
 
-    // Helper to calculate card height so vertical stacks never collide or overlap
+    // Helper to calculate card height so vertical stacks or matrix rows never collide
     const calcCardHeight = (content: string) => {
       const lineCount = content.split('\n').filter(l => l.trim().length > 0).length;
-      return Math.max(260, 110 + (lineCount * 22));
+      return Math.max(260, 120 + (lineCount * 22));
     };
 
-    // Helper to build column header
+    // Helper to build lane/column header
     const buildColHeader = (
       id: string,
       title: string,
@@ -754,7 +813,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       title,
       subtitle,
       content: actionType === 'copyAll'
-        ? `Drag any section across to Column 4 (Master Lane), or click ★ Copy to Master on any card.\nKey: ${tag} • BPM synced`
+        ? `Drag any section across to Column 4 (Master Lane), click ★ Master to copy, or click ▶ Audition to hear that section.\nKey: ${tag} • BPM synced`
         : `DROP ZONE: Assemble your winning sections here.\nReorder cards vertically, edit lines, then click Compile to lock into ${selectedTrack.title}.`,
       x,
       y: 60,
@@ -764,7 +823,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       orderIndex: 0
     });
 
-    // 1. Column 1: Song A (x = 80, Indigo)
+    // 1. Headers across top
     newBlocks.push(buildColHeader(
       `col_a_${timestamp}`,
       `SONG A • ${trackA.title}`,
@@ -775,26 +834,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'copyAll'
     ));
 
-    let yA = 240;
-    secA.forEach((sec, idx) => {
-      newBlocks.push({
-        id: `blk_a_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `Song A • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
-        content: sec.content,
-        x: 80,
-        y: yA,
-        width: 340,
-        color: 'indigo',
-        sectionTag: sec.tag,
-        tags: ['Song A', trackA.id, sec.cleanTag],
-        orderIndex: idx + 1
-      });
-      yA += calcCardHeight(sec.content) + 24;
-    });
-
-    // 2. Column 2: Song B (x = 460, Emerald)
     newBlocks.push(buildColHeader(
       `col_b_${timestamp}`,
       `SONG B • ${trackB.title}`,
@@ -805,26 +844,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'copyAll'
     ));
 
-    let yB = 240;
-    secB.forEach((sec, idx) => {
-      newBlocks.push({
-        id: `blk_b_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `Song B • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
-        content: sec.content,
-        x: 460,
-        y: yB,
-        width: 340,
-        color: 'emerald',
-        sectionTag: sec.tag,
-        tags: ['Song B', trackB.id, sec.cleanTag],
-        orderIndex: idx + 1
-      });
-      yB += calcCardHeight(sec.content) + 24;
-    });
-
-    // 3. Column 3: Song C (x = 840, Purple)
     newBlocks.push(buildColHeader(
       `col_c_${timestamp}`,
       `SONG C • ${trackC.title}`,
@@ -835,26 +854,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'copyAll'
     ));
 
-    let yC = 240;
-    secC.forEach((sec, idx) => {
-      newBlocks.push({
-        id: `blk_c_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `Song C • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
-        content: sec.content,
-        x: 840,
-        y: yC,
-        width: 340,
-        color: 'purple',
-        sectionTag: sec.tag,
-        tags: ['Song C', trackC.id, sec.cleanTag],
-        orderIndex: idx + 1
-      });
-      yC += calcCardHeight(sec.content) + 24;
-    });
-
-    // 4. Column 4: ★ Master Best Version (x = 1220, Amber)
     newBlocks.push(buildColHeader(
       `col_master_${timestamp}`,
       `★ MASTER BEST VERSION LANE`,
@@ -865,26 +864,282 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'masterHeader'
     ));
 
-    // Populate Master column initially with Song A's or selectedTrack's sections as baseline
-    const baselineSections = secA.length > 0 ? secA : (parseLyricSections(getSubstantiveLyrics(selectedTrack)));
-    let yM = 240;
-    baselineSections.forEach((sec, idx) => {
-      newBlocks.push({
-        id: `blk_m_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `★ Master • ${sec.tag}`,
-        subtitle: `Baseline Draft from ${trackA.title} (${sec.lineCount} lines)`,
-        content: sec.content,
-        x: 1220,
-        y: yM,
-        width: 380,
-        color: 'amber',
-        sectionTag: sec.tag,
-        tags: ['Master', 'Active', sec.cleanTag],
-        orderIndex: idx + 1
+    // LAYOUT MODE 1: VERSE-TO-VERSE MATRIX (SECTION ROWS) - Aligns Verse 1 to Verse 1 horizontally
+    if (layout === 'sectionRows') {
+      // Gather unique tags across songs in order of appearance
+      const uniqueTags: string[] = [];
+      const seenClean = new Set<string>();
+      [...secA, ...secB, ...secC].forEach(s => {
+        const clean = s.cleanTag.toLowerCase();
+        if (!seenClean.has(clean)) {
+          seenClean.add(clean);
+          uniqueTags.push(s.tag);
+        }
       });
-      yM += calcCardHeight(sec.content) + 24;
-    });
+
+      let currentY = 240;
+
+      uniqueTags.forEach((tag, rIdx) => {
+        const clean = tag.replace(/[[\]]/g, '').trim().toLowerCase();
+        const sA = secA.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+        const sB = secB.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+        const sC = secC.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+
+        const idxA = sA ? secA.indexOf(sA) : rIdx;
+        const idxB = sB ? secB.indexOf(sB) : rIdx;
+        const idxC = sC ? secC.indexOf(sC) : rIdx;
+
+        const timeA = getEstimatedSectionTime(tag, idxA, trackA.bpm);
+        const timeB = getEstimatedSectionTime(tag, idxB, trackB.bpm);
+        const timeC = getEstimatedSectionTime(tag, idxC, trackC.bpm);
+
+        const hA = sA ? calcCardHeight(sA.content) : 220;
+        const hB = sB ? calcCardHeight(sB.content) : 220;
+        const hC = sC ? calcCardHeight(sC.content) : 220;
+        const rowMaxH = Math.max(hA, hB, hC, 240);
+
+        let prevRowBlockId: string | null = null;
+
+        // Song A card
+        if (sA) {
+          const blkIdA = `blk_a_${rIdx}_${timestamp}`;
+          newBlocks.push({
+            id: blkIdA,
+            type: 'song_section',
+            title: `Song A • ${tag}`,
+            subtitle: `Row #${rIdx + 1} (${sA.lineCount} lines • ${sA.charCount} chars)`,
+            content: sA.content,
+            x: 80,
+            y: currentY,
+            width: 340,
+            color: 'indigo',
+            sectionTag: tag,
+            tags: ['Song A', trackA.id, sA.cleanTag],
+            audioUrl: audioUrlA,
+            trackId: trackA.id,
+            trackTitle: trackA.title,
+            styleIndex: options?.styleA ?? 0,
+            sectionStartTimeSec: timeA.startTimeSec,
+            sectionDurationSec: timeA.durationSec,
+            stemCategory: 'master',
+            orderIndex: rIdx + 1
+          });
+          prevRowBlockId = blkIdA;
+        }
+
+        // Song B card
+        if (sB) {
+          const blkIdB = `blk_b_${rIdx}_${timestamp}`;
+          newBlocks.push({
+            id: blkIdB,
+            type: 'song_section',
+            title: `Song B • ${tag}`,
+            subtitle: `Row #${rIdx + 1} (${sB.lineCount} lines • ${sB.charCount} chars)`,
+            content: sB.content,
+            x: 460,
+            y: currentY,
+            width: 340,
+            color: 'emerald',
+            sectionTag: tag,
+            tags: ['Song B', trackB.id, sB.cleanTag],
+            audioUrl: audioUrlB,
+            trackId: trackB.id,
+            trackTitle: trackB.title,
+            styleIndex: options?.styleB ?? 0,
+            sectionStartTimeSec: timeB.startTimeSec,
+            sectionDurationSec: timeB.durationSec,
+            stemCategory: 'master',
+            orderIndex: rIdx + 1
+          });
+
+          if (prevRowBlockId) {
+            newConnectors.push({
+              id: `conn_cmp_${prevRowBlockId}_${blkIdB}`,
+              sourceBlockId: prevRowBlockId,
+              targetBlockId: blkIdB,
+              label: 'vs',
+              color: '#06b6d4'
+            });
+          }
+          prevRowBlockId = blkIdB;
+        }
+
+        // Song C card
+        if (sC) {
+          const blkIdC = `blk_c_${rIdx}_${timestamp}`;
+          newBlocks.push({
+            id: blkIdC,
+            type: 'song_section',
+            title: `Song C • ${tag}`,
+            subtitle: `Row #${rIdx + 1} (${sC.lineCount} lines • ${sC.charCount} chars)`,
+            content: sC.content,
+            x: 840,
+            y: currentY,
+            width: 340,
+            color: 'purple',
+            sectionTag: tag,
+            tags: ['Song C', trackC.id, sC.cleanTag],
+            audioUrl: audioUrlC,
+            trackId: trackC.id,
+            trackTitle: trackC.title,
+            styleIndex: options?.styleC ?? 0,
+            sectionStartTimeSec: timeC.startTimeSec,
+            sectionDurationSec: timeC.durationSec,
+            stemCategory: 'master',
+            orderIndex: rIdx + 1
+          });
+
+          if (prevRowBlockId) {
+            newConnectors.push({
+              id: `conn_cmp_${prevRowBlockId}_${blkIdC}`,
+              sourceBlockId: prevRowBlockId,
+              targetBlockId: blkIdC,
+              label: 'vs',
+              color: '#a855f7'
+            });
+          }
+        }
+
+        // Master Lane Target Card (Row #${rIdx + 1})
+        const blkIdM = `blk_m_${rIdx}_${timestamp}`;
+        const defaultContent = sA?.content || sB?.content || sC?.content || `[${tag} assembled master text]`;
+        newBlocks.push({
+          id: blkIdM,
+          type: 'song_section',
+          title: `★ Master • ${tag}`,
+          subtitle: `Row #${rIdx + 1} Baseline Synthesis`,
+          content: defaultContent,
+          x: 1220,
+          y: currentY,
+          width: 380,
+          color: 'amber',
+          sectionTag: tag,
+          tags: ['Master', 'Active', clean],
+          audioUrl: audioUrlM,
+          trackId: selectedTrack.id,
+          trackTitle: selectedTrack.title,
+          styleIndex: 0,
+          sectionStartTimeSec: timeA.startTimeSec,
+          sectionDurationSec: timeA.durationSec,
+          stemCategory: 'master',
+          orderIndex: rIdx + 1
+        });
+
+        currentY += rowMaxH + 36;
+      });
+
+    } else {
+      // LAYOUT MODE 2: PARALLEL SONG COLUMNS
+      let yA = 240;
+      secA.forEach((sec, idx) => {
+        const timeA = getEstimatedSectionTime(sec.tag, idx, trackA.bpm);
+        newBlocks.push({
+          id: `blk_a_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `Song A • ${sec.tag}`,
+          subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
+          content: sec.content,
+          x: 80,
+          y: yA,
+          width: 340,
+          color: 'indigo',
+          sectionTag: sec.tag,
+          tags: ['Song A', trackA.id, sec.cleanTag],
+          audioUrl: audioUrlA,
+          trackId: trackA.id,
+          trackTitle: trackA.title,
+          styleIndex: options?.styleA ?? 0,
+          sectionStartTimeSec: timeA.startTimeSec,
+          sectionDurationSec: timeA.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yA += calcCardHeight(sec.content) + 24;
+      });
+
+      let yB = 240;
+      secB.forEach((sec, idx) => {
+        const timeB = getEstimatedSectionTime(sec.tag, idx, trackB.bpm);
+        newBlocks.push({
+          id: `blk_b_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `Song B • ${sec.tag}`,
+          subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
+          content: sec.content,
+          x: 460,
+          y: yB,
+          width: 340,
+          color: 'emerald',
+          sectionTag: sec.tag,
+          tags: ['Song B', trackB.id, sec.cleanTag],
+          audioUrl: audioUrlB,
+          trackId: trackB.id,
+          trackTitle: trackB.title,
+          styleIndex: options?.styleB ?? 0,
+          sectionStartTimeSec: timeB.startTimeSec,
+          sectionDurationSec: timeB.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yB += calcCardHeight(sec.content) + 24;
+      });
+
+      let yC = 240;
+      secC.forEach((sec, idx) => {
+        const timeC = getEstimatedSectionTime(sec.tag, idx, trackC.bpm);
+        newBlocks.push({
+          id: `blk_c_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `Song C • ${sec.tag}`,
+          subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
+          content: sec.content,
+          x: 840,
+          y: yC,
+          width: 340,
+          color: 'purple',
+          sectionTag: sec.tag,
+          tags: ['Song C', trackC.id, sec.cleanTag],
+          audioUrl: audioUrlC,
+          trackId: trackC.id,
+          trackTitle: trackC.title,
+          styleIndex: options?.styleC ?? 0,
+          sectionStartTimeSec: timeC.startTimeSec,
+          sectionDurationSec: timeC.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yC += calcCardHeight(sec.content) + 24;
+      });
+
+      // Master column initially with Song A or selectedTrack sections
+      const baselineSections = secA.length > 0 ? secA : (parseLyricSections(getSubstantiveLyrics(selectedTrack)));
+      let yM = 240;
+      baselineSections.forEach((sec, idx) => {
+        const timeM = getEstimatedSectionTime(sec.tag, idx, selectedTrack.bpm);
+        newBlocks.push({
+          id: `blk_m_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `★ Master • ${sec.tag}`,
+          subtitle: `Baseline Draft from ${trackA.title} (${sec.lineCount} lines)`,
+          content: sec.content,
+          x: 1220,
+          y: yM,
+          width: 380,
+          color: 'amber',
+          sectionTag: sec.tag,
+          tags: ['Master', 'Active', sec.cleanTag],
+          audioUrl: audioUrlM,
+          trackId: selectedTrack.id,
+          trackTitle: selectedTrack.title,
+          styleIndex: 0,
+          sectionStartTimeSec: timeM.startTimeSec,
+          sectionDurationSec: timeM.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yM += calcCardHeight(sec.content) + 24;
+      });
+    }
 
     setBlocks(newBlocks);
     setConnectors(newConnectors);
@@ -895,7 +1150,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       handleFitToContent();
     }, 150);
 
-    showToast(`Loaded 3 songs in full (${secA.length} sections for ${trackA.title}, ${secB.length} for ${trackB.title}, ${secC.length} for ${trackC.title})!`, 'success');
+    const layoutDesc = layout === 'sectionRows' ? 'Verse-to-Verse Section Matrix' : 'Parallel 4-Column Board';
+    showToast(`Loaded 3 songs in ${layoutDesc} with Audio Snippet Shootout (${secA.length} for ${trackA.title}, ${secB.length} for ${trackB.title}, ${secC.length} for ${trackC.title})!`, 'success');
   };
 
   // 1-Click Copy any section into Master Column
@@ -1994,6 +2250,96 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                         </div>
                       )}
 
+                      {/* Interactive Audio Snippet Audition Bar for Song Section Cards */}
+                      {block.type === 'song_section' && (() => {
+                        const blockTag = block.sectionTag || block.title;
+                        const isCardSnippetPlaying =
+                          playbackState.isPlaying &&
+                          ((block.audioUrl && playbackState.audioUrl === block.audioUrl && playbackState.currentSectionTag === blockTag) ||
+                           (playbackState.currentTrackId === (block.trackId || selectedTrack.id) && playbackState.currentSectionTag === blockTag));
+
+                        const timing = (block.sectionStartTimeSec !== undefined && block.sectionDurationSec !== undefined)
+                          ? { startTimeSec: block.sectionStartTimeSec, durationSec: block.sectionDurationSec }
+                          : getEstimatedSectionTime(blockTag, block.orderIndex || 0, selectedTrack.bpm);
+
+                        return (
+                          <div className={`flex items-center justify-between gap-1.5 p-1.5 rounded-lg border text-xs font-mono transition-all ${
+                            isCardSnippetPlaying
+                              ? 'bg-amber-950/50 border-amber-500/80 shadow-md shadow-amber-950/60 ring-1 ring-amber-400/50'
+                              : 'bg-slate-950/70 border-slate-800/80'
+                          }`}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePlayBlockSnippet(block);
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer shrink-0 ${
+                                  isCardSnippetPlaying
+                                    ? 'bg-amber-500 text-slate-950 font-black animate-pulse shadow-sm shadow-amber-500/50'
+                                    : 'bg-indigo-600/90 hover:bg-indigo-500 text-white'
+                                }`}
+                                title={isCardSnippetPlaying ? "Pause Audio Snippet" : "Audition Audio Snippet for this section"}
+                              >
+                                {isCardSnippetPlaying ? (
+                                  <>
+                                    <Pause className="w-2.5 h-2.5" />
+                                    <span>Pause</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="w-2.5 h-2.5 fill-current" />
+                                    <span>Audition</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <span className="text-[10px] font-mono text-slate-300 truncate">
+                                {formatTimeMMSS(timing.startTimeSec)} - {formatTimeMMSS(timing.startTimeSec + timing.durationSec)}
+                              </span>
+                            </div>
+
+                            {/* Live Playing Waveform Indicator or Track hint */}
+                            {isCardSnippetPlaying ? (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <div className="flex items-end gap-0.5 h-3 px-1">
+                                  <span className="w-0.5 h-2 bg-emerald-400 animate-bounce" />
+                                  <span className="w-0.5 h-3 bg-amber-400 animate-bounce [animation-delay:150ms]" />
+                                  <span className="w-0.5 h-1.5 bg-indigo-400 animate-bounce [animation-delay:300ms]" />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sectionSnippetPlayer.nudge(-5);
+                                  }}
+                                  className="px-1 py-0.2 rounded bg-slate-800 text-[9px] text-slate-300 hover:text-white"
+                                  title="Rewind 5s"
+                                >
+                                  -5s
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sectionSnippetPlayer.nudge(5);
+                                  }}
+                                  className="px-1 py-0.2 rounded bg-slate-800 text-[9px] text-slate-300 hover:text-white"
+                                  title="Forward 5s"
+                                >
+                                  +5s
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[9px] text-slate-500 font-mono truncate max-w-[110px]">
+                                {block.trackTitle || selectedTrack.title}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       <textarea
                         value={block.content}
                         onChange={(e) => handleUpdateBlock(block.id, { content: e.target.value })}
@@ -2148,6 +2494,105 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 <span className="text-slate-500">Wheel: Zoom • Drag: Pan</span>
               </div>
             </div>
+
+            {/* FLOATING WHITEBOARD SECTION SHOOTOUT DECK */}
+            {playbackState.isPlaying && (
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-amber-500/70 rounded-2xl p-3 shadow-2xl backdrop-blur-xl flex items-center gap-3 text-xs font-mono ring-2 ring-amber-500/30 animate-in slide-in-from-bottom duration-200 flex-wrap sm:flex-nowrap">
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-amber-300 font-black text-xs">Section Shootout:</span>
+                      <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 text-[10px] font-bold">
+                        {playbackState.currentSectionTag}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-300 truncate max-w-[180px]">
+                      {playbackState.currentTrackTitle}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fast 3-Way Shootout Version Switcher */}
+                {blocks.some(b => b.tags?.includes('Song A') || b.tags?.includes('Song B') || b.tags?.includes('Song C')) && (
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+                    <span className="text-[10px] text-slate-400 px-1 font-bold">Audition:</span>
+                    {(['Song A', 'Song B', 'Song C'] as const).map((laneKey) => {
+                      const matchBlock = blocks.find(
+                        b => b.tags?.includes(laneKey) &&
+                        (b.sectionTag === playbackState.currentSectionTag || b.title.includes(playbackState.currentSectionTag))
+                      );
+                      if (!matchBlock) return null;
+                      const isActive = playbackState.currentTrackId === matchBlock.trackId;
+                      const btnColor = laneKey === 'Song A' ? 'text-indigo-400' : laneKey === 'Song B' ? 'text-emerald-400' : 'text-purple-400';
+                      return (
+                        <button
+                          key={laneKey}
+                          type="button"
+                          onClick={() => handlePlayBlockSnippet(matchBlock)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            isActive
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-xs ring-1 ring-amber-300'
+                              : `bg-slate-900 hover:bg-slate-850 ${btnColor} border border-slate-800`
+                          }`}
+                          title={`Instantly audition ${laneKey} for this section`}
+                        >
+                          <Play className="w-2.5 h-2.5" />
+                          <span>{laneKey}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Progress, Nudge & Loop Controls */}
+                <div className="flex items-center gap-2 border-l border-slate-800 pl-2 shrink-0">
+                  <span className="text-slate-300 font-mono text-[11px] min-w-[70px]">
+                    {formatTimeMMSS(playbackState.currentSec)} / {formatTimeMMSS(playbackState.durationSec)}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.nudge(-5)}
+                    className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] font-bold"
+                    title="Rewind 5s"
+                  >
+                    -5s
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.nudge(5)}
+                    className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] font-bold"
+                    title="Forward 5s"
+                  >
+                    +5s
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.toggleLoop()}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                      playbackState.isLooping
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}
+                    title="Toggle Loop"
+                  >
+                    Loop
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.stop()}
+                    className="p-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white cursor-pointer ml-1"
+                    title="Stop Audition"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* ===================================================================== */

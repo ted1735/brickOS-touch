@@ -808,6 +808,13 @@ export interface BlockSuiteBlock {
   aspectRatio?: '16:9' | '9:16' | '1:1' | string;
   assetId?: string; // Studio visual asset ID link
   shotNumber?: string;
+  audioUrl?: string; // Audio snippet stream URL (from track master or stems)
+  trackId?: string; // Associated track ID (e.g. TRK-01)
+  trackTitle?: string; // Associated track title (e.g. Meet Me Here)
+  styleIndex?: number; // Version / style index
+  sectionStartTimeSec?: number; // Estimated / customized start time in seconds (e.g. 15 for Verse 1)
+  sectionDurationSec?: number; // Duration of snippet in seconds (e.g. 25)
+  stemCategory?: 'master' | 'vocal' | 'instrumental';
 }
 
 export interface WhiteboardCanvasDoc {
