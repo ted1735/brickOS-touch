@@ -48,7 +48,11 @@ import {
   Radio,
   ExternalLink,
   X,
-  GitCompare
+  GitCompare,
+  Play,
+  Pause,
+  Repeat,
+  Volume2
 } from 'lucide-react';
 import {
   Track,
@@ -66,7 +70,7 @@ import {
   isFirebaseConfigured
 } from '../lib/firebase';
 import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
-import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
+import { getTrackNextcloudAssets, getTrackStems } from '../data/nextcloudAssetIndex';
 import { BlockSuiteGuideModal } from './BlockSuiteGuideModal';
 import { BlockSuiteThreeSongComparatorModal } from './BlockSuiteThreeSongComparatorModal';
 import { getSubstantiveLyrics, parseLyricSections, ParsedLyricSection } from '../utils/lyricParser';
@@ -92,6 +96,39 @@ const COLOR_OPTIONS = [
   { id: 'purple', name: 'Purple / Suno', border: 'border-purple-500/60', bg: 'bg-purple-950/80', text: 'text-purple-300', hex: '#a855f7' },
   { id: 'slate', name: 'Slate / Note', border: 'border-slate-700', bg: 'bg-slate-900/90', text: 'text-slate-300', hex: '#64748b' }
 ];
+
+// Format time in mm:ss for audio snippets
+const formatSnippetTime = (secs: number = 0): string => {
+  if (isNaN(secs) || secs < 0) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+// Estimate section cue window (startTime and endTime) based on arrangement tag and position
+const estimateSectionTimings = (
+  sectionIndex: number,
+  tag: string,
+  totalSections: number,
+  approxSongDuration: number = 210
+): { startTime: number; endTime: number } => {
+  const lower = (tag || '').toLowerCase();
+  
+  if (lower.includes('intro')) return { startTime: 0, endTime: 16 };
+  if (lower.includes('verse 1') || (lower.includes('verse') && sectionIndex === 0)) return { startTime: 16, endTime: 46 };
+  if (lower.includes('pre-chorus 1') || (lower.includes('pre') && sectionIndex <= 2)) return { startTime: 46, endTime: 62 };
+  if (lower.includes('chorus 1') || (lower.includes('chorus') && sectionIndex <= 3)) return { startTime: 62, endTime: 92 };
+  if (lower.includes('verse 2')) return { startTime: 92, endTime: 122 };
+  if (lower.includes('pre-chorus 2')) return { startTime: 122, endTime: 138 };
+  if (lower.includes('chorus 2')) return { startTime: 138, endTime: 168 };
+  if (lower.includes('bridge') || lower.includes('drop') || lower.includes('breakdown')) return { startTime: 168, endTime: 198 };
+  if (lower.includes('chorus 3') || lower.includes('final chorus')) return { startTime: 198, endTime: 228 };
+  if (lower.includes('outro') || lower.includes('tag')) return { startTime: 228, endTime: 248 };
+
+  const slice = Math.max(20, Math.floor(approxSongDuration / Math.max(1, totalSections)));
+  const start = Math.floor(sectionIndex * slice);
+  return { startTime: start, endTime: Math.floor(start + slice) };
+};
 
 export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProps> = ({
   tracks,
@@ -238,6 +275,189 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     panToBlock(matchingBlocks[prevIdx].id);
   };
 
+  // ========================================================
+  // Non-Destructive Lyric Audio Snippet Player Engine
+  // ========================================================
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingBlockId, setPlayingBlockId] = useState<string | null>(null);
+  const [currentPlayTime, setCurrentPlayTime] = useState<number>(0);
+  const playheadAnimRef = useRef<number | null>(null);
+
+  // Toggle play/pause for a section block
+  const handleTogglePlaySnippet = (block: BlockSuiteBlock) => {
+    if (playingBlockId === block.id) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (playheadAnimRef.current) {
+        cancelAnimationFrame(playheadAnimRef.current);
+      }
+      setPlayingBlockId(null);
+      return;
+    }
+
+    if (!block.audioUrl) {
+      showToast('No audio source mapped to this card. Check track master WAV.', 'warning');
+      return;
+    }
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.crossOrigin = 'anonymous';
+      audioRef.current.preload = 'auto';
+    }
+
+    const currentSrc = (audioRef.current as any)._loadedUrl;
+    if (currentSrc !== block.audioUrl) {
+      (audioRef.current as any)._loadedUrl = block.audioUrl;
+      audioRef.current.src = block.audioUrl;
+      audioRef.current.load();
+    }
+
+    const start = block.startTime || 0;
+    audioRef.current.currentTime = start;
+    setCurrentPlayTime(start);
+    setPlayingBlockId(block.id);
+
+    audioRef.current.play().catch(err => {
+      console.warn('Playback start note:', err);
+      showToast('Tap again to enable browser audio stream', 'info');
+    });
+  };
+
+  // Toggle looping for a block
+  const handleToggleLoopBlock = (blockId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const nextLoop = !block.isAudioLooping;
+    handleUpdateBlock(blockId, { isAudioLooping: nextLoop });
+    showToast(nextLoop ? 'Section loop enabled' : 'Section loop disabled', 'info');
+  };
+
+  // Micro-nudge start or end cue points
+  const handleNudgeCue = (blockId: string, cue: 'start' | 'end', delta: number) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    let newStart = block.startTime ?? 0;
+    let newEnd = block.endTime ?? (newStart + 30);
+
+    if (cue === 'start') {
+      newStart = Math.max(0, Math.round((newStart + delta) * 10) / 10);
+      if (newStart >= newEnd) newStart = Math.max(0, newEnd - 1);
+      handleUpdateBlock(blockId, { startTime: newStart });
+      if (playingBlockId === blockId && audioRef.current) {
+        if (audioRef.current.currentTime < newStart) {
+          audioRef.current.currentTime = newStart;
+          setCurrentPlayTime(newStart);
+        }
+      }
+    } else {
+      newEnd = Math.max(newStart + 1, Math.round((newEnd + delta) * 10) / 10);
+      handleUpdateBlock(blockId, { endTime: newEnd });
+      if (playingBlockId === blockId && audioRef.current) {
+        if (audioRef.current.currentTime >= newEnd) {
+          audioRef.current.currentTime = newStart;
+          setCurrentPlayTime(newStart);
+        }
+      }
+    }
+  };
+
+  // Scrub inside snippet window
+  const handleScrubSnippet = (e: React.MouseEvent<HTMLDivElement>, block: BlockSuiteBlock) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    const start = block.startTime ?? 0;
+    const end = block.endTime ?? (start + 30);
+    const targetTime = Math.round((start + (pct * (end - start))) * 10) / 10;
+
+    if (audioRef.current && playingBlockId === block.id) {
+      audioRef.current.currentTime = targetTime;
+      setCurrentPlayTime(targetTime);
+    } else {
+      if (!block.audioUrl) return;
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+        audioRef.current.crossOrigin = 'anonymous';
+        audioRef.current.preload = 'auto';
+      }
+      const currentSrc = (audioRef.current as any)._loadedUrl;
+      if (currentSrc !== block.audioUrl) {
+        (audioRef.current as any)._loadedUrl = block.audioUrl;
+        audioRef.current.src = block.audioUrl;
+        audioRef.current.load();
+      }
+      audioRef.current.currentTime = targetTime;
+      setCurrentPlayTime(targetTime);
+      setPlayingBlockId(block.id);
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  // Active playhead animation loop and boundary checking
+  useEffect(() => {
+    if (!playingBlockId) {
+      if (playheadAnimRef.current) {
+        cancelAnimationFrame(playheadAnimRef.current);
+      }
+      return;
+    }
+
+    const activeBlock = blocks.find(b => b.id === playingBlockId);
+    if (!activeBlock) {
+      setPlayingBlockId(null);
+      return;
+    }
+
+    const start = activeBlock.startTime ?? 0;
+    const end = activeBlock.endTime ?? (start + 30);
+
+    const monitorLoop = () => {
+      if (!audioRef.current) return;
+
+      const current = audioRef.current.currentTime;
+      setCurrentPlayTime(current);
+
+      if (current >= end) {
+        if (activeBlock.isAudioLooping) {
+          audioRef.current.currentTime = start;
+          audioRef.current.play().catch(() => {});
+        } else {
+          audioRef.current.pause();
+          audioRef.current.currentTime = start;
+          setPlayingBlockId(null);
+          setCurrentPlayTime(start);
+          return;
+        }
+      }
+
+      playheadAnimRef.current = requestAnimationFrame(monitorLoop);
+    };
+
+    playheadAnimRef.current = requestAnimationFrame(monitorLoop);
+
+    return () => {
+      if (playheadAnimRef.current) {
+        cancelAnimationFrame(playheadAnimRef.current);
+      }
+    };
+  }, [playingBlockId, blocks]);
+
+  // Audio cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      if (playheadAnimRef.current) {
+        cancelAnimationFrame(playheadAnimRef.current);
+      }
+    };
+  }, []);
+
   // Helper to generate default blocks from track lyrics (and specific style/version)
   const generateInitialBlocksFromTrack = (
     track: Track,
@@ -248,6 +468,9 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const parsedSections = parseLyricSections(rawLyrics);
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
+
+    const stems = getTrackStems(track);
+    const defaultAudioUrl = track.audioUrl || stems.find(s => s.stemType === 'master')?.audioUrl || stems[0]?.audioUrl || '';
 
     let currentX = 120;
     let currentY = 100;
@@ -285,6 +508,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         else if (lowerTag.includes('intro') || lowerTag.includes('outro') || lowerTag.includes('tag')) color = 'purple';
         else if (lowerTag.includes('stop') || lowerTag.includes('silence')) color = 'slate';
 
+        const timings = estimateSectionTimings(index, tag, parsedSections.length);
         const blockId = `block_${index + 1}_${Date.now()}`;
         const newBlock: BlockSuiteBlock = {
           id: blockId,
@@ -298,7 +522,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           color,
           sectionTag: tag,
           tags: ['Lyrics', tag.replace(/[[\]]/g, '')],
-          orderIndex: index + 1
+          orderIndex: index + 1,
+          audioUrl: defaultAudioUrl,
+          startTime: timings.startTime,
+          endTime: timings.endTime,
+          trackId: track.id,
+          trackTitle: track.title,
+          isAudioLooping: false
         };
         newBlocks.push(newBlock);
 
@@ -317,7 +547,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         currentX += 380;
         if (currentX > 1700) {
           currentX = 120;
-          currentY += 440;
+          currentY += 460;
         }
       });
     } else {
@@ -541,6 +771,9 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     let color = 'indigo';
     let width = 320;
     let sectionTag: string | undefined = undefined;
+    let audioUrl: string | undefined = undefined;
+    let startTime: number | undefined = undefined;
+    let endTime: number | undefined = undefined;
 
     if (type === 'song_section') {
       const sectionCount = blocks.filter(b => b.type === 'song_section').length;
@@ -548,6 +781,11 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       content = 'Write lyrics and arrangement notes here...';
       color = sectionCount % 2 === 0 ? 'indigo' : 'cyan';
       sectionTag = title;
+      const stems = getTrackStems(selectedTrack);
+      audioUrl = selectedTrack.audioUrl || stems.find(s => s.stemType === 'master')?.audioUrl || stems[0]?.audioUrl || '';
+      const timings = estimateSectionTimings(sectionCount, title, sectionCount + 1);
+      startTime = timings.startTime;
+      endTime = timings.endTime;
     } else if (type === 'sticky_note') {
       title = 'Idea / Sticky Note';
       content = 'Record fleeting melodic hooks, rhyme ideas, or transition notes.';
@@ -590,7 +828,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       width,
       color,
       sectionTag,
-      orderIndex: blocks.length
+      orderIndex: blocks.length,
+      audioUrl: type === 'song_section' ? audioUrl : undefined,
+      startTime: type === 'song_section' ? startTime : undefined,
+      endTime: type === 'song_section' ? endTime : undefined,
+      trackId: selectedTrack.id,
+      trackTitle: selectedTrack.title,
+      isAudioLooping: false
     };
 
     const updated = [...blocks, newBlock];
@@ -737,10 +981,19 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const newConnectors: BlockSuiteConnector[] = [];
     const timestamp = Date.now();
 
+    const stemsA = getTrackStems(trackA);
+    const audioUrlA = trackA.audioUrl || stemsA.find(s => s.stemType === 'master')?.audioUrl || stemsA[0]?.audioUrl || '';
+
+    const stemsB = getTrackStems(trackB);
+    const audioUrlB = trackB.audioUrl || stemsB.find(s => s.stemType === 'master')?.audioUrl || stemsB[0]?.audioUrl || '';
+
+    const stemsC = getTrackStems(trackC);
+    const audioUrlC = trackC.audioUrl || stemsC.find(s => s.stemType === 'master')?.audioUrl || stemsC[0]?.audioUrl || '';
+
     // Helper to calculate card height so vertical stacks never collide or overlap
     const calcCardHeight = (content: string) => {
       const lineCount = content.split('\n').filter(l => l.trim().length > 0).length;
-      return Math.max(260, 110 + (lineCount * 22));
+      return Math.max(340, 180 + (lineCount * 22));
     };
 
     // Helper to build column header
@@ -781,6 +1034,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
     let yA = 240;
     secA.forEach((sec, idx) => {
+      const timings = estimateSectionTimings(idx, sec.tag, secA.length);
       newBlocks.push({
         id: `blk_a_${idx}_${timestamp}`,
         type: 'song_section',
@@ -793,7 +1047,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         color: 'indigo',
         sectionTag: sec.tag,
         tags: ['Song A', trackA.id, sec.cleanTag],
-        orderIndex: idx + 1
+        orderIndex: idx + 1,
+        audioUrl: audioUrlA,
+        startTime: timings.startTime,
+        endTime: timings.endTime,
+        trackId: trackA.id,
+        trackTitle: trackA.title,
+        isAudioLooping: false
       });
       yA += calcCardHeight(sec.content) + 24;
     });
@@ -811,6 +1071,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
     let yB = 240;
     secB.forEach((sec, idx) => {
+      const timings = estimateSectionTimings(idx, sec.tag, secB.length);
       newBlocks.push({
         id: `blk_b_${idx}_${timestamp}`,
         type: 'song_section',
@@ -823,7 +1084,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         color: 'emerald',
         sectionTag: sec.tag,
         tags: ['Song B', trackB.id, sec.cleanTag],
-        orderIndex: idx + 1
+        orderIndex: idx + 1,
+        audioUrl: audioUrlB,
+        startTime: timings.startTime,
+        endTime: timings.endTime,
+        trackId: trackB.id,
+        trackTitle: trackB.title,
+        isAudioLooping: false
       });
       yB += calcCardHeight(sec.content) + 24;
     });
@@ -841,6 +1108,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
 
     let yC = 240;
     secC.forEach((sec, idx) => {
+      const timings = estimateSectionTimings(idx, sec.tag, secC.length);
       newBlocks.push({
         id: `blk_c_${idx}_${timestamp}`,
         type: 'song_section',
@@ -853,7 +1121,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         color: 'purple',
         sectionTag: sec.tag,
         tags: ['Song C', trackC.id, sec.cleanTag],
-        orderIndex: idx + 1
+        orderIndex: idx + 1,
+        audioUrl: audioUrlC,
+        startTime: timings.startTime,
+        endTime: timings.endTime,
+        trackId: trackC.id,
+        trackTitle: trackC.title,
+        isAudioLooping: false
       });
       yC += calcCardHeight(sec.content) + 24;
     });
@@ -873,6 +1147,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const baselineSections = secA.length > 0 ? secA : (parseLyricSections(getSubstantiveLyrics(selectedTrack)));
     let yM = 240;
     baselineSections.forEach((sec, idx) => {
+      const timings = estimateSectionTimings(idx, sec.tag, baselineSections.length);
       newBlocks.push({
         id: `blk_m_${idx}_${timestamp}`,
         type: 'song_section',
@@ -885,7 +1160,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         color: 'amber',
         sectionTag: sec.tag,
         tags: ['Master', 'Active', sec.cleanTag],
-        orderIndex: idx + 1
+        orderIndex: idx + 1,
+        audioUrl: audioUrlA,
+        startTime: timings.startTime,
+        endTime: timings.endTime,
+        trackId: trackA.id,
+        trackTitle: trackA.title,
+        isAudioLooping: false
       });
       yM += calcCardHeight(sec.content) + 24;
     });
@@ -921,7 +1202,13 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       color: 'amber',
       sectionTag: sourceBlock.sectionTag || sourceBlock.title.replace(/Song [ABC] • /, ''),
       tags: ['Master', 'Active', sourceBlock.sectionTag || 'Section'],
-      orderIndex: masterBlocks.length + 1
+      orderIndex: masterBlocks.length + 1,
+      audioUrl: sourceBlock.audioUrl,
+      startTime: sourceBlock.startTime,
+      endTime: sourceBlock.endTime,
+      trackId: sourceBlock.trackId,
+      trackTitle: sourceBlock.trackTitle,
+      isAudioLooping: sourceBlock.isAudioLooping
     };
 
     const updated = [...blocks, newBlock];
@@ -1912,6 +2199,15 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 const isSourceSection = !isMasterBlock && block.type === 'song_section';
                 const isMasterHeader = isMasterBlock && block.tags?.includes('Header');
 
+                const isPlayingThisBlock = playingBlockId === block.id;
+                const startCue = block.startTime ?? 0;
+                const endCue = block.endTime ?? (startCue + 30);
+                const snippetDuration = Math.max(0.1, endCue - startCue);
+                const currentSnippetTime = isPlayingThisBlock ? Math.min(endCue, Math.max(startCue, currentPlayTime)) : startCue;
+                const snippetPercent = isPlayingThisBlock
+                  ? Math.min(100, Math.max(0, ((currentSnippetTime - startCue) / snippetDuration) * 100))
+                  : 0;
+
                 return (
                   <div
                     key={block.id}
@@ -2085,6 +2381,155 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                             <span className="text-[9px] font-mono text-slate-200 truncate">
                               Storyboard Visual
                             </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Non-Destructive Lyric Audio Snippet Player Bar */}
+                      {block.type === 'song_section' && (
+                        <div
+                          className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/90 flex flex-col gap-1.5 touch-none"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center gap-2">
+                            {/* Big Touch-Friendly Play / Pause Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePlaySnippet(block);
+                              }}
+                              className={`touch-target w-8 h-8 rounded-lg flex items-center justify-center font-bold transition shadow-sm cursor-pointer shrink-0 ${
+                                isPlayingThisBlock
+                                  ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 animate-pulse'
+                                  : block.audioUrl
+                                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                              }`}
+                              title={
+                                block.audioUrl
+                                  ? isPlayingThisBlock
+                                    ? 'Pause Snippet'
+                                    : 'Play Non-Destructive Lyric Snippet'
+                                  : 'No audio source mapped'
+                              }
+                              disabled={!block.audioUrl}
+                            >
+                              {isPlayingThisBlock ? (
+                                <Pause className="w-4 h-4 fill-current" />
+                              ) : (
+                                <Play className="w-4 h-4 fill-current ml-0.5" />
+                              )}
+                            </button>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between text-[10px] font-mono leading-tight">
+                                <span className="text-slate-200 font-bold truncate flex items-center gap-1">
+                                  <Volume2
+                                    className={`w-3 h-3 ${
+                                      isPlayingThisBlock ? 'text-amber-400 animate-bounce' : 'text-slate-400'
+                                    }`}
+                                  />
+                                  <span>
+                                    {formatSnippetTime(isPlayingThisBlock ? currentPlayTime : startCue)} / {formatSnippetTime(endCue)}
+                                  </span>
+                                  <span className="text-slate-500 text-[9px]">
+                                    ({Math.max(1, Math.round(endCue - startCue))}s)
+                                  </span>
+                                </span>
+
+                                {/* Loop Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleLoopBlock(block.id);
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 transition cursor-pointer ${
+                                    block.isAudioLooping
+                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+                                      : 'text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800'
+                                  }`}
+                                  title="Loop this section during lyric review"
+                                >
+                                  <Repeat className="w-2.5 h-2.5" />
+                                  <span>{block.isAudioLooping ? 'Loop ON' : 'Loop'}</span>
+                                </button>
+                              </div>
+
+                              {/* Progress bar with click-to-scrub */}
+                              <div
+                                className="w-full h-1.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden mt-1 cursor-pointer relative"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleScrubSnippet(e, block);
+                                }}
+                                title="Click or tap to scrub inside section"
+                              >
+                                <div
+                                  className="h-full bg-gradient-to-r from-indigo-500 via-amber-400 to-amber-300 transition-all duration-75 rounded-full"
+                                  style={{ width: `${snippetPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Cue adjustments: In / Out timestamps with -1s / +1s nudges */}
+                          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-900/80">
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-500">In:</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'start', -1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge start cue -1s"
+                              >
+                                -1s
+                              </button>
+                              <span className="text-indigo-300 font-bold px-0.5">{formatSnippetTime(startCue)}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'start', 1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge start cue +1s"
+                              >
+                                +1s
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-500">Out:</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'end', -1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge end cue -1s"
+                              >
+                                -1s
+                              </button>
+                              <span className="text-amber-300 font-bold px-0.5">{formatSnippetTime(endCue)}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'end', 1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge end cue +1s"
+                              >
+                                +1s
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -2270,6 +2715,15 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                   const colorConfig = COLOR_OPTIONS.find(c => c.id === block.color) || COLOR_OPTIONS[0];
                   const isMatch = matchingBlockIds.includes(block.id);
 
+                  const isPlayingThisBlock = playingBlockId === block.id;
+                  const startCue = block.startTime ?? 0;
+                  const endCue = block.endTime ?? (startCue + 30);
+                  const snippetDuration = Math.max(0.1, endCue - startCue);
+                  const currentSnippetTime = isPlayingThisBlock ? Math.min(endCue, Math.max(startCue, currentPlayTime)) : startCue;
+                  const snippetPercent = isPlayingThisBlock
+                    ? Math.min(100, Math.max(0, ((currentSnippetTime - startCue) / snippetDuration) * 100))
+                    : 0;
+
                   return (
                     <div
                       key={block.id}
@@ -2336,6 +2790,155 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                               <span>Send to VideoExpress</span>
                             </button>
                           )}
+                        </div>
+                      )}
+
+                      {/* Non-Destructive Lyric Audio Snippet Player Bar */}
+                      {block.type === 'song_section' && (
+                        <div
+                          className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/90 flex flex-col gap-1.5 touch-none"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center gap-2">
+                            {/* Big Touch-Friendly Play / Pause Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePlaySnippet(block);
+                              }}
+                              className={`touch-target w-8 h-8 rounded-lg flex items-center justify-center font-bold transition shadow-sm cursor-pointer shrink-0 ${
+                                isPlayingThisBlock
+                                  ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 animate-pulse'
+                                  : block.audioUrl
+                                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                              }`}
+                              title={
+                                block.audioUrl
+                                  ? isPlayingThisBlock
+                                    ? 'Pause Snippet'
+                                    : 'Play Non-Destructive Lyric Snippet'
+                                  : 'No audio source mapped'
+                              }
+                              disabled={!block.audioUrl}
+                            >
+                              {isPlayingThisBlock ? (
+                                <Pause className="w-4 h-4 fill-current" />
+                              ) : (
+                                <Play className="w-4 h-4 fill-current ml-0.5" />
+                              )}
+                            </button>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between text-[10px] font-mono leading-tight">
+                                <span className="text-slate-200 font-bold truncate flex items-center gap-1">
+                                  <Volume2
+                                    className={`w-3 h-3 ${
+                                      isPlayingThisBlock ? 'text-amber-400 animate-bounce' : 'text-slate-400'
+                                    }`}
+                                  />
+                                  <span>
+                                    {formatSnippetTime(isPlayingThisBlock ? currentPlayTime : startCue)} / {formatSnippetTime(endCue)}
+                                  </span>
+                                  <span className="text-slate-500 text-[9px]">
+                                    ({Math.max(1, Math.round(endCue - startCue))}s)
+                                  </span>
+                                </span>
+
+                                {/* Loop Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleLoopBlock(block.id);
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 transition cursor-pointer ${
+                                    block.isAudioLooping
+                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+                                      : 'text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800'
+                                  }`}
+                                  title="Loop this section during lyric review"
+                                >
+                                  <Repeat className="w-2.5 h-2.5" />
+                                  <span>{block.isAudioLooping ? 'Loop ON' : 'Loop'}</span>
+                                </button>
+                              </div>
+
+                              {/* Progress bar with click-to-scrub */}
+                              <div
+                                className="w-full h-1.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden mt-1 cursor-pointer relative"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleScrubSnippet(e, block);
+                                }}
+                                title="Click or tap to scrub inside section"
+                              >
+                                <div
+                                  className="h-full bg-gradient-to-r from-indigo-500 via-amber-400 to-amber-300 transition-all duration-75 rounded-full"
+                                  style={{ width: `${snippetPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Cue adjustments: In / Out timestamps with -1s / +1s nudges */}
+                          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-900/80">
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-500">In:</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'start', -1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge start cue -1s"
+                              >
+                                -1s
+                              </button>
+                              <span className="text-indigo-300 font-bold px-0.5">{formatSnippetTime(startCue)}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'start', 1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge start cue +1s"
+                              >
+                                +1s
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-500">Out:</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'end', -1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge end cue -1s"
+                              >
+                                -1s
+                              </button>
+                              <span className="text-amber-300 font-bold px-0.5">{formatSnippetTime(endCue)}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNudgeCue(block.id, 'end', 1);
+                                }}
+                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
+                                title="Nudge end cue +1s"
+                              >
+                                +1s
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       )}
 

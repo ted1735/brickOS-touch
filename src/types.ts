@@ -808,6 +808,12 @@ export interface BlockSuiteBlock {
   aspectRatio?: '16:9' | '9:16' | '1:1' | string;
   assetId?: string; // Studio visual asset ID link
   shotNumber?: string;
+  audioUrl?: string; // Streamable master audio or stem URL
+  startTime?: number; // Start cue in seconds (e.g. 15.0)
+  endTime?: number; // End cue in seconds (e.g. 45.0)
+  trackId?: string; // ID of parent Track
+  trackTitle?: string; // Title of parent Track
+  isAudioLooping?: boolean; // Section loop toggle
 }
 
 export interface WhiteboardCanvasDoc {
