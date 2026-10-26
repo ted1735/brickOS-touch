@@ -1897,47 +1897,67 @@ export default function BrickOSMusicStudioWorkspace() {
         </div>
       )}
 
-      {/* TOP NAVIGATION HEADER */}
-      <header
-        className={`px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
-          isDarkMode
-            ? 'bg-slate-900/95 border-b border-slate-800 text-white'
-            : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
-        }`}
-      >
-        {/* BRAND ZONE: 150x150 PROMINENT HERO LOGO & IDENTITY */}
-        <div className="flex items-center gap-4 flex-shrink-0">
+      {/* FLOATING TOP-RIGHT BUTTON TO ESCAPE FOCUS MODE */}
+      {focusMode && (
+        <div className="fixed top-3 right-3 z-50 flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
           <button
-            onClick={() => setActiveTab('home')}
-            className="w-[150px] h-[150px] min-w-[150px] min-h-[150px] rounded-2xl bg-slate-950 border-2 border-indigo-500/30 p-2.5 flex items-center justify-center shadow-2xl shadow-indigo-500/20 ring-1 ring-white/10 hover:border-indigo-400 hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer overflow-hidden group shrink-0 relative"
-            title="Return to Studio Home"
+            type="button"
+            onClick={handleToggleFocusMode}
+            className="px-3.5 py-2 rounded-xl bg-slate-900/95 hover:bg-slate-800 text-purple-300 hover:text-white border border-purple-500/70 shadow-2xl shadow-black flex items-center gap-2 text-xs font-mono font-bold backdrop-blur-md cursor-pointer transition-all hover:scale-105 active:scale-95 group ring-2 ring-purple-500/30"
+            title="Exit Focus Mode (Esc or Z)"
+            aria-label="Exit Focus Mode"
           >
-            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 opacity-70 group-hover:opacity-100 transition" />
-            <img 
-              src="/brick-logo.webp" 
-              alt="brickOS Studio Logo" 
-              className="w-full h-full object-contain drop-shadow-lg group-hover:brightness-110 transition relative z-10" 
-            />
+            <Minimize2 className="w-4 h-4 text-purple-400 group-hover:rotate-90 transition-transform duration-200" />
+            <span>Exit Focus</span>
+            <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-purple-950/80 border border-purple-700/60 text-purple-300 font-bold">
+              Esc
+            </kbd>
           </button>
+        </div>
+      )}
 
-          <div className="flex flex-col justify-center space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 
-                onClick={() => setActiveTab('home')}
-                className={`text-2xl sm:text-3xl font-black tracking-wider transition cursor-pointer ${
-                  isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
-                }`}
-                title="Return to Studio Home"
-              >
-                brickOS
-              </h1>
-              <span 
-                className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-xs font-black border border-indigo-500/40 shadow-xs shadow-indigo-500/10 flex items-center gap-1.5"
-                title={`Active Studio Revision: ${CURRENT_STUDIO_VERSION} (Whiteboard Full Lyrics & 3-Song Comparator)`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                <span>{CURRENT_STUDIO_VERSION}</span>
-              </span>
+      {/* TOP NAVIGATION HEADER */}
+      {!focusMode && (
+        <header
+          className={`px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
+            isDarkMode
+              ? 'bg-slate-900/95 border-b border-slate-800 text-white'
+              : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
+          }`}
+        >
+          {/* BRAND ZONE: 150x150 PROMINENT HERO LOGO & IDENTITY */}
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <button
+              onClick={() => setActiveTab('home')}
+              className="w-[150px] h-[150px] min-w-[150px] min-h-[150px] rounded-2xl bg-slate-950 border-2 border-indigo-500/30 p-2.5 flex items-center justify-center shadow-2xl shadow-indigo-500/20 ring-1 ring-white/10 hover:border-indigo-400 hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer overflow-hidden group shrink-0 relative"
+              title="Return to Studio Home"
+            >
+              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 opacity-70 group-hover:opacity-100 transition" />
+              <img 
+                src="/brick-logo.webp" 
+                alt="brickOS Studio Logo" 
+                className="w-full h-full object-contain drop-shadow-lg group-hover:brightness-110 transition relative z-10" 
+              />
+            </button>
+
+            <div className="flex flex-col justify-center space-y-1">
+              <div className="flex items-center gap-2">
+                <h1 
+                  onClick={() => setActiveTab('home')}
+                  className={`text-2xl sm:text-3xl font-black tracking-wider transition cursor-pointer ${
+                    isDarkMode ? 'text-white hover:text-indigo-300' : 'text-slate-900 hover:text-indigo-600'
+                  }`}
+                  title="Return to Studio Home"
+                >
+                  brickOS
+                </h1>
+                <span 
+                  className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-xs font-black border border-indigo-500/40 shadow-xs shadow-indigo-500/10 flex items-center gap-1.5"
+                  title={`Active Studio Revision: ${CURRENT_STUDIO_VERSION} (Fullscreen Focus Mode & Whiteboard Canvas Immersion)`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                  <span>{CURRENT_STUDIO_VERSION}</span>
+                </span>
               <button
                 type="button"
                 onClick={() => setActiveTab('nextcloud_sync')}
@@ -2138,6 +2158,27 @@ export default function BrickOSMusicStudioWorkspace() {
             <span className="hidden sm:inline">+ New Project</span>
           </button>
 
+          {/* 1-Click Focus Mode Header Toggle */}
+          <button
+            type="button"
+            onClick={handleToggleFocusMode}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+              focusMode
+                ? 'bg-purple-600 border-purple-400 text-white shadow-purple-950/60'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700 hover:border-purple-500/50 hover:text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-purple-700 border-slate-300'
+            }`}
+            title="Toggle Fullscreen Focus Mode (Z or Esc) - Hides all chrome & headers"
+            aria-label="Toggle Fullscreen Focus Mode"
+          >
+            <Maximize2 className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Focus</span>
+            <kbd className="hidden sm:inline px-1 py-0.2 rounded text-[9px] font-mono bg-purple-950/80 border border-purple-800/80 text-purple-300">
+              Z
+            </kbd>
+          </button>
+
           {/* Studio Quick Tools Drawer Trigger (Groups secondary tools cleanly) */}
           <button
             type="button"
@@ -2158,40 +2199,43 @@ export default function BrickOSMusicStudioWorkspace() {
           </button>
         </div>
       </header>
+      )}
 
       {/* SMART ADAPTIVE CONTEXT ACTION BAR (Adaptive 1-click stage shortcuts) */}
-      <SmartContextActionBar
-        activeTab={activeTab}
-        selectedTrack={selectedTrack}
-        onNavigateToTab={(tab) => {
-          setActiveTab(tab as any);
-          showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
-        }}
-        onQuickAction={(actionId) => {
-          if (actionId === 'copy_suno') {
-            copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
-          } else if (actionId === 'load_stems') {
-            audioMiniDaw.init();
-            const currentStems = getTrackStems(selectedTrack);
-            audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
-            setIsPlaying(true);
-            showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
-          } else if (actionId === 'measure_lufs') {
-            setActiveTab('mastering');
-            showToast('Loudness Metering Active: Target -12 LUFS', 'info');
-          } else if (actionId === 'sync_folder') {
-            setActiveTab('nextcloud_sync');
-            showToast('Refreshed Folder 207332 WebDAV assets', 'info');
-          }
-        }}
-        isDarkMode={isDarkMode}
-      />
+      {!focusMode && (
+        <SmartContextActionBar
+          activeTab={activeTab}
+          selectedTrack={selectedTrack}
+          onNavigateToTab={(tab) => {
+            setActiveTab(tab as any);
+            showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+          }}
+          onQuickAction={(actionId) => {
+            if (actionId === 'copy_suno') {
+              copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
+            } else if (actionId === 'load_stems') {
+              audioMiniDaw.init();
+              const currentStems = getTrackStems(selectedTrack);
+              audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+              setIsPlaying(true);
+              showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
+            } else if (actionId === 'measure_lufs') {
+              setActiveTab('mastering');
+              showToast('Loudness Metering Active: Target -12 LUFS', 'info');
+            } else if (actionId === 'sync_folder') {
+              setActiveTab('nextcloud_sync');
+              showToast('Refreshed Folder 207332 WebDAV assets', 'info');
+            }
+          }}
+          isDarkMode={isDarkMode}
+        />
+      )}
 
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex overflow-hidden relative">
         
         {/* COLLAPSIBLE / PINNABLE SIDE NAVIGATION PANEL */}
-        {isSideNavOpen && (
+        {!focusMode && isSideNavOpen && (
           <>
             {/* Backdrop on mobile screens */}
             <div 
@@ -2243,10 +2287,10 @@ export default function BrickOSMusicStudioWorkspace() {
         )}
 
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto'}`}>
+        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen p-0 m-0 overflow-hidden' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto')}`}>
           
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
-          {activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
+          {!focusMode && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div className="flex-shrink-0">
               <StudioWorkflowGuide
                 activeTab={activeTab}
@@ -2257,7 +2301,7 @@ export default function BrickOSMusicStudioWorkspace() {
           )}
 
           {/* TRACK HEADER BANNER (Shown on single-track workbench views, hidden in Write/Lyrics/Whiteboard mode) */}
-          {activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
+          {!focusMode && activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div
               className={`bento-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 transition-all duration-200 ${
                 isDarkMode
@@ -2693,6 +2737,8 @@ export default function BrickOSMusicStudioWorkspace() {
                   showToast('Loaded Whiteboard scene into VideoExpress.ai!', 'info');
                 }}
                 isDarkMode={isDarkMode}
+                focusMode={focusMode}
+                onToggleFocusMode={handleToggleFocusMode}
               />
             </ErrorBoundary>
           )}

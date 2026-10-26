@@ -11,6 +11,14 @@ import { ALL_CANONICAL_NEXTCLOUD_ASSETS, CATALOG_TRACK_DEFINITIONS } from './src
 
 dotenv.config();
 
+// Protect server process from unhandled WebSocket, network, or async promise crashes
+process.on('uncaughtException', (err) => {
+  console.warn('[Server uncaughtException caught and shielded]:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Server unhandledRejection caught and shielded]:', reason);
+});
+
 const app = express();
 const PORT = 3000;
 
