@@ -42,6 +42,7 @@ import { Track } from '../types';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
 import { songVersionsCatalog } from '../data/songVersionsCatalog';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
+import { SUNO_MASTER_TRACKS, SunoTrackMeta } from '../data/sunoMasterCatalog';
 
 export interface AudioTrackSlot {
   id: 'slot-a' | 'slot-b' | 'slot-c';
@@ -52,7 +53,7 @@ export interface AudioTrackSlot {
   genre: string;
   bpm: number;
   key: string;
-  sourceType: 'catalog' | 'upload' | 'preset' | 'webdav';
+  sourceType: 'catalog' | 'upload' | 'preset' | 'webdav' | 'suno';
   fileName?: string;
   durationSeconds: number;
   currentTimeSeconds: number;
@@ -1592,7 +1593,48 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
 
               {/* Source Selection & File Upload Strip */}
               <div className="p-2.5 bg-slate-950/70 border-b border-slate-800/80 space-y-2 text-xs">
-                {/* 1-Click Nextcloud Stems & Audio Dropdown */}
+                {/* 1-Click Suno Multi-Take Live Stream Loader (372 Generations) */}
+                  <div>
+                    <select
+                      value={displaySlot.sourceType === 'suno' ? displaySlot.audioBlobUrl : ''}
+                      onChange={(e) => {
+                        const selectedUrl = e.target.value;
+                        if (!selectedUrl) return;
+                        const sunoTrack = SUNO_MASTER_TRACKS.find(st => st.streamUrl === selectedUrl);
+                        if (!sunoTrack) return;
+                        setSlots(prev => prev.map(s => {
+                          if (s.id === displaySlot.id) {
+                            return {
+                              ...s,
+                              title: sunoTrack.title,
+                              versionTag: `Suno (${sunoTrack.model}): ${sunoTrack.tags ? sunoTrack.tags.slice(0, 32) + '...' : 'Take'}`,
+                              fileName: `${sunoTrack.id}.m4a`,
+                              audioBlobUrl: sunoTrack.streamUrl,
+                              sourceType: 'suno',
+                              durationSeconds: Math.round(sunoTrack.duration) || 218,
+                              currentTimeSeconds: 0,
+                              peakData: generateDeterministicPeaks(`${sunoTrack.title}_${sunoTrack.id}`, 160)
+                            };
+                          }
+                          return s;
+                        }));
+                        if (showToast) {
+                          showToast(`Loaded Suno Take "${sunoTrack.title}" (${sunoTrack.model}) into Take ${letter}`, 'success');
+                        }
+                      }}
+                      className="w-full bg-slate-900/90 border border-amber-500/40 hover:border-amber-400 rounded-lg px-2.5 py-1 text-[11px] font-mono text-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-400 truncate cursor-pointer"
+                      title="1-Click Direct Suno CloudFront Multi-Take Stream Loader (372 Harvested Generations)"
+                    >
+                      <option value="">Suno CloudFront Master Takes (372 generations)...</option>
+                      {SUNO_MASTER_TRACKS.map(st => (
+                        <option key={st.id} value={st.streamUrl}>
+                          {st.title} [{st.model}] ({Math.round(st.duration)}s)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 1-Click Nextcloud Stems & Audio Dropdown */}
                 {availableNextcloudAudioAssets.length > 0 && (
                   <div>
                     <select
