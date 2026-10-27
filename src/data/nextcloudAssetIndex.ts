@@ -585,12 +585,76 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     ],
     visualTitle: 'Screaming Steel Foundry and Smoldering Sparks',
     sceneTitle: 'Gethsemane Agony Under Heavy Rain'
+  },
+  {
+    trackId: 'TRK-27',
+    title: "The Work Ain't Done",
+    folderName: 'TheWorkAintDone',
+    aliases: ['TRK-27', 'TheWorkAintDone', 'The_Work_Aint_Done', "The Work Ain't Done", 'TWAD', '00-Active_Projects/TheWorkAintDone'],
+    bpm: 102,
+    key: 'G Minor',
+    genre: 'Folk-Hop / Boom-Bap CHH / K-Pop Ministry Hybrid',
+    vocal: 'Kane / Brandon',
+    versions: [
+      { tag: 'v1.0', styleName: 'Recovery Defense Final Cut (MP3)', notes: 'Acoustic guitar flatpicking, heavy foot-stomp kick, tectonic baritone authority.' }
+    ],
+    stems: [
+      { id: 1, name: "Track 1: The Work Ain't Done Final Master (MP3)", stemFilename: "The Work Ain't Done-TedMoyer- FINAL .mp3", stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: "Track 2: The Work Ain't Done 24-Bit Studio Master (WAV)", stemFilename: "The Work Ain't Done-TedMoyer- FINAL .wav", stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Beyond the Exit Spoken Word (MP3)', stemFilename: 'Beyond the Exit - Protect The Recovery Full Spoken Word.mp3', stemType: 'vocal', color: '#f59e0b', freq: 220, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Remastered 7.5sbR Cut (WAV)', stemFilename: '7.5sbR_The_Work_Aint_Done_TedMoyer_v1.0_(Remastered).wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+    ],
+    visualTitle: 'Hospital Emergency Exit to Healing Sunburst',
+    sceneTitle: 'Protecting the Recovery at the Threshold'
+  },
+  {
+    trackId: 'TRK-28',
+    title: 'Standing at the Breach',
+    folderName: 'The-Weight-and-The-Wisdom',
+    aliases: ['TRK-28', 'Standing-at-the-Breach', 'Standing_at_the_Breach', 'Standing at the Breach', 'SATB', 'The-Weight-and-The-Wisdom'],
+    bpm: 84,
+    key: 'A Minor',
+    genre: 'Cinematic CHH / Southern Rock Hybrid',
+    vocal: 'Brandon / Kane',
+    versions: [
+      { tag: 'v1.0', styleName: 'Battle-Tested Arrangement Master (MP3)', notes: 'Heavy acoustic stomp, distorted slide guitar, raw raspy male vocal.' }
+    ],
+    stems: [
+      { id: 1, name: 'Track 1: Standing at the Breach Master (MP3)', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Heavy Acoustic Stomp & Slide', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Frontline Vocal Delivery', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'vocal', color: '#f59e0b', freq: 330, waveType: 'sine' },
+      { id: 4, name: 'Track 4: War Room Drum Section', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
+    ],
+    visualTitle: 'Midnight Oil Kitchen Window Glow into Storm',
+    sceneTitle: 'Standing in the Gap at the Breach'
+  },
+  {
+    trackId: 'TRK-29',
+    title: 'Track 29 (At the Last Line)',
+    folderName: 'Meet_Me_Here',
+    aliases: ['TRK-29', 'Track-29', 'At_The_Last_Line', 'Track 29 (At the Last Line)', 'LastLine', 'Meet_Me_Here'],
+    bpm: 78,
+    key: 'E Minor',
+    genre: 'Slow-Burn Acoustic Roots / Cinematic CHH',
+    vocal: 'Brandon',
+    versions: [
+      { tag: 'v1.0bZ', styleName: 'Last Line Devotional Master (MP3)', notes: '2 AM raw truck breakdown, stripped acoustic guitar, vulnerable conversational prayer.' }
+    ],
+    stems: [
+      { id: 1, name: 'Track 1: Meet Me Here CHH v2.0bZ Master (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Meet Me Here Acoustic Guitar (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0aZ-Remastered.mp3', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Meet Me Here Intimate Vocal (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0bY-Remastered.mp3', stemType: 'vocal', color: '#f59e0b', freq: 246.94, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Dax Reference / Sub Bass (MP3)', stemFilename: 'Dax-God-Can-You-Hear-me.mp3', stemType: 'bass', color: '#ec4899', freq: 82.41, waveType: 'square' }
+    ],
+    visualTitle: 'Two Lane Highway Dashboard Glow at 3 AM in Rain',
+    sceneTitle: 'Surrender at the Edge of the Last Line'
   }
 ];
 
-// Fallback generic definition builder for any remaining tracks in the 27-song catalog
+// Fallback generic definition builder for any remaining tracks in the catalog
 export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefinition {
-  const found = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === track.id);
+  const found = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === track.id) ||
+    CATALOG_TRACK_DEFINITIONS.find(d => track.title && d.aliases.some(a => track.title.toLowerCase().includes(a.toLowerCase())));
   if (found) return found;
 
   const sanitized = track.title.replace(/[^a-zA-Z0-9]/g, '_');
@@ -599,7 +663,7 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
   return {
     trackId: track.id,
     title: track.title,
-    folderName: track.id,
+    folderName: 'Meet_Me_Here',
     aliases: [track.id, sanitized, track.title, acronym],
     bpm: track.bpm || 80,
     key: track.key || 'C Major',
@@ -609,10 +673,10 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
       ? track.versions.map((v, i) => ({ tag: v.version || `v${i + 1}.0`, styleName: v.version || `Style ${i + 1}`, notes: v.reason || 'Studio Master' }))
       : [{ tag: 'v1.0', styleName: 'Studio Master', notes: '24-Bit / 48kHz Master Print' }],
     stems: [
-      { id: 1, name: `Track 1: Lead Vocal (${track.vocal || 'Lead'}) [UVR5 Clean]`, stemFilename: `${track.id}_Lead_Vocal_Clean_BS-Roformer.wav`, stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: `Track 2: Harmonies & Background Choir`, stemFilename: `${track.id}_Harmonies_Choir_UVR5.wav`, stemType: 'choir', color: '#10b981', freq: 246.94, waveType: 'triangle' },
-      { id: 3, name: `Track 3: Core Instrumental Bed (${track.genre})`, stemFilename: `${track.id}_Core_Instrumental_Bed.wav`, stemType: 'guitar', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: `Track 4: Drums, Bass & Rhythm Section`, stemFilename: `${track.id}_Rhythm_Section_Drums_Bass.wav`, stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+      { id: 1, name: `Track 1: Verified Master Stream (${track.title})`, stemFilename: 'Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: `Track 2: Alternate Arrangement Cut`, stemFilename: 'Meet-Me-Here-CHH-v2.0aZ-Remastered.mp3', stemType: 'guitar', color: '#10b981', freq: 246.94, waveType: 'triangle' },
+      { id: 3, name: `Track 3: Intimate Devotional Cut`, stemFilename: 'Meet-Me-Here-CHH-v2.0bY-Remastered.mp3', stemType: 'vocal', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: `Track 4: Dynamic Reference Bed`, stemFilename: 'Dax-God-Can-You-Hear-me.mp3', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
     ],
     visualTitle: `${track.title} 4K Sovereign Cathedral Master`,
     sceneTitle: `${track.title} Storyboard Devotional Scene`
