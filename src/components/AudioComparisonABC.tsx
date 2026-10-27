@@ -43,6 +43,7 @@ import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
 import { songVersionsCatalog } from '../data/songVersionsCatalog';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, getTrackStems, getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { SUNO_MASTER_TRACKS, SunoTrackMeta } from '../data/sunoMasterCatalog';
+import { RELATIONAL_SUNO_CATALOG, getSongRevisions } from '../data/relationalSunoCatalog';
 
 export interface AudioTrackSlot {
   id: 'slot-a' | 'slot-b' | 'slot-c';
@@ -1625,11 +1626,32 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                       className="w-full bg-slate-900/90 border border-amber-500/40 hover:border-amber-400 rounded-lg px-2.5 py-1 text-[11px] font-mono text-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-400 truncate cursor-pointer"
                       title="1-Click Direct Suno CloudFront Multi-Take Stream Loader (372 Harvested Generations)"
                     >
-                      <option value="">Suno CloudFront Master Takes (372 generations)...</option>
-                      {SUNO_MASTER_TRACKS.map(st => (
-                        <option key={st.id} value={st.streamUrl}>
-                          {st.title} [{st.model}] ({Math.round(st.duration)}s)
-                        </option>
+                      <option value="">Suno CloudFront Takes (Grouped by Song & Revision)...</option>
+                      {/* Active song priority optgroup */}
+                      {(() => {
+                        const activeRevSong = RELATIONAL_SUNO_CATALOG.find(s => s.id === (activeTrack?.id || 'TRK-01') || s.title.toLowerCase() === (activeTrack?.title || '').toLowerCase());
+                        if (activeRevSong && activeRevSong.revisions.length > 0) {
+                          return (
+                            <optgroup label={`Current Song: ${activeRevSong.title} (${activeRevSong.revisions.length} takes)`}>
+                              {activeRevSong.revisions.map(st => (
+                                <option key={st.sunoClipId} value={st.streamUrl}>
+                                  ⭐ {st.title} [{st.model}] ({st.durationSeconds}s)
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {/* Grouped by canonical songs */}
+                      {RELATIONAL_SUNO_CATALOG.map(song => (
+                        <optgroup key={song.id} label={`${song.id}: ${song.title} (${song.revisionCount} takes)`}>
+                          {song.revisions.map(st => (
+                            <option key={st.sunoClipId} value={st.streamUrl}>
+                              {st.title} [{st.model}] ({st.durationSeconds}s)
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </div>
