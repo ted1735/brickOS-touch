@@ -1614,11 +1614,26 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                               sourceType: 'suno',
                               durationSeconds: Math.round(sunoTrack.duration) || 218,
                               currentTimeSeconds: 0,
+                              isPlaying: true,
                               peakData: generateDeterministicPeaks(`${sunoTrack.title}_${sunoTrack.id}`, 160)
                             };
                           }
                           return s;
                         }));
+
+                        // Instant Auto-Play & Cue on selection
+                        setTimeout(() => {
+                          ensureAudioGraph();
+                          const el = getOrCreateAudioElement({ ...displaySlot, audioBlobUrl: sunoTrack.streamUrl });
+                          if (el) {
+                            el.src = sunoTrack.streamUrl;
+                            el.currentTime = 0;
+                            const playPromise = el.play();
+                            if (playPromise) {
+                              playPromise.catch(err => console.warn('Auto-play note:', err));
+                            }
+                          }
+                        }, 50);
                         if (showToast) {
                           showToast(`Loaded Suno Take "${sunoTrack.title}" (${sunoTrack.model}) into Take ${letter}`, 'success');
                         }
