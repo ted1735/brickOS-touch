@@ -1111,53 +1111,130 @@ We're standing at the breach with You.`,
   {
     id: "TRK-29",
     ep: "EP 4: Surrender Sessions",
-    title: "Track 29 (At the Last Line)",
-    status: "In Progress",
-    genre: "Slow-Burn Acoustic Roots / Cinematic CHH",
+    title: "Manic in the Mundane",
+    status: "Audio Master",
+    genre: "Slow-Burn Acoustic Roots / Gothic CHH",
     bpm: 78,
     key: "E Minor",
     vocal: "Brandon",
-    vocalCast: "Brandon (Unpolished 2 AM Truck Breakdown)",
-    thesis: "Raw 2 AM vulnerability; breaking through religious clichés into honest, conversational surrender at the foot of the cross.",
-    sunoPrompt: "Slow-Burn Acoustic Roots CHH, 78 BPM, Key of E Minor, flatpick acoustic guitar, warm sub-bass, unpolished raspy vocal, intimate room mic, zero reverb wash",
-    negativePrompt: "sibilance, high-frequency hiss, piercing treble, autotune, generic church cliches, clean radio pop, synthesizer pad wash",
-    engineSliders: { weirdness: 15, styleInfluence: 75, voiceAudio: 100 },
-    lyrics: `[Intro – Spoken, close mic, tired breath]
-No stage lights tonight.
-Just grease on my knuckles and gravel under my boots.
-I'm done pretending I've got it all figured out.
+    vocalCast: "Brandon (Dry Rasp & Explosive Scream)",
+    thesis: "The frantic tension between the spiritual and the relentless, exhausting grind of ordinary work; screaming in the quiet room until realizing the God of the mundane is the Lord of it all.",
+    sunoPrompt: "Slow-Burn Acoustic Roots CHH, 78 BPM, Key of E Minor, flatpick acoustic guitar, unpolished raspy male lead, dead snare, room mic, abrupt cold silence stop, explosive dry scream, raw driving rock chorus",
+    negativePrompt: "sibilance, high-frequency hiss, piercing treble, autotune, generic pop choir, motivational fluff, muddy low-end",
+    engineSliders: { weirdness: 14, styleInfluence: 78, voiceAudio: 100 },
+    lyrics: `[Intro]
+[Acoustic, Spoken Whisper]
+Manic in the mundane...
+Screaming at the slow.
 
 [Verse 1]
-Two lane highway, dashboard glow at 3 AM.
-Tired of the phrases and the polished hymns.
-If I can't speak the truth when my chest is tight,
-Then what's the point of fighting through another night?
+[Acoustic, Whisper]
+Boots untied by the kitchen door
+Can't bring myself to cross the floor
+Keys dropped heavy on the counter space
+Hands shaking in this quiet place
+Twelve hours running on an endless track
+Now the room goes still and the weight comes back
+Can't feel my fingers, can't catch my breath
+Sitting in a silence that feels heavier than death
+Prayers hitting drywall, bouncing off the paint
+Whispering Your name until my vocal cords faint
+When the noise shuts off, the black dog bites
+Swallowing the marrow out of simple nights
+I manufacture panic just to feel a spark—
 
-[Chorus - 60-Second Refrain]
-Strip away the slogans, strip away the pride.
-I don't need a sermon just to feel alive.
-Meet me in the wreckage, meet me in the grit...
-Where the broken heart is where the healing fits.
+[Cold Silence Stop All Music]
+[Scream, Dry]
+GOD, TELL ME YOU'RE IN THIS ROOM!
+[Vocal Crack]
+ANYTHING IS BETTER THAN THIS LIVING TOMB!
+
+[Pre-Chorus]
+[Build, Solo]
+Why do I run from a quiet room?
+Why do I treat Your peace like a tomb?
+I'd rather set a fire to my racing mind
+Than face the hollow gray that I left behind!
+
+[Chorus]
+[Drive, Solo Belt]
+Manic in the mundane, screaming at the slow
+Terrified of what the silence is gonna show!
+Manic in the mundane, panic just to beat the cold
+Fighting off a shadow that is growing old!
+You're not in the wreckage that I tried to make
+You're sitting in the numbness where I barely wake
+Lord, meet me in the crater where the fog rolls in—
+Pull me through the darkness where the manic begins!
 
 [Verse 2]
-Hands on the wheel, calloused and sore.
-Left my excuses right outside the door.
-Real faith isn't pretty words upon a page—
-It's breathing in the quiet when the storms still rage.
+[Roots Groove, Dead Snare]
+Clock on the microwave blinking three AM
+Mind running circles through the dust again
+No emergency to drag me out of bed
+Just the heavy gravity inside my head
+You lived thirty years before the world took note
+Living through the silence that the writers never wrote
+Waking in the morning, putting boots on feet
+Looking for holy purpose on an ordinary street.
 
-[Bridge - Throne Room Pivot]
-Here at the bottom of the canyon floor...
-I'm not asking for an easy way out no more.
-Take the broken pieces, take this heavy breath...
-You are the life that overcomes the death.
+[Pre-Chorus]
+[Build, Solo]
+Why do I run from a quiet room?
+Why do I treat Your peace like a tomb?
+I'd rather set a fire to my racing mind
+Than face the hollow gray that I left behind!
+
+[Chorus]
+[Full Band, Solo Roar]
+Manic in the mundane, screaming at the slow
+Terrified of what the silence is gonna show!
+Manic in the mundane, panic just to beat the cold
+Fighting off a shadow that is growing old!
+You're not in the wreckage that I tried to make
+You're sitting in the numbness where I barely wake
+Lord, meet me in the crater where the fog rolls in—
+Pull me through the darkness where the manic begins!
+
+[Bridge]
+[Acoustic, Broken Whisper]
+You didn't turn the daylight on.
+You didn't make the black dog gone.
+You didn't ask for drama, You just asked for me...
+To sit down in the dark where I can finally see.
+You sat right down on the cold concrete,
+Put Your calloused hands beneath my feet.
+When I had no faith left to lend—
+You stayed in the dark where the road must end.
+[Scream, Dry]
+The God of the mundane is the Lord of it all.
+
+[Chorus]
+[Max Drive, Raw Belt]
+I was manic in the mundane, terrified of slow
+Running from the only place Your grace could grow!
+Trading all my panic for a quiet breath
+Knowing that Your stillness isn't quiet death!
+You sat down in the crater where the fog rolled in
+Stayed with the heavy shadow where the panic had been!
+Held in the mundane, right here where I can stand—
+Holding out my silence to Your holy hand!
 
 [Outro]
-Right here at the last line...
-Meet me here.`,
+[Spoken, Fade]
+Boots on the floor.
+Three in the morning.
+The silence isn't empty.
+You stayed in the dark.
+Quiet grace.
+Holy space.
+Beauty in the boredom.
+[End]`,
     versions: [
-      { version: "v1.0 (Work in Progress)", timestamp: "2026-10-11", reason: "Active songwriting session with Co-Producer AI", lyrics: "Strip away the slogans, strip away the pride..." }
+      { version: "v5.1 (BMV1 Gold Master)", timestamp: "2026-10-18", reason: "BMV1 Gold Master print with Brandon dry rasp and explosive scream", lyrics: "Manic in the mundane, screaming at the slow..." },
+      { version: "v1.0 (Original Acoustic Sketch)", timestamp: "2026-09-12", reason: "Kitchen floor boots untied acoustic whisper sketch", lyrics: "Boots untied by the kitchen door, can't bring myself to cross the floor..." }
     ],
-    selahPrayed: false,
+    selahPrayed: true,
   },
 ];
 

@@ -3207,7 +3207,7 @@ const CANONICAL_TRACK_REAL_AUDIO: Record<string, string> = {
   'TRK-26': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3',
   'TRK-27': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
   'TRK-28': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/The-Weight-and-The-Wisdom.mp3',
-  'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3',
+  'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3',
 };
 
 const handleNextcloudStream = async (req: any, res: any) => {
@@ -3318,6 +3318,8 @@ const handleNextcloudStream = async (req: any, res: any) => {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-20'];
           } else if (lowerPath.includes('theworkaintdone') || lowerPath.includes('the-work-aint-done')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-27'];
+          } else if (lowerPath.includes('manic') || lowerPath.includes('mundane') || lowerPath.includes('mitm')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-29'];
           }
         }
 

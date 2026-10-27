@@ -117,16 +117,27 @@ export function getTrackAudioSnippetUrl(
 
     // Direct resolution from catalog definitions if stems are empty
     const def = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === track.id) ||
-      CATALOG_TRACK_DEFINITIONS.find(d => track.title && d.aliases.some(a => track.title.toLowerCase().includes(a.toLowerCase())));
+      CATALOG_TRACK_DEFINITIONS.find(d => track.title && d.aliases.some(a => track.title.toLowerCase().includes(a.toLowerCase()))) ||
+      ((track.title || '').toLowerCase().includes('manic') ? CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === 'TRK-29') : null);
     if (def && def.stems && def.stems.length > 0) {
       const primary = def.stems.find(s => s.stemType === 'master') || def.stems[0];
       return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/${def.folderName}/${primary.stemFilename}`);
+    }
+
+    // Dynamic resolution based on track title
+    const lowerTitle = (track.title || '').toLowerCase();
+    if (lowerTitle.includes('manic') || lowerTitle.includes('mundane')) {
+      return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3`);
     }
 
     // Fallback directly to verified active project master
     return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3`);
   } catch (err) {
     console.warn('[sectionAudioHelper] getTrackAudioSnippetUrl error:', err);
+    const lowerTitle = (track?.title || '').toLowerCase();
+    if (lowerTitle.includes('manic') || lowerTitle.includes('mundane')) {
+      return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3`);
+    }
     return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3`);
   }
 }

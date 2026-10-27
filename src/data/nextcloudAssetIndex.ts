@@ -630,24 +630,24 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
   },
   {
     trackId: 'TRK-29',
-    title: 'Track 29 (At the Last Line)',
-    folderName: 'Meet_Me_Here',
-    aliases: ['TRK-29', 'Track-29', 'At_The_Last_Line', 'Track 29 (At the Last Line)', 'LastLine', 'Meet_Me_Here'],
+    title: 'Manic in the Mundane',
+    folderName: 'Manic_In_The_Mundane',
+    aliases: ['TRK-29', 'Manic in the Mundane', 'Manic_In_The_Mundane', 'ManicInTheMundane', 'MITM', '00-Active_Projects/Manic_In_The_Mundane'],
     bpm: 78,
     key: 'E Minor',
-    genre: 'Slow-Burn Acoustic Roots / Cinematic CHH',
+    genre: 'Slow-Burn Acoustic Roots / Gothic CHH',
     vocal: 'Brandon',
     versions: [
-      { tag: 'v1.0bZ', styleName: 'Last Line Devotional Master (MP3)', notes: '2 AM raw truck breakdown, stripped acoustic guitar, vulnerable conversational prayer.' }
+      { tag: 'v5.1', styleName: 'BMV1 Remastered Gold Master (MP3)', notes: 'Acoustic whisper intro, dead snare roots groove, explosive dry scream into raw belt chorus.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Meet Me Here CHH v2.0bZ Master (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Meet Me Here Acoustic Guitar (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0aZ-Remastered.mp3', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Meet Me Here Intimate Vocal (MP3)', stemFilename: 'Meet-Me-Here-CHH-v2.0bY-Remastered.mp3', stemType: 'vocal', color: '#f59e0b', freq: 246.94, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Dax Reference / Sub Bass (MP3)', stemFilename: 'Dax-God-Can-You-Hear-me.mp3', stemType: 'bass', color: '#ec4899', freq: 82.41, waveType: 'square' }
+      { id: 1, name: 'Track 1: Manic in the Mundane v5.1 Gold Master (MP3)', stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Manic in the Mundane 24-Bit Studio Master (WAV)', stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Ted Moyer Lead Cut (WAV)', stemFilename: 'Manic-In-The-Mundane_Ted_Moyer.wav', stemType: 'vocal', color: '#f59e0b', freq: 246.94, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Full Bridge Climax Stem (WAV)', stemFilename: 'bridge_full_205_260.wav', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'square' }
     ],
-    visualTitle: 'Two Lane Highway Dashboard Glow at 3 AM in Rain',
-    sceneTitle: 'Surrender at the Edge of the Last Line'
+    visualTitle: 'Boots Untied on Cold Concrete Floor at 3 AM',
+    sceneTitle: 'Lord Meeting the Brokenness in the Mundane'
   }
 ];
 
@@ -657,13 +657,23 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
     CATALOG_TRACK_DEFINITIONS.find(d => track.title && d.aliases.some(a => track.title.toLowerCase().includes(a.toLowerCase())));
   if (found) return found;
 
+  const titleLower = (track.title || '').toLowerCase();
+  if (titleLower.includes('manic') || titleLower.includes('mundane') || titleLower.includes('mitm')) {
+    const mitm = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === 'TRK-29');
+    if (mitm) return mitm;
+  }
+  if (titleLower.includes('meet') && titleLower.includes('here')) {
+    const mmh = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === 'TRK-16');
+    if (mmh) return mmh;
+  }
+
   const sanitized = track.title.replace(/[^a-zA-Z0-9]/g, '_');
   const acronym = track.title.split(' ').map(w => w[0]).join('').toUpperCase();
 
   return {
     trackId: track.id,
     title: track.title,
-    folderName: 'Meet_Me_Here',
+    folderName: 'Manic_In_The_Mundane',
     aliases: [track.id, sanitized, track.title, acronym],
     bpm: track.bpm || 80,
     key: track.key || 'C Major',
@@ -673,10 +683,10 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
       ? track.versions.map((v, i) => ({ tag: v.version || `v${i + 1}.0`, styleName: v.version || `Style ${i + 1}`, notes: v.reason || 'Studio Master' }))
       : [{ tag: 'v1.0', styleName: 'Studio Master', notes: '24-Bit / 48kHz Master Print' }],
     stems: [
-      { id: 1, name: `Track 1: Verified Master Stream (${track.title})`, stemFilename: 'Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: `Track 2: Alternate Arrangement Cut`, stemFilename: 'Meet-Me-Here-CHH-v2.0aZ-Remastered.mp3', stemType: 'guitar', color: '#10b981', freq: 246.94, waveType: 'triangle' },
-      { id: 3, name: `Track 3: Intimate Devotional Cut`, stemFilename: 'Meet-Me-Here-CHH-v2.0bY-Remastered.mp3', stemType: 'vocal', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: `Track 4: Dynamic Reference Bed`, stemFilename: 'Dax-God-Can-You-Hear-me.mp3', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+      { id: 1, name: `Track 1: Verified Master Stream (${track.title})`, stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: `Track 2: Alternate Studio Master Cut`, stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav', stemType: 'guitar', color: '#10b981', freq: 246.94, waveType: 'triangle' },
+      { id: 3, name: `Track 3: Ted Moyer Lead Acoustic Cut`, stemFilename: 'Manic-In-The-Mundane_Ted_Moyer.wav', stemType: 'vocal', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: `Track 4: Dynamic Climax Bed`, stemFilename: 'bridge_full_205_260.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
     ],
     visualTitle: `${track.title} 4K Sovereign Cathedral Master`,
     sceneTitle: `${track.title} Storyboard Devotional Scene`
