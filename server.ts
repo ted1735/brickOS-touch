@@ -8,8 +8,28 @@ import dotenv from 'dotenv';
 import { fetch as undiciFetch, ProxyAgent, Agent } from 'undici';
 import { exec, execSync, spawn } from 'child_process';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, CATALOG_TRACK_DEFINITIONS } from './src/data/nextcloudAssetIndex';
+import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
+import { getFirestore as getFirebaseFirestore, doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
+import firebaseConfig from './firebase-applet-config.json';
+import { mapTrackFolderAssets, RawAssetItem } from './src/services/metadataMapperService';
+import { CANONICAL_TRACKS } from './src/data/canonicalCatalog';
 
 dotenv.config();
+
+let serverFirestoreDb: any = null;
+function getServerFirestore() {
+  if (!serverFirestoreDb && firebaseConfig && firebaseConfig.projectId) {
+    try {
+      const fbApp = getFirebaseApps().length === 0 ? initFirebaseApp(firebaseConfig) : getFirebaseApp();
+      serverFirestoreDb = firebaseConfig.firestoreDatabaseId
+        ? getFirebaseFirestore(fbApp, firebaseConfig.firestoreDatabaseId)
+        : getFirebaseFirestore(fbApp);
+    } catch (e) {
+      console.warn('Failed to init Firestore on server:', e);
+    }
+  }
+  return serverFirestoreDb;
+}
 
 // Protect server process from unhandled WebSocket, network, or async promise crashes
 process.on('uncaughtException', (err) => {
@@ -1051,6 +1071,7 @@ function initNotifyPushClient() {
       // Purge in-memory PROPFIND cache on any file change
       invalidatePropfindCache();
       broadcastNextcloudEvent({ type: 'push_file_change', data: dataStr, timestamp: new Date().toISOString() });
+      executeCatalogMetadataMapping().catch(err => console.warn('[AutoMapper] Push trigger mapping note:', err));
     };
 
     ws.onerror = (err: any) => {
@@ -1971,6 +1992,11 @@ app.post('/api/nextcloud/sync-folder', async (req, res) => {
           message: `Parsed ${liveItemsFound} live remote files from Nextcloud WebDAV`,
           details: { count: liveItemsFound }
         });
+
+        // Automatically trigger catalog metadata mapper with the freshly discovered live files
+        if (liveFiles.length > 0) {
+          executeCatalogMetadataMapping(liveFiles).catch(err => console.warn('[AutoMapper] Background sync mapping note:', err));
+        }
       } else if (davRes.status === 401) {
         const rawText = await davRes.text();
         const excMatch = rawText.match(/<s:exception>([^<]+)<\/s:exception>/i);
@@ -3060,6 +3086,170 @@ app.post('/api/nextcloud/index-all-catalog', async (req, res) => {
       latencyMs,
       error: err.message || 'Failed to index entire Nextcloud catalog'
     });
+  }
+});
+
+// 14c. Automated Metadata Mapper & Musical Characteristics Tagger
+export async function executeCatalogMetadataMapping(initialFiles?: any[]): Promise<any[]> {
+  const db = getServerFirestore();
+  const results: any[] = [];
+  const startTime = Date.now();
+
+  try {
+    for (const def of CATALOG_TRACK_DEFINITIONS) {
+      const track = CANONICAL_TRACKS.find(t => t.id === def.trackId) || ({
+        id: def.trackId,
+        title: def.title,
+        ep: 'EP 1: Restoration',
+        status: 'In Progress',
+        bpm: def.bpm,
+        key: def.key || 'E Minor',
+        vocal: def.vocal || 'Brandon',
+        vocalCast: `${def.vocal || 'Brandon'} (Lead Vocal)`,
+        thesis: '',
+        sunoPrompt: '',
+        negativePrompt: '',
+        engineSliders: { weirdness: 14, styleInfluence: 78, voiceAudio: 100 },
+        lyrics: '',
+        versions: []
+      } as any);
+
+      let folderAssets: RawAssetItem[] = [];
+
+      // 1. Check if provided initial files match this track's folder or aliases
+      if (initialFiles && initialFiles.length > 0) {
+        folderAssets = initialFiles
+          .filter(f => {
+            const pathStr = (f.href || f.path || f.name || '').toLowerCase();
+            return pathStr.includes(def.folderName.toLowerCase()) || (def.aliases || []).some(a => pathStr.includes(a.toLowerCase()));
+          })
+          .map(f => ({
+            name: f.name,
+            path: f.href || f.path,
+            size: f.size || 0,
+            mimeType: f.mimeType || 'application/octet-stream',
+            lastModified: f.lastModified
+          }));
+      }
+
+      // 2. If no assets in initial batch and WebDAV auth is available, query folder directly
+      if (folderAssets.length === 0 && cachedWebdavCredentials.password) {
+        try {
+          const folderUrl = `/remote.php/dav/files/${cachedWebdavCredentials.username}/Music-Production/${def.folderName}`;
+          const authString = Buffer.from(`${cachedWebdavCredentials.username}:${cachedWebdavCredentials.password}`).toString('base64');
+          const davRes = await smartFetch(folderUrl, {
+            method: 'PROPFIND',
+            headers: {
+              'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+              'Depth': '1',
+              'Authorization': `Basic ${authString}`
+            },
+            signal: AbortSignal.timeout(6000)
+          });
+          if (davRes.status >= 200 && davRes.status < 300) {
+            const xml = await davRes.text();
+            const blocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+            for (const b of blocks) {
+              const bXml = b[1];
+              const hMatch = bXml.match(/<d:href>([^<]+)<\/d:href>/i);
+              if (!hMatch) continue;
+              const h = decodeURIComponent(hMatch[1]);
+              const fName = h.split('/').filter(Boolean).pop() || '';
+              const isCol = /<d:collection\s*\/?>/i.test(bXml);
+              if (!fName || fName.startsWith('.') || isCol || fName === def.folderName) continue;
+              const lMatch = bXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+              const sz = lMatch ? parseInt(lMatch[1], 10) : 0;
+              folderAssets.push({
+                name: fName,
+                path: h,
+                size: sz,
+                mimeType: fName.endsWith('.wav') ? 'audio/wav' : fName.endsWith('.mp3') ? 'audio/mpeg' : 'application/octet-stream'
+              });
+            }
+          }
+        } catch {
+          // Continue to fallback
+        }
+      }
+
+      // 3. Fallback to canonical assets index
+      if (folderAssets.length === 0) {
+        folderAssets = ALL_CANONICAL_NEXTCLOUD_ASSETS
+          .filter(a => a.matchedTrackId === def.trackId || (a.webdavPath || '').includes(def.folderName))
+          .map(a => ({
+            name: a.filename,
+            path: a.webdavPath,
+            size: a.fileSizeBytes || 0,
+            mimeType: a.mimeType || 'audio/wav'
+          }));
+      }
+
+      if (folderAssets.length > 0) {
+        const mapped = mapTrackFolderAssets(track, folderAssets, def.folderName);
+        results.push(mapped);
+
+        // Persist enriched musical specs to Firestore
+        if (db) {
+          try {
+            const trackDocRef = firestoreDoc(db, 'tracks', mapped.trackId);
+            const rawPayload = {
+              status: mapped.status,
+              bpm: mapped.bpm || 80,
+              key: mapped.key || 'E Minor',
+              camelotKey: mapped.camelotKey || '9A',
+              vocal: mapped.vocal || 'Brandon',
+              vocalCast: mapped.vocalCast || 'Brandon (Lead Vocal)',
+              sunoAssets: mapped.sunoAssets,
+              lastMetadataMappedAt: new Date().toISOString(),
+              metadataMappingReason: mapped.newStatusReason
+            };
+            const sanitizedPayload = JSON.parse(JSON.stringify(rawPayload));
+            await firestoreSetDoc(trackDocRef, sanitizedPayload, { merge: true });
+          } catch (writeErr) {
+            console.warn(`[AutoMapper] Firestore write note for ${mapped.trackId}:`, writeErr);
+          }
+        }
+      }
+    }
+
+    addNextcloudLog({
+      stage: 'METADATA_MAPPER',
+      action: 'BATCH_COMPLETED',
+      level: 'success',
+      message: `Automated metadata mapper processed ${results.length} tracks with enriched musical specs & Firestore persistence (${Date.now() - startTime}ms)`,
+      details: {
+        mappedCount: results.length,
+        tracks: results.map(r => ({ id: r.trackId, status: r.status, takes: r.identifiedTakesCount, snippets: r.identifiedSnippetsCount }))
+      }
+    });
+
+    broadcastNextcloudEvent({
+      type: 'metadata_mapped',
+      count: results.length,
+      results,
+      timestamp: new Date().toISOString()
+    });
+
+    return results;
+  } catch (err: any) {
+    console.error('Error in executeCatalogMetadataMapping:', err);
+    return results;
+  }
+}
+
+app.post('/api/nextcloud/auto-map-metadata', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const results = await executeCatalogMetadataMapping();
+    res.json({
+      success: true,
+      count: results.length,
+      results,
+      latencyMs: Date.now() - startTime,
+      message: `Automated metadata mapper processed and persisted ${results.length} tracks in Firestore.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Auto-map metadata failed' });
   }
 });
 

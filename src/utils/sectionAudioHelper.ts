@@ -97,9 +97,43 @@ export const formatTimeMMSS = formatTimeSeconds;
 export function getTrackAudioSnippetUrl(
   track: Track,
   styleIndex: number = 0,
-  stemCategory: 'master' | 'vocal' | 'instrumental' = 'master'
+  stemCategory: 'master' | 'vocal' | 'instrumental' = 'master',
+  sectionTag?: string
 ): string {
   try {
+    // 1. Check if an exact matching snippet exists in sunoAssets (e.g. drywall, scream, microwave, bridge)
+    if (sectionTag && track.sunoAssets?.snippets && track.sunoAssets.snippets.length > 0) {
+      const lowerTag = sectionTag.toLowerCase();
+      const match = track.sunoAssets.snippets.find(s => {
+        const lowerLabel = s.label.toLowerCase();
+        const lowerSection = s.lyricSection.toLowerCase();
+        const lowerQuote = s.lyricQuote.toLowerCase();
+        return (
+          lowerLabel.includes(lowerTag) ||
+          lowerSection.includes(lowerTag) ||
+          lowerQuote.includes(lowerTag) ||
+          (lowerTag.includes('bridge') && lowerLabel.includes('bridge')) ||
+          (lowerTag.includes('scream') && (lowerLabel.includes('scream') || lowerSection.includes('scream'))) ||
+          (lowerTag.includes('chorus') && lowerLabel.includes('chorus')) ||
+          (lowerTag.includes('verse 1') && (lowerLabel.includes('verse 1') || lowerLabel.includes('drywall') || lowerLabel.includes('boots'))) ||
+          (lowerTag.includes('verse 2') && (lowerLabel.includes('verse 2') || lowerLabel.includes('microwave')))
+        );
+      });
+      if (match?.streamUrl) {
+        return match.streamUrl;
+      }
+    }
+
+    // 2. Check if sunoAssets has authentic audio takes (Remastered Gold Master preferred)
+    if (track.sunoAssets?.takes && track.sunoAssets.takes.length > 0) {
+      const takes = track.sunoAssets.takes;
+      const masterTake = takes.find(t => t.isRemastered && t.isMaster) || takes.find(t => t.isMaster) || takes[styleIndex % takes.length] || takes[0];
+      if (masterTake?.streamUrl) {
+        return masterTake.streamUrl;
+      }
+    }
+
+    // 3. Check track stems
     const stems = getTrackStems(track);
     if (stems && stems.length > 0) {
       if (stemCategory === 'vocal') {
@@ -115,7 +149,7 @@ export function getTrackAudioSnippetUrl(
       if (masterStem?.audioUrl) return masterStem.audioUrl;
     }
 
-    // Direct resolution from catalog definitions if stems are empty
+    // 4. Direct resolution from catalog definitions if stems are empty
     const def = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === track.id) ||
       CATALOG_TRACK_DEFINITIONS.find(d => track.title && d.aliases.some(a => track.title.toLowerCase().includes(a.toLowerCase()))) ||
       ((track.title || '').toLowerCase().includes('manic') ? CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === 'TRK-29') : null);
@@ -124,7 +158,7 @@ export function getTrackAudioSnippetUrl(
       return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/${def.folderName}/${primary.stemFilename}`);
     }
 
-    // Dynamic resolution based on track title
+    // 5. Dynamic resolution based on track title
     const lowerTitle = (track.title || '').toLowerCase();
     if (lowerTitle.includes('manic') || lowerTitle.includes('mundane')) {
       return buildNextcloudStreamUrl(`/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3`);

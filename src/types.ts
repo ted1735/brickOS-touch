@@ -115,6 +115,64 @@ export interface Track {
   epCollection?: string;
   camelotKey?: string;
   notes?: string;
+  sunoAssets?: SunoTrackAssets;
+}
+
+export interface SunoAudioTake {
+  id: string;
+  label: string;
+  versionTag: string;
+  isMaster: boolean;
+  isRemastered: boolean;
+  filename: string;
+  webdavPath: string;
+  streamUrl: string;
+  format: 'wav' | 'mp3' | 'flac';
+  sampleRate: number;
+  bitDepth: number;
+  lufsIntegrated?: number;
+  lra?: number;
+  truePeakDb?: number;
+  spectralEnhancements?: {
+    ultrasonicHissReductionDb: number;
+    presenceSmoothingDb: number;
+    subBassWarmthDb: number;
+    lowEndWarmthDb: number;
+  };
+}
+
+export interface LyricAudioSnippet {
+  id: string;
+  label: string;
+  lyricSection: string;
+  lyricQuote: string;
+  startTimeSeconds: number;
+  endTimeSeconds: number;
+  filename: string;
+  webdavPath: string;
+  streamUrl: string;
+}
+
+export interface SunoVideoMaster {
+  id: string;
+  label: string;
+  aspectRatio: string;
+  resolution: string;
+  filename: string;
+  streamUrl: string;
+}
+
+export interface SunoTrackAssets {
+  takes: SunoAudioTake[];
+  snippets: LyricAudioSnippet[];
+  modelEngine: string;
+  primaryPrompt?: string;
+  negativePrompt?: string;
+  engineSliders?: EngineSliders;
+  vocalArchetype?: string;
+  characterAnchor?: string;
+  videoMasters?: SunoVideoMaster[];
+  storyboardSceneCount?: number;
 }
 
 export interface EPCollection {

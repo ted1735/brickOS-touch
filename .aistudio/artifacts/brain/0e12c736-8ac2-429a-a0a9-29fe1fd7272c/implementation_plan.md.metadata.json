@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for expandable Volume/Pan automation lanes with interactive breakpoint envelopes in Mini-DAW mixer, and a balanced single-column collapsed sidebar with uniform icons, label words, and rich hover cards.",
-  "updatedAt": "2026-10-12T20:19:05.892426059Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Implementation plan for the Automated Metadata & Musical Characteristics Mapper and Multi-Version Stream Audition Engine in brickOS Studio. Specifies automatic metadata extraction (BPM, Key, Camelot, LUFS, LRA, True Peak, Vocal Archetypes, Stems, Snippets), Firestore persistence, Nextcloud/Suno stream fallbacks, and Studio version bump to v4.0.",
+  "updatedAt":  "2026-10-31T13:00:41.667250418Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

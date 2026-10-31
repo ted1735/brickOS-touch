@@ -108,8 +108,16 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
       return;
     }
 
-    const { startTimeSec, durationSec } = getEstimatedSectionTime(tag, secIdx, track.bpm);
-    const audioUrl = getTrackAudioSnippetUrl(track, styleIdx, 'master');
+    const estimated = getEstimatedSectionTime(tag, secIdx, track.bpm);
+    const snippetMatch = track.sunoAssets?.snippets?.find(s => 
+      s.lyricSection.toLowerCase().includes(tag.toLowerCase()) || 
+      s.label.toLowerCase().includes(tag.toLowerCase()) ||
+      (tag.toLowerCase().includes('bridge') && s.label.toLowerCase().includes('bridge')) ||
+      (tag.toLowerCase().includes('scream') && s.label.toLowerCase().includes('scream'))
+    );
+    const startTimeSec = snippetMatch ? snippetMatch.startTimeSeconds : estimated.startTimeSec;
+    const durationSec = snippetMatch ? Math.max(4, snippetMatch.endTimeSeconds - snippetMatch.startTimeSeconds) : estimated.durationSec;
+    const audioUrl = getTrackAudioSnippetUrl(track, styleIdx, 'master', tag);
 
     sectionSnippetPlayer.playSnippet({
       url: audioUrl,

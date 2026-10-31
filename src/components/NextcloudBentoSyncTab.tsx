@@ -117,6 +117,26 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   const [playingAssetId, setPlayingAssetId] = useState<string | null>(null);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [copiedPill, setCopiedPill] = useState('');
+  const [isMappingMetadata, setIsMappingMetadata] = useState(false);
+
+  const handleTriggerAutoMapper = async () => {
+    setIsMappingMetadata(true);
+    setCopiedPill('Scanning Nextcloud & auto-mapping metadata...');
+    try {
+      const res = await fetch('/api/nextcloud/auto-map-metadata', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setCopiedPill(`Auto-mapped ${data.count} tracks & synced to Firestore!`);
+      } else {
+        setCopiedPill(`Mapping error: ${data.error || 'Failed'}`);
+      }
+    } catch (err: any) {
+      setCopiedPill(`Mapping error: ${err.message}`);
+    } finally {
+      setIsMappingMetadata(false);
+      setTimeout(() => setCopiedPill(''), 4000);
+    }
+  };
 
   // Subscribe to audio engine loading / buffering states
   useEffect(() => {
@@ -817,6 +837,21 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
               <span className="hidden sm:inline">Auto-Match Catalog</span>
               <span className="sm:hidden">Match</span>
+            </button>
+
+            <button
+              onClick={handleTriggerAutoMapper}
+              disabled={isMappingMetadata}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                isDarkMode
+                  ? 'bg-emerald-950/70 hover:bg-emerald-900/90 text-emerald-300 border-emerald-700/60 shadow-xs'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+              }`}
+              title="Automatically scan Nextcloud assets, infer musical specs (BPM, Key, Camelot, LUFS, LRA, True Peak), and update Firestore"
+            >
+              <Sliders className={`w-3.5 h-3.5 text-emerald-400 ${isMappingMetadata ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isMappingMetadata ? 'Mapping Metadata...' : 'Auto-Map Metadata'}</span>
+              <span className="sm:hidden">Map Specs</span>
             </button>
 
             <a
