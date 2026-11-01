@@ -22,7 +22,7 @@ try {
     } else {
         Write-Host "  -> Working tree clean, checking remote..." -ForegroundColor Gray
     }
-    git pull --rebase origin main
+    git pull origin main --no-rebase
     git push origin main
     Write-Host "  -> Successfully pushed to https://github.com/ted1735/brickOS-touch" -ForegroundColor Green
 
