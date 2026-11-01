@@ -60,6 +60,7 @@ import { MiniDawSpectrumVisualizer } from './MiniDawSpectrumVisualizer';
 import { MasteringRack } from './MasteringRack';
 import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
 import { AutomationLaneEditor, interpolateAutomationValue } from './AutomationLaneEditor';
+import { D3ChannelWaveformVisualizer } from './D3ChannelWaveformVisualizer';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -2420,6 +2421,20 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Real-time D3 Waveform Visualizer reflecting UVR5 Stem Data */}
+              <div className="w-full">
+                <D3ChannelWaveformVisualizer
+                  track={trk}
+                  isPlaying={isPlaying}
+                  playbackProgressPercent={playbackProgressPercent}
+                  height={76}
+                  isDarkMode={isDarkMode}
+                  onSeekPercent={(pct) => {
+                    setPlaybackProgressPercent(pct);
+                  }}
+                />
+              </div>
 
               {/* Expandable Automation Lane Drawer */}
               {isLaneExpanded && (

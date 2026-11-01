@@ -60,6 +60,7 @@ class MiniDawEngine {
     gain: GainNode;
     panner: StereoPannerNode;
     filter?: BiquadFilterNode;
+    analyser?: AnalyserNode;
   }> = new Map();
   private audioBufferCache: Map<string, AudioBuffer> = new Map();
   private isMono: boolean = false;
@@ -1084,6 +1085,9 @@ class MiniDawEngine {
 
       const gain = this.ctx.createGain();
       const panner = this.ctx.createStereoPanner();
+      const analyser = this.ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.75;
 
       // Check if track has an audioUrl or webdavPath to stream real audio from Nextcloud
       let streamUrl = '';
@@ -1135,7 +1139,8 @@ class MiniDawEngine {
             const mediaSource = this.ctx.createMediaElementSource(audioEl);
             mediaSource.connect(panner);
             panner.connect(gain);
-            gain.connect(this.masterGain);
+            gain.connect(analyser);
+            analyser.connect(this.masterGain);
             gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
             panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
           } catch (corsErr) {
@@ -1159,7 +1164,7 @@ class MiniDawEngine {
             });
           }
 
-          this.trackNodes.set(t.id, { audioEl, gain, panner });
+          this.trackNodes.set(t.id, { audioEl, gain, panner, analyser });
           return;
         } catch (streamErr) {
           console.warn('[AudioEngine] Failed to stream audio directly:', streamErr);
@@ -1172,15 +1177,35 @@ class MiniDawEngine {
       panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
 
       panner.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(analyser);
+      analyser.connect(this.masterGain);
 
       this.trackNodes.set(t.id, {
         gain,
-        panner
+        panner,
+        analyser
       });
     });
 
     this.updateBusRouting(this.currentEffects.busRouting || this.currentBus, tracks);
+  }
+
+  public getTrackAnalyser(trackId: number): AnalyserNode | null {
+    return this.trackNodes.get(trackId)?.analyser || null;
+  }
+
+  public getTrackWaveformData(trackId: number, dataArray: Float32Array): boolean {
+    const node = this.trackNodes.get(trackId);
+    if (!node || !node.analyser) return false;
+    node.analyser.getFloatTimeDomainData(dataArray);
+    return true;
+  }
+
+  public getTrackFrequencyData(trackId: number, dataArray: Uint8Array): boolean {
+    const node = this.trackNodes.get(trackId);
+    if (!node || !node.analyser) return false;
+    node.analyser.getByteFrequencyData(dataArray);
+    return true;
   }
 
   public updateTrackControls(trackId: number, vol: number, pan: number, muted: boolean, hasSolo: boolean, isSolo: boolean) {
