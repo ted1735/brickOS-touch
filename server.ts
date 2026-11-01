@@ -1258,14 +1258,15 @@ async function smartFetchWithFailover(
 }
 
 async function smartFetch(urlStr: string, options: any = {}, forceTailscale = false): Promise<any> {
-  const isTs = forceTailscale || isTailscaleAddress(urlStr);
+  const isTs = forceTailscale || isTailscaleAddress(urlStr) || urlStr.startsWith('/');
   if (isTs) {
     try {
       const res = await smartFetchWithFailover(urlStr, options);
       return res.response;
     } catch {
       ensureTailscaledRunning();
-      return undiciFetch(urlStr, {
+      const target = urlStr.startsWith('/') ? `${PRIMARY_NEXTCLOUD_URL}${urlStr}` : urlStr;
+      return undiciFetch(target, {
         ...options,
         dispatcher: tailscaleProxyAgent
       });
@@ -3322,47 +3323,10 @@ app.post('/api/audio/separate-stems', async (req, res) => {
 
     // Ensure stems directory exists in Nextcloud
     const stemsDir = `/remote.php/dav/files/${username}/Music-Production/${folderName}/stems`;
-    if (password) {
-      try {
-        const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-        await smartFetch(stemsDir, {
-          method: 'MKCOL',
-          headers: {
-            'User-Agent': 'brickOS-Studio-UVR5-Engine/4.1',
-            'Authorization': authHeader
-          }
-        });
-      } catch {
-        // Folder may already exist, ignore
-      }
-    }
-
-    const separatedStems: any[] = [];
-
-    for (const spec of stemSpecs) {
+    const separatedStems: any[] = stemSpecs.map((spec) => {
       const stemWebdavPath = `${stemsDir}/${spec.filename}`;
       const streamUrl = `/api/nextcloud/stream?path=${encodeURIComponent(stemWebdavPath)}`;
-
-      // Upload pristine 24-bit/48kHz stem to Nextcloud if authenticated
-      if (password) {
-        try {
-          const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-          const stemBuffer = generateMusicalWavBuffer(spec.filename, 12.0, 48000);
-          await smartFetch(stemWebdavPath, {
-            method: 'PUT',
-            headers: {
-              'User-Agent': 'brickOS-Studio-UVR5-Engine/4.1',
-              'Authorization': authHeader,
-              'Content-Type': 'audio/wav'
-            },
-            body: stemBuffer
-          });
-        } catch (uploadErr) {
-          console.warn(`[UVR5 Separator] Nextcloud upload note for ${spec.filename}:`, uploadErr);
-        }
-      }
-
-      separatedStems.push({
+      return {
         id: spec.id,
         name: spec.name,
         stemType: spec.stemType,
@@ -3380,7 +3344,41 @@ app.post('/api/audio/separate-stems', async (req, res) => {
         groupId: spec.group,
         isSeparated: true,
         modelUsed: model
-      });
+      };
+    });
+
+    // Asynchronously perform Nextcloud WebDAV upload in background so client gets instant routing
+    if (password) {
+      (async () => {
+        try {
+          const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+          await smartFetch(stemsDir, {
+            method: 'MKCOL',
+            headers: {
+              'User-Agent': 'brickOS-Studio-UVR5-Engine/4.1',
+              'Authorization': authHeader
+            }
+          }).catch(() => {});
+
+          for (const spec of stemSpecs) {
+            const stemWebdavPath = `${stemsDir}/${spec.filename}`;
+            const stemBuffer = generateMusicalWavBuffer(spec.filename, 6.0, 48000);
+            await smartFetch(stemWebdavPath, {
+              method: 'PUT',
+              headers: {
+                'User-Agent': 'brickOS-Studio-UVR5-Engine/4.1',
+                'Authorization': authHeader,
+                'Content-Type': 'audio/wav',
+                'Content-Length': stemBuffer.length.toString()
+              },
+              body: stemBuffer,
+              duplex: 'half'
+            }).catch((err) => console.warn(`[UVR5 Separator] WebDAV upload notice for ${spec.filename}:`, err.message));
+          }
+        } catch (bgErr) {
+          console.warn('[UVR5 Separator] Background WebDAV upload error:', bgErr);
+        }
+      })();
     }
 
     // Persist to Firestore
@@ -3395,9 +3393,12 @@ app.post('/api/audio/separate-stems', async (req, res) => {
           stemSeparationModel: `${model} + MelBand-Roformer-Kim-Inst-V2`,
           updatedAt: new Date().toISOString()
         };
-        await firestoreSetDoc(trackDocRef, JSON.parse(JSON.stringify(updatePayload)), { merge: true });
-      } catch (fbErr) {
-        console.warn(`[UVR5 Separator] Firestore update note for ${trackId}:`, fbErr);
+        await Promise.race([
+          firestoreSetDoc(trackDocRef, JSON.parse(JSON.stringify(updatePayload)), { merge: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout (2500ms)')), 2500))
+        ]);
+      } catch (fbErr: any) {
+        console.warn(`[UVR5 Separator] Firestore update note for ${trackId}:`, fbErr?.message || fbErr);
       }
     }
 

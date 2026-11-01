@@ -278,6 +278,9 @@ export interface MixerTrack {
   assetId?: string;
   automation?: TrackAutomationState;
   groupId?: string | null;
+  isUvrSeparated?: boolean;
+  stemFilename?: string;
+  modelUsed?: string;
 }
 
 export interface GeneratedImage {
