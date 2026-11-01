@@ -27,6 +27,7 @@ import {
 import { SongVersion } from './SongVersionCompareTab';
 import { Track } from '../types';
 import { getTrackStems } from '../data/nextcloudAssetIndex';
+import { getTrackAudioSnippetUrl } from '../utils/sectionAudioHelper';
 
 export interface SectionBreakdown {
   id: string;
@@ -284,18 +285,18 @@ export const SectionCriticalComparator: React.FC<SectionCriticalComparatorProps>
 
     try {
       if (activeTrack) {
-        const stems = getTrackStems(activeTrack);
-        const targetStem = stems[activeAuditionIndex % stems.length] || stems[0];
-        if (targetStem?.audioUrl) {
+        const currentSecTag = currentSection?.cleanTag || 'Chorus';
+        const targetAudioUrl = getTrackAudioSnippetUrl(activeTrack, activeAuditionIndex, 'master', currentSecTag);
+        if (targetAudioUrl) {
           if (!audioElRef.current) {
             audioElRef.current = new Audio();
             audioElRef.current.crossOrigin = 'anonymous';
             audioElRef.current.preload = 'auto';
           }
           const currentLoaded = (audioElRef.current as any)._loadedUrl;
-          if (currentLoaded !== targetStem.audioUrl) {
-            (audioElRef.current as any)._loadedUrl = targetStem.audioUrl;
-            audioElRef.current.src = targetStem.audioUrl;
+          if (currentLoaded !== targetAudioUrl) {
+            (audioElRef.current as any)._loadedUrl = targetAudioUrl;
+            audioElRef.current.src = targetAudioUrl;
             audioElRef.current.load();
           }
           audioElRef.current.loop = isLooping;

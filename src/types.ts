@@ -115,6 +115,64 @@ export interface Track {
   epCollection?: string;
   camelotKey?: string;
   notes?: string;
+  sunoAssets?: SunoTrackAssets;
+}
+
+export interface SunoAudioTake {
+  id: string;
+  label: string;
+  versionTag: string;
+  isMaster: boolean;
+  isRemastered: boolean;
+  filename: string;
+  webdavPath: string;
+  streamUrl: string;
+  format: 'wav' | 'mp3' | 'flac';
+  sampleRate: number;
+  bitDepth: number;
+  lufsIntegrated?: number;
+  lra?: number;
+  truePeakDb?: number;
+  spectralEnhancements?: {
+    ultrasonicHissReductionDb: number;
+    presenceSmoothingDb: number;
+    subBassWarmthDb: number;
+    lowEndWarmthDb: number;
+  };
+}
+
+export interface LyricAudioSnippet {
+  id: string;
+  label: string;
+  lyricSection: string;
+  lyricQuote: string;
+  startTimeSeconds: number;
+  endTimeSeconds: number;
+  filename: string;
+  webdavPath: string;
+  streamUrl: string;
+}
+
+export interface SunoVideoMaster {
+  id: string;
+  label: string;
+  aspectRatio: string;
+  resolution: string;
+  filename: string;
+  streamUrl: string;
+}
+
+export interface SunoTrackAssets {
+  takes: SunoAudioTake[];
+  snippets: LyricAudioSnippet[];
+  modelEngine: string;
+  primaryPrompt?: string;
+  negativePrompt?: string;
+  engineSliders?: EngineSliders;
+  vocalArchetype?: string;
+  characterAnchor?: string;
+  videoMasters?: SunoVideoMaster[];
+  storyboardSceneCount?: number;
 }
 
 export interface EPCollection {
@@ -220,6 +278,9 @@ export interface MixerTrack {
   assetId?: string;
   automation?: TrackAutomationState;
   groupId?: string | null;
+  isUvrSeparated?: boolean;
+  stemFilename?: string;
+  modelUsed?: string;
 }
 
 export interface GeneratedImage {
@@ -808,12 +869,16 @@ export interface BlockSuiteBlock {
   aspectRatio?: '16:9' | '9:16' | '1:1' | string;
   assetId?: string; // Studio visual asset ID link
   shotNumber?: string;
-  audioUrl?: string; // Streamable master audio or stem URL
+  audioUrl?: string; // Audio snippet stream URL (from track master or stems)
   startTime?: number; // Start cue in seconds (e.g. 15.0)
   endTime?: number; // End cue in seconds (e.g. 45.0)
   trackId?: string; // ID of parent Track
   trackTitle?: string; // Title of parent Track
   isAudioLooping?: boolean; // Section loop toggle
+  styleIndex?: number; // Version / style index
+  sectionStartTimeSec?: number; // Estimated / customized start time in seconds (e.g. 15 for Verse 1)
+  sectionDurationSec?: number; // Duration of snippet in seconds (e.g. 25)
+  stemCategory?: 'master' | 'vocal' | 'instrumental';
 }
 
 export interface WhiteboardCanvasDoc {

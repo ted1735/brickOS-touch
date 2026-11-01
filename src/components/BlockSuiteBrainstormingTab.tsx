@@ -51,8 +51,11 @@ import {
   GitCompare,
   Play,
   Pause,
-  Repeat,
-  Volume2
+  Volume2,
+  FastForward,
+  Rewind,
+  Rows,
+  AlignHorizontalDistributeCenter
 } from 'lucide-react';
 import {
   Track,
@@ -70,10 +73,17 @@ import {
   isFirebaseConfigured
 } from '../lib/firebase';
 import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
-import { getTrackNextcloudAssets, getTrackStems } from '../data/nextcloudAssetIndex';
+import { getTrackNextcloudAssets } from '../data/nextcloudAssetIndex';
 import { BlockSuiteGuideModal } from './BlockSuiteGuideModal';
 import { BlockSuiteThreeSongComparatorModal } from './BlockSuiteThreeSongComparatorModal';
 import { getSubstantiveLyrics, parseLyricSections, ParsedLyricSection } from '../utils/lyricParser';
+import {
+  sectionSnippetPlayer,
+  getEstimatedSectionTime,
+  getTrackAudioSnippetUrl,
+  formatTimeMMSS,
+  SnippetPlaybackState
+} from '../utils/sectionAudioHelper';
 
 interface BlockSuiteBrainstormingTabProps {
   tracks: Track[];
@@ -83,8 +93,8 @@ interface BlockSuiteBrainstormingTabProps {
   onNavigateToTab?: (tab: string) => void;
   onSendToVideoExpress?: (sceneData: { title: string; prompt: string; shotNumber?: string; imageUrl?: string }) => void;
   isDarkMode?: boolean;
-  /** When true, all whiteboard chrome (headers, toolbars, footer) is hidden — canvas only. */
   focusMode?: boolean;
+  onToggleFocusMode?: () => void;
 }
 
 const COLOR_OPTIONS = [
@@ -97,39 +107,6 @@ const COLOR_OPTIONS = [
   { id: 'slate', name: 'Slate / Note', border: 'border-slate-700', bg: 'bg-slate-900/90', text: 'text-slate-300', hex: '#64748b' }
 ];
 
-// Format time in mm:ss for audio snippets
-const formatSnippetTime = (secs: number = 0): string => {
-  if (isNaN(secs) || secs < 0) return '0:00';
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-};
-
-// Estimate section cue window (startTime and endTime) based on arrangement tag and position
-const estimateSectionTimings = (
-  sectionIndex: number,
-  tag: string,
-  totalSections: number,
-  approxSongDuration: number = 210
-): { startTime: number; endTime: number } => {
-  const lower = (tag || '').toLowerCase();
-  
-  if (lower.includes('intro')) return { startTime: 0, endTime: 16 };
-  if (lower.includes('verse 1') || (lower.includes('verse') && sectionIndex === 0)) return { startTime: 16, endTime: 46 };
-  if (lower.includes('pre-chorus 1') || (lower.includes('pre') && sectionIndex <= 2)) return { startTime: 46, endTime: 62 };
-  if (lower.includes('chorus 1') || (lower.includes('chorus') && sectionIndex <= 3)) return { startTime: 62, endTime: 92 };
-  if (lower.includes('verse 2')) return { startTime: 92, endTime: 122 };
-  if (lower.includes('pre-chorus 2')) return { startTime: 122, endTime: 138 };
-  if (lower.includes('chorus 2')) return { startTime: 138, endTime: 168 };
-  if (lower.includes('bridge') || lower.includes('drop') || lower.includes('breakdown')) return { startTime: 168, endTime: 198 };
-  if (lower.includes('chorus 3') || lower.includes('final chorus')) return { startTime: 198, endTime: 228 };
-  if (lower.includes('outro') || lower.includes('tag')) return { startTime: 228, endTime: 248 };
-
-  const slice = Math.max(20, Math.floor(approxSongDuration / Math.max(1, totalSections)));
-  const start = Math.floor(sectionIndex * slice);
-  return { startTime: start, endTime: Math.floor(start + slice) };
-};
-
 export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProps> = ({
   tracks,
   selectedTrack,
@@ -138,7 +115,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   onNavigateToTab,
   onSendToVideoExpress,
   isDarkMode = true,
-  focusMode = false
+  focusMode = false,
+  onToggleFocusMode
 }) => {
   // Isomorphic BlockSuite View Mode: 'edgeless' (infinite whiteboard) vs 'page' (linear document)
   const [viewMode, setViewMode] = useState<'edgeless' | 'page'>('edgeless');
@@ -275,189 +253,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     panToBlock(matchingBlocks[prevIdx].id);
   };
 
-  // ========================================================
-  // Non-Destructive Lyric Audio Snippet Player Engine
-  // ========================================================
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playingBlockId, setPlayingBlockId] = useState<string | null>(null);
-  const [currentPlayTime, setCurrentPlayTime] = useState<number>(0);
-  const playheadAnimRef = useRef<number | null>(null);
-
-  // Toggle play/pause for a section block
-  const handleTogglePlaySnippet = (block: BlockSuiteBlock) => {
-    if (playingBlockId === block.id) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      if (playheadAnimRef.current) {
-        cancelAnimationFrame(playheadAnimRef.current);
-      }
-      setPlayingBlockId(null);
-      return;
-    }
-
-    if (!block.audioUrl) {
-      showToast('No audio source mapped to this card. Check track master WAV.', 'warning');
-      return;
-    }
-
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.crossOrigin = 'anonymous';
-      audioRef.current.preload = 'auto';
-    }
-
-    const currentSrc = (audioRef.current as any)._loadedUrl;
-    if (currentSrc !== block.audioUrl) {
-      (audioRef.current as any)._loadedUrl = block.audioUrl;
-      audioRef.current.src = block.audioUrl;
-      audioRef.current.load();
-    }
-
-    const start = block.startTime || 0;
-    audioRef.current.currentTime = start;
-    setCurrentPlayTime(start);
-    setPlayingBlockId(block.id);
-
-    audioRef.current.play().catch(err => {
-      console.warn('Playback start note:', err);
-      showToast('Tap again to enable browser audio stream', 'info');
-    });
-  };
-
-  // Toggle looping for a block
-  const handleToggleLoopBlock = (blockId: string) => {
-    const block = blocks.find(b => b.id === blockId);
-    if (!block) return;
-    const nextLoop = !block.isAudioLooping;
-    handleUpdateBlock(blockId, { isAudioLooping: nextLoop });
-    showToast(nextLoop ? 'Section loop enabled' : 'Section loop disabled', 'info');
-  };
-
-  // Micro-nudge start or end cue points
-  const handleNudgeCue = (blockId: string, cue: 'start' | 'end', delta: number) => {
-    const block = blocks.find(b => b.id === blockId);
-    if (!block) return;
-
-    let newStart = block.startTime ?? 0;
-    let newEnd = block.endTime ?? (newStart + 30);
-
-    if (cue === 'start') {
-      newStart = Math.max(0, Math.round((newStart + delta) * 10) / 10);
-      if (newStart >= newEnd) newStart = Math.max(0, newEnd - 1);
-      handleUpdateBlock(blockId, { startTime: newStart });
-      if (playingBlockId === blockId && audioRef.current) {
-        if (audioRef.current.currentTime < newStart) {
-          audioRef.current.currentTime = newStart;
-          setCurrentPlayTime(newStart);
-        }
-      }
-    } else {
-      newEnd = Math.max(newStart + 1, Math.round((newEnd + delta) * 10) / 10);
-      handleUpdateBlock(blockId, { endTime: newEnd });
-      if (playingBlockId === blockId && audioRef.current) {
-        if (audioRef.current.currentTime >= newEnd) {
-          audioRef.current.currentTime = newStart;
-          setCurrentPlayTime(newStart);
-        }
-      }
-    }
-  };
-
-  // Scrub inside snippet window
-  const handleScrubSnippet = (e: React.MouseEvent<HTMLDivElement>, block: BlockSuiteBlock) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, clickX / rect.width));
-    const start = block.startTime ?? 0;
-    const end = block.endTime ?? (start + 30);
-    const targetTime = Math.round((start + (pct * (end - start))) * 10) / 10;
-
-    if (audioRef.current && playingBlockId === block.id) {
-      audioRef.current.currentTime = targetTime;
-      setCurrentPlayTime(targetTime);
-    } else {
-      if (!block.audioUrl) return;
-      if (!audioRef.current) {
-        audioRef.current = new Audio();
-        audioRef.current.crossOrigin = 'anonymous';
-        audioRef.current.preload = 'auto';
-      }
-      const currentSrc = (audioRef.current as any)._loadedUrl;
-      if (currentSrc !== block.audioUrl) {
-        (audioRef.current as any)._loadedUrl = block.audioUrl;
-        audioRef.current.src = block.audioUrl;
-        audioRef.current.load();
-      }
-      audioRef.current.currentTime = targetTime;
-      setCurrentPlayTime(targetTime);
-      setPlayingBlockId(block.id);
-      audioRef.current.play().catch(() => {});
-    }
-  };
-
-  // Active playhead animation loop and boundary checking
-  useEffect(() => {
-    if (!playingBlockId) {
-      if (playheadAnimRef.current) {
-        cancelAnimationFrame(playheadAnimRef.current);
-      }
-      return;
-    }
-
-    const activeBlock = blocks.find(b => b.id === playingBlockId);
-    if (!activeBlock) {
-      setPlayingBlockId(null);
-      return;
-    }
-
-    const start = activeBlock.startTime ?? 0;
-    const end = activeBlock.endTime ?? (start + 30);
-
-    const monitorLoop = () => {
-      if (!audioRef.current) return;
-
-      const current = audioRef.current.currentTime;
-      setCurrentPlayTime(current);
-
-      if (current >= end) {
-        if (activeBlock.isAudioLooping) {
-          audioRef.current.currentTime = start;
-          audioRef.current.play().catch(() => {});
-        } else {
-          audioRef.current.pause();
-          audioRef.current.currentTime = start;
-          setPlayingBlockId(null);
-          setCurrentPlayTime(start);
-          return;
-        }
-      }
-
-      playheadAnimRef.current = requestAnimationFrame(monitorLoop);
-    };
-
-    playheadAnimRef.current = requestAnimationFrame(monitorLoop);
-
-    return () => {
-      if (playheadAnimRef.current) {
-        cancelAnimationFrame(playheadAnimRef.current);
-      }
-    };
-  }, [playingBlockId, blocks]);
-
-  // Audio cleanup on component unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-      }
-      if (playheadAnimRef.current) {
-        cancelAnimationFrame(playheadAnimRef.current);
-      }
-    };
-  }, []);
-
   // Helper to generate default blocks from track lyrics (and specific style/version)
   const generateInitialBlocksFromTrack = (
     track: Track,
@@ -468,9 +263,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const parsedSections = parseLyricSections(rawLyrics);
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
-
-    const stems = getTrackStems(track);
-    const defaultAudioUrl = track.audioUrl || stems.find(s => s.stemType === 'master')?.audioUrl || stems[0]?.audioUrl || '';
 
     let currentX = 120;
     let currentY = 100;
@@ -508,7 +300,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         else if (lowerTag.includes('intro') || lowerTag.includes('outro') || lowerTag.includes('tag')) color = 'purple';
         else if (lowerTag.includes('stop') || lowerTag.includes('silence')) color = 'slate';
 
-        const timings = estimateSectionTimings(index, tag, parsedSections.length);
         const blockId = `block_${index + 1}_${Date.now()}`;
         const newBlock: BlockSuiteBlock = {
           id: blockId,
@@ -522,13 +313,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           color,
           sectionTag: tag,
           tags: ['Lyrics', tag.replace(/[[\]]/g, '')],
-          orderIndex: index + 1,
-          audioUrl: defaultAudioUrl,
-          startTime: timings.startTime,
-          endTime: timings.endTime,
-          trackId: track.id,
-          trackTitle: track.title,
-          isAudioLooping: false
+          orderIndex: index + 1
         };
         newBlocks.push(newBlock);
 
@@ -547,7 +332,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
         currentX += 380;
         if (currentX > 1700) {
           currentX = 120;
-          currentY += 460;
+          currentY += 440;
         }
       });
     } else {
@@ -598,6 +383,45 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   const linkedNextcloudAssets = useMemo(() => {
     return getTrackNextcloudAssets(selectedTrack.id, selectedTrack.title);
   }, [selectedTrack.id, selectedTrack.title]);
+
+  // Section Audio Snippet Shootout Player State
+  const [playbackState, setPlaybackState] = useState<SnippetPlaybackState>(sectionSnippetPlayer.getState());
+
+  useEffect(() => {
+    const unsub = sectionSnippetPlayer.subscribe((st) => setPlaybackState({ ...st }));
+    return () => unsub();
+  }, []);
+
+  // Helper to play/stop snippet for any card block
+  const handlePlayBlockSnippet = (block: BlockSuiteBlock) => {
+    const blockTag = block.sectionTag || block.title;
+    const isThisPlaying =
+      playbackState.isPlaying &&
+      ((block.audioUrl && playbackState.audioUrl === block.audioUrl && playbackState.currentSectionTag === blockTag) ||
+       (playbackState.currentTrackId === (block.trackId || selectedTrack.id) && playbackState.currentSectionTag === blockTag));
+
+    if (isThisPlaying) {
+      sectionSnippetPlayer.stop();
+      return;
+    }
+
+    const trackObj = tracks.find(t => t.id === block.trackId) || selectedTrack;
+    const styleIdx = block.styleIndex ?? activeStyleIndex;
+    const audioUrl = block.audioUrl || getTrackAudioSnippetUrl(trackObj, styleIdx, block.stemCategory || 'master');
+    const timing = (block.sectionStartTimeSec !== undefined && block.sectionDurationSec !== undefined)
+      ? { startTimeSec: block.sectionStartTimeSec, durationSec: block.sectionDurationSec }
+      : getEstimatedSectionTime(blockTag, block.orderIndex || 0, trackObj.bpm);
+
+    sectionSnippetPlayer.playSnippet({
+      url: audioUrl,
+      trackId: trackObj.id,
+      trackTitle: block.trackTitle || trackObj.title,
+      sectionTag: blockTag,
+      startTimeSec: timing.startTimeSec,
+      durationSec: timing.durationSec,
+      loop: false
+    });
+  };
 
   // Load from Firestore or initialize when selectedTrack changes
   useEffect(() => {
@@ -771,9 +595,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     let color = 'indigo';
     let width = 320;
     let sectionTag: string | undefined = undefined;
-    let audioUrl: string | undefined = undefined;
-    let startTime: number | undefined = undefined;
-    let endTime: number | undefined = undefined;
 
     if (type === 'song_section') {
       const sectionCount = blocks.filter(b => b.type === 'song_section').length;
@@ -781,11 +602,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       content = 'Write lyrics and arrangement notes here...';
       color = sectionCount % 2 === 0 ? 'indigo' : 'cyan';
       sectionTag = title;
-      const stems = getTrackStems(selectedTrack);
-      audioUrl = selectedTrack.audioUrl || stems.find(s => s.stemType === 'master')?.audioUrl || stems[0]?.audioUrl || '';
-      const timings = estimateSectionTimings(sectionCount, title, sectionCount + 1);
-      startTime = timings.startTime;
-      endTime = timings.endTime;
     } else if (type === 'sticky_note') {
       title = 'Idea / Sticky Note';
       content = 'Record fleeting melodic hooks, rhyme ideas, or transition notes.';
@@ -828,13 +644,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       width,
       color,
       sectionTag,
-      orderIndex: blocks.length,
-      audioUrl: type === 'song_section' ? audioUrl : undefined,
-      startTime: type === 'song_section' ? startTime : undefined,
-      endTime: type === 'song_section' ? endTime : undefined,
-      trackId: selectedTrack.id,
-      trackTitle: selectedTrack.title,
-      isAudioLooping: false
+      orderIndex: blocks.length
     };
 
     const updated = [...blocks, newBlock];
@@ -962,12 +772,12 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     showToast(`Compiled ${targetSections.length} whiteboard sections to active track lyrics!`);
   };
 
-  // Load 3 songs side-by-side into 4 parallel columns: Song A, Song B, Song C, and Master Best Version
+  // Load 3 songs side-by-side: Section Rows (Verse-to-Verse Matrix) or Parallel Columns
   const handleLoadThreeSongsToCanvas = (
     trackA: Track,
     trackB: Track,
     trackC: Track,
-    options?: { styleA?: number; styleB?: number; styleC?: number }
+    options?: { styleA?: number; styleB?: number; styleC?: number; layoutMode?: 'sectionRows' | 'songColumns' }
   ) => {
     const rawA = getSubstantiveLyrics(trackA, options?.styleA);
     const rawB = getSubstantiveLyrics(trackB, options?.styleB);
@@ -977,26 +787,23 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
     const secB = parseLyricSections(rawB);
     const secC = parseLyricSections(rawC);
 
+    const audioUrlA = getTrackAudioSnippetUrl(trackA, options?.styleA, 'master');
+    const audioUrlB = getTrackAudioSnippetUrl(trackB, options?.styleB, 'master');
+    const audioUrlC = getTrackAudioSnippetUrl(trackC, options?.styleC, 'master');
+    const audioUrlM = getTrackAudioSnippetUrl(selectedTrack, 0, 'master');
+
     const newBlocks: BlockSuiteBlock[] = [];
     const newConnectors: BlockSuiteConnector[] = [];
     const timestamp = Date.now();
+    const layout = options?.layoutMode || 'sectionRows';
 
-    const stemsA = getTrackStems(trackA);
-    const audioUrlA = trackA.audioUrl || stemsA.find(s => s.stemType === 'master')?.audioUrl || stemsA[0]?.audioUrl || '';
-
-    const stemsB = getTrackStems(trackB);
-    const audioUrlB = trackB.audioUrl || stemsB.find(s => s.stemType === 'master')?.audioUrl || stemsB[0]?.audioUrl || '';
-
-    const stemsC = getTrackStems(trackC);
-    const audioUrlC = trackC.audioUrl || stemsC.find(s => s.stemType === 'master')?.audioUrl || stemsC[0]?.audioUrl || '';
-
-    // Helper to calculate card height so vertical stacks never collide or overlap
+    // Helper to calculate card height so vertical stacks or matrix rows never collide
     const calcCardHeight = (content: string) => {
       const lineCount = content.split('\n').filter(l => l.trim().length > 0).length;
-      return Math.max(340, 180 + (lineCount * 22));
+      return Math.max(260, 120 + (lineCount * 22));
     };
 
-    // Helper to build column header
+    // Helper to build lane/column header
     const buildColHeader = (
       id: string,
       title: string,
@@ -1011,7 +818,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       title,
       subtitle,
       content: actionType === 'copyAll'
-        ? `Drag any section across to Column 4 (Master Lane), or click ★ Copy to Master on any card.\nKey: ${tag} • BPM synced`
+        ? `Drag any section across to Column 4 (Master Lane), click ★ Master to copy, or click ▶ Audition to hear that section.\nKey: ${tag} • BPM synced`
         : `DROP ZONE: Assemble your winning sections here.\nReorder cards vertically, edit lines, then click Compile to lock into ${selectedTrack.title}.`,
       x,
       y: 60,
@@ -1021,7 +828,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       orderIndex: 0
     });
 
-    // 1. Column 1: Song A (x = 80, Indigo)
+    // 1. Headers across top
     newBlocks.push(buildColHeader(
       `col_a_${timestamp}`,
       `SONG A • ${trackA.title}`,
@@ -1032,33 +839,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'copyAll'
     ));
 
-    let yA = 240;
-    secA.forEach((sec, idx) => {
-      const timings = estimateSectionTimings(idx, sec.tag, secA.length);
-      newBlocks.push({
-        id: `blk_a_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `Song A • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
-        content: sec.content,
-        x: 80,
-        y: yA,
-        width: 340,
-        color: 'indigo',
-        sectionTag: sec.tag,
-        tags: ['Song A', trackA.id, sec.cleanTag],
-        orderIndex: idx + 1,
-        audioUrl: audioUrlA,
-        startTime: timings.startTime,
-        endTime: timings.endTime,
-        trackId: trackA.id,
-        trackTitle: trackA.title,
-        isAudioLooping: false
-      });
-      yA += calcCardHeight(sec.content) + 24;
-    });
-
-    // 2. Column 2: Song B (x = 460, Emerald)
     newBlocks.push(buildColHeader(
       `col_b_${timestamp}`,
       `SONG B • ${trackB.title}`,
@@ -1069,33 +849,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'copyAll'
     ));
 
-    let yB = 240;
-    secB.forEach((sec, idx) => {
-      const timings = estimateSectionTimings(idx, sec.tag, secB.length);
-      newBlocks.push({
-        id: `blk_b_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `Song B • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
-        content: sec.content,
-        x: 460,
-        y: yB,
-        width: 340,
-        color: 'emerald',
-        sectionTag: sec.tag,
-        tags: ['Song B', trackB.id, sec.cleanTag],
-        orderIndex: idx + 1,
-        audioUrl: audioUrlB,
-        startTime: timings.startTime,
-        endTime: timings.endTime,
-        trackId: trackB.id,
-        trackTitle: trackB.title,
-        isAudioLooping: false
-      });
-      yB += calcCardHeight(sec.content) + 24;
-    });
-
-    // 3. Column 3: Song C (x = 840, Purple)
     newBlocks.push(buildColHeader(
       `col_c_${timestamp}`,
       `SONG C • ${trackC.title}`,
@@ -1106,33 +859,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'copyAll'
     ));
 
-    let yC = 240;
-    secC.forEach((sec, idx) => {
-      const timings = estimateSectionTimings(idx, sec.tag, secC.length);
-      newBlocks.push({
-        id: `blk_c_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `Song C • ${sec.tag}`,
-        subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
-        content: sec.content,
-        x: 840,
-        y: yC,
-        width: 340,
-        color: 'purple',
-        sectionTag: sec.tag,
-        tags: ['Song C', trackC.id, sec.cleanTag],
-        orderIndex: idx + 1,
-        audioUrl: audioUrlC,
-        startTime: timings.startTime,
-        endTime: timings.endTime,
-        trackId: trackC.id,
-        trackTitle: trackC.title,
-        isAudioLooping: false
-      });
-      yC += calcCardHeight(sec.content) + 24;
-    });
-
-    // 4. Column 4: ★ Master Best Version (x = 1220, Amber)
     newBlocks.push(buildColHeader(
       `col_master_${timestamp}`,
       `★ MASTER BEST VERSION LANE`,
@@ -1143,33 +869,282 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       'masterHeader'
     ));
 
-    // Populate Master column initially with Song A's or selectedTrack's sections as baseline
-    const baselineSections = secA.length > 0 ? secA : (parseLyricSections(getSubstantiveLyrics(selectedTrack)));
-    let yM = 240;
-    baselineSections.forEach((sec, idx) => {
-      const timings = estimateSectionTimings(idx, sec.tag, baselineSections.length);
-      newBlocks.push({
-        id: `blk_m_${idx}_${timestamp}`,
-        type: 'song_section',
-        title: `★ Master • ${sec.tag}`,
-        subtitle: `Baseline Draft from ${trackA.title} (${sec.lineCount} lines)`,
-        content: sec.content,
-        x: 1220,
-        y: yM,
-        width: 380,
-        color: 'amber',
-        sectionTag: sec.tag,
-        tags: ['Master', 'Active', sec.cleanTag],
-        orderIndex: idx + 1,
-        audioUrl: audioUrlA,
-        startTime: timings.startTime,
-        endTime: timings.endTime,
-        trackId: trackA.id,
-        trackTitle: trackA.title,
-        isAudioLooping: false
+    // LAYOUT MODE 1: VERSE-TO-VERSE MATRIX (SECTION ROWS) - Aligns Verse 1 to Verse 1 horizontally
+    if (layout === 'sectionRows') {
+      // Gather unique tags across songs in order of appearance
+      const uniqueTags: string[] = [];
+      const seenClean = new Set<string>();
+      [...secA, ...secB, ...secC].forEach(s => {
+        const clean = s.cleanTag.toLowerCase();
+        if (!seenClean.has(clean)) {
+          seenClean.add(clean);
+          uniqueTags.push(s.tag);
+        }
       });
-      yM += calcCardHeight(sec.content) + 24;
-    });
+
+      let currentY = 240;
+
+      uniqueTags.forEach((tag, rIdx) => {
+        const clean = tag.replace(/[[\]]/g, '').trim().toLowerCase();
+        const sA = secA.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+        const sB = secB.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+        const sC = secC.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+
+        const idxA = sA ? secA.indexOf(sA) : rIdx;
+        const idxB = sB ? secB.indexOf(sB) : rIdx;
+        const idxC = sC ? secC.indexOf(sC) : rIdx;
+
+        const timeA = getEstimatedSectionTime(tag, idxA, trackA.bpm);
+        const timeB = getEstimatedSectionTime(tag, idxB, trackB.bpm);
+        const timeC = getEstimatedSectionTime(tag, idxC, trackC.bpm);
+
+        const hA = sA ? calcCardHeight(sA.content) : 220;
+        const hB = sB ? calcCardHeight(sB.content) : 220;
+        const hC = sC ? calcCardHeight(sC.content) : 220;
+        const rowMaxH = Math.max(hA, hB, hC, 240);
+
+        let prevRowBlockId: string | null = null;
+
+        // Song A card
+        if (sA) {
+          const blkIdA = `blk_a_${rIdx}_${timestamp}`;
+          newBlocks.push({
+            id: blkIdA,
+            type: 'song_section',
+            title: `Song A • ${tag}`,
+            subtitle: `Row #${rIdx + 1} (${sA.lineCount} lines • ${sA.charCount} chars)`,
+            content: sA.content,
+            x: 80,
+            y: currentY,
+            width: 340,
+            color: 'indigo',
+            sectionTag: tag,
+            tags: ['Song A', trackA.id, sA.cleanTag],
+            audioUrl: audioUrlA,
+            trackId: trackA.id,
+            trackTitle: trackA.title,
+            styleIndex: options?.styleA ?? 0,
+            sectionStartTimeSec: timeA.startTimeSec,
+            sectionDurationSec: timeA.durationSec,
+            stemCategory: 'master',
+            orderIndex: rIdx + 1
+          });
+          prevRowBlockId = blkIdA;
+        }
+
+        // Song B card
+        if (sB) {
+          const blkIdB = `blk_b_${rIdx}_${timestamp}`;
+          newBlocks.push({
+            id: blkIdB,
+            type: 'song_section',
+            title: `Song B • ${tag}`,
+            subtitle: `Row #${rIdx + 1} (${sB.lineCount} lines • ${sB.charCount} chars)`,
+            content: sB.content,
+            x: 460,
+            y: currentY,
+            width: 340,
+            color: 'emerald',
+            sectionTag: tag,
+            tags: ['Song B', trackB.id, sB.cleanTag],
+            audioUrl: audioUrlB,
+            trackId: trackB.id,
+            trackTitle: trackB.title,
+            styleIndex: options?.styleB ?? 0,
+            sectionStartTimeSec: timeB.startTimeSec,
+            sectionDurationSec: timeB.durationSec,
+            stemCategory: 'master',
+            orderIndex: rIdx + 1
+          });
+
+          if (prevRowBlockId) {
+            newConnectors.push({
+              id: `conn_cmp_${prevRowBlockId}_${blkIdB}`,
+              sourceBlockId: prevRowBlockId,
+              targetBlockId: blkIdB,
+              label: 'vs',
+              color: '#06b6d4'
+            });
+          }
+          prevRowBlockId = blkIdB;
+        }
+
+        // Song C card
+        if (sC) {
+          const blkIdC = `blk_c_${rIdx}_${timestamp}`;
+          newBlocks.push({
+            id: blkIdC,
+            type: 'song_section',
+            title: `Song C • ${tag}`,
+            subtitle: `Row #${rIdx + 1} (${sC.lineCount} lines • ${sC.charCount} chars)`,
+            content: sC.content,
+            x: 840,
+            y: currentY,
+            width: 340,
+            color: 'purple',
+            sectionTag: tag,
+            tags: ['Song C', trackC.id, sC.cleanTag],
+            audioUrl: audioUrlC,
+            trackId: trackC.id,
+            trackTitle: trackC.title,
+            styleIndex: options?.styleC ?? 0,
+            sectionStartTimeSec: timeC.startTimeSec,
+            sectionDurationSec: timeC.durationSec,
+            stemCategory: 'master',
+            orderIndex: rIdx + 1
+          });
+
+          if (prevRowBlockId) {
+            newConnectors.push({
+              id: `conn_cmp_${prevRowBlockId}_${blkIdC}`,
+              sourceBlockId: prevRowBlockId,
+              targetBlockId: blkIdC,
+              label: 'vs',
+              color: '#a855f7'
+            });
+          }
+        }
+
+        // Master Lane Target Card (Row #${rIdx + 1})
+        const blkIdM = `blk_m_${rIdx}_${timestamp}`;
+        const defaultContent = sA?.content || sB?.content || sC?.content || `[${tag} assembled master text]`;
+        newBlocks.push({
+          id: blkIdM,
+          type: 'song_section',
+          title: `★ Master • ${tag}`,
+          subtitle: `Row #${rIdx + 1} Baseline Synthesis`,
+          content: defaultContent,
+          x: 1220,
+          y: currentY,
+          width: 380,
+          color: 'amber',
+          sectionTag: tag,
+          tags: ['Master', 'Active', clean],
+          audioUrl: audioUrlM,
+          trackId: selectedTrack.id,
+          trackTitle: selectedTrack.title,
+          styleIndex: 0,
+          sectionStartTimeSec: timeA.startTimeSec,
+          sectionDurationSec: timeA.durationSec,
+          stemCategory: 'master',
+          orderIndex: rIdx + 1
+        });
+
+        currentY += rowMaxH + 36;
+      });
+
+    } else {
+      // LAYOUT MODE 2: PARALLEL SONG COLUMNS
+      let yA = 240;
+      secA.forEach((sec, idx) => {
+        const timeA = getEstimatedSectionTime(sec.tag, idx, trackA.bpm);
+        newBlocks.push({
+          id: `blk_a_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `Song A • ${sec.tag}`,
+          subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
+          content: sec.content,
+          x: 80,
+          y: yA,
+          width: 340,
+          color: 'indigo',
+          sectionTag: sec.tag,
+          tags: ['Song A', trackA.id, sec.cleanTag],
+          audioUrl: audioUrlA,
+          trackId: trackA.id,
+          trackTitle: trackA.title,
+          styleIndex: options?.styleA ?? 0,
+          sectionStartTimeSec: timeA.startTimeSec,
+          sectionDurationSec: timeA.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yA += calcCardHeight(sec.content) + 24;
+      });
+
+      let yB = 240;
+      secB.forEach((sec, idx) => {
+        const timeB = getEstimatedSectionTime(sec.tag, idx, trackB.bpm);
+        newBlocks.push({
+          id: `blk_b_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `Song B • ${sec.tag}`,
+          subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
+          content: sec.content,
+          x: 460,
+          y: yB,
+          width: 340,
+          color: 'emerald',
+          sectionTag: sec.tag,
+          tags: ['Song B', trackB.id, sec.cleanTag],
+          audioUrl: audioUrlB,
+          trackId: trackB.id,
+          trackTitle: trackB.title,
+          styleIndex: options?.styleB ?? 0,
+          sectionStartTimeSec: timeB.startTimeSec,
+          sectionDurationSec: timeB.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yB += calcCardHeight(sec.content) + 24;
+      });
+
+      let yC = 240;
+      secC.forEach((sec, idx) => {
+        const timeC = getEstimatedSectionTime(sec.tag, idx, trackC.bpm);
+        newBlocks.push({
+          id: `blk_c_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `Song C • ${sec.tag}`,
+          subtitle: `Arrangement Part #${idx + 1} (${sec.lineCount} lines • ${sec.charCount} chars)`,
+          content: sec.content,
+          x: 840,
+          y: yC,
+          width: 340,
+          color: 'purple',
+          sectionTag: sec.tag,
+          tags: ['Song C', trackC.id, sec.cleanTag],
+          audioUrl: audioUrlC,
+          trackId: trackC.id,
+          trackTitle: trackC.title,
+          styleIndex: options?.styleC ?? 0,
+          sectionStartTimeSec: timeC.startTimeSec,
+          sectionDurationSec: timeC.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yC += calcCardHeight(sec.content) + 24;
+      });
+
+      // Master column initially with Song A or selectedTrack sections
+      const baselineSections = secA.length > 0 ? secA : (parseLyricSections(getSubstantiveLyrics(selectedTrack)));
+      let yM = 240;
+      baselineSections.forEach((sec, idx) => {
+        const timeM = getEstimatedSectionTime(sec.tag, idx, selectedTrack.bpm);
+        newBlocks.push({
+          id: `blk_m_${idx}_${timestamp}`,
+          type: 'song_section',
+          title: `★ Master • ${sec.tag}`,
+          subtitle: `Baseline Draft from ${trackA.title} (${sec.lineCount} lines)`,
+          content: sec.content,
+          x: 1220,
+          y: yM,
+          width: 380,
+          color: 'amber',
+          sectionTag: sec.tag,
+          tags: ['Master', 'Active', sec.cleanTag],
+          audioUrl: audioUrlM,
+          trackId: selectedTrack.id,
+          trackTitle: selectedTrack.title,
+          styleIndex: 0,
+          sectionStartTimeSec: timeM.startTimeSec,
+          sectionDurationSec: timeM.durationSec,
+          stemCategory: 'master',
+          orderIndex: idx + 1
+        });
+        yM += calcCardHeight(sec.content) + 24;
+      });
+    }
 
     setBlocks(newBlocks);
     setConnectors(newConnectors);
@@ -1180,7 +1155,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       handleFitToContent();
     }, 150);
 
-    showToast(`Loaded 3 songs in full (${secA.length} sections for ${trackA.title}, ${secB.length} for ${trackB.title}, ${secC.length} for ${trackC.title})!`, 'success');
+    const layoutDesc = layout === 'sectionRows' ? 'Verse-to-Verse Section Matrix' : 'Parallel 4-Column Board';
+    showToast(`Loaded 3 songs in ${layoutDesc} with Audio Snippet Shootout (${secA.length} for ${trackA.title}, ${secB.length} for ${trackB.title}, ${secC.length} for ${trackC.title})!`, 'success');
   };
 
   // 1-Click Copy any section into Master Column
@@ -1202,13 +1178,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       color: 'amber',
       sectionTag: sourceBlock.sectionTag || sourceBlock.title.replace(/Song [ABC] • /, ''),
       tags: ['Master', 'Active', sourceBlock.sectionTag || 'Section'],
-      orderIndex: masterBlocks.length + 1,
-      audioUrl: sourceBlock.audioUrl,
-      startTime: sourceBlock.startTime,
-      endTime: sourceBlock.endTime,
-      trackId: sourceBlock.trackId,
-      trackTitle: sourceBlock.trackTitle,
-      isAudioLooping: sourceBlock.isAudioLooping
+      orderIndex: masterBlocks.length + 1
     };
 
     const updated = [...blocks, newBlock];
@@ -1576,221 +1546,239 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
   };
 
   return (
-    <div className={`flex flex-col h-full min-h-[550px] bg-slate-950 text-slate-100 overflow-hidden relative ${focusMode ? '' : 'rounded-2xl border border-slate-800/80 shadow-2xl'}`}>
+    <div className={`flex flex-col h-full ${focusMode ? 'min-h-screen rounded-none border-0' : 'min-h-[550px] rounded-2xl border border-slate-800/80'} bg-slate-950 text-slate-100 shadow-2xl overflow-hidden relative`}>
       {/* ========================================================================= */}
       {/* STUDIO HEADER: BLOCKSUITE ISOMORPHIC CONTROLS & STATUS BAR */}
       {/* ========================================================================= */}
-      <div className={`px-4 py-3 bg-slate-900/95 border-b border-slate-800 flex-wrap items-center justify-between gap-3 shrink-0 ${focusMode ? 'hidden' : 'flex'}`}>
-        {/* Left: Studio Branding & Track Selector */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black tracking-wide text-white uppercase font-mono">
-                BlockSuite Brainstorming Canvas
-              </h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                AFFiNE CORE
-              </span>
+      {!focusMode && (
+        <div className="px-4 py-3 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          {/* Left: Studio Branding & Track Selector */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+              <Layers className="w-5 h-5" />
             </div>
-            <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 font-mono">
-              <span>Track:</span>
-              <select
-                value={selectedTrack.id}
-                onChange={(e) => {
-                  const t = tracks.find(trk => trk.id === e.target.value);
-                  if (t) onSelectTrack(t);
-                }}
-                className="bg-slate-850 border border-slate-750 text-indigo-300 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
-              >
-                {tracks.map(t => (
-                  <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                    {t.id}: {t.title} ({t.ep})
-                  </option>
-                ))}
-              </select>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black tracking-wide text-white uppercase font-mono">
+                  BlockSuite Brainstorming Canvas
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  AFFiNE CORE
+                </span>
+              </div>
+              <div className="flex items-center flex-wrap gap-2 text-xs text-slate-400 font-mono">
+                <span>Track:</span>
+                <select
+                  value={selectedTrack.id}
+                  onChange={(e) => {
+                    const t = tracks.find(trk => trk.id === e.target.value);
+                    if (t) onSelectTrack(t);
+                  }}
+                  className="bg-slate-850 border border-slate-750 text-indigo-300 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
+                >
+                  {tracks.map(t => (
+                    <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                      {t.id}: {t.title} ({t.ep})
+                    </option>
+                  ))}
+                </select>
 
-              {/* Style / Version Selector for Dual-Style Songs like Every Candle's Victory */}
-              {selectedTrack.versions && selectedTrack.versions.length > 1 && (
-                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
-                  <span className="text-amber-400 font-bold">Style:</span>
-                  <select
-                    value={activeStyleIndex}
-                    onChange={(e) => handleSyncStyleLyricsToWhiteboard(Number(e.target.value))}
-                    className="bg-amber-950/60 border border-amber-600/50 text-amber-200 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
-                  >
-                    {selectedTrack.versions.map((ver, idx) => (
-                      <option key={idx} value={idx} className="bg-slate-900 text-white">
-                        Style {idx + 1}: {ver.version} ({ver.genre || selectedTrack.genre})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => handleSyncStyleLyricsToWhiteboard(activeStyleIndex)}
-                    title="Populate or reload this style's lyrics into whiteboard arrangement cards"
-                    className="px-2 py-0.5 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Sync Style Lyrics</span>
-                  </button>
-                </div>
+                {/* Style / Version Selector for Dual-Style Songs like Every Candle's Victory */}
+                {selectedTrack.versions && selectedTrack.versions.length > 1 && (
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+                    <span className="text-amber-400 font-bold">Style:</span>
+                    <select
+                      value={activeStyleIndex}
+                      onChange={(e) => handleSyncStyleLyricsToWhiteboard(Number(e.target.value))}
+                      className="bg-amber-950/60 border border-amber-600/50 text-amber-200 font-semibold rounded px-2 py-0.5 text-xs outline-none cursor-pointer"
+                    >
+                      {selectedTrack.versions.map((ver, idx) => (
+                        <option key={idx} value={idx} className="bg-slate-900 text-white">
+                          Style {idx + 1}: {ver.version} ({ver.genre || selectedTrack.genre})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleSyncStyleLyricsToWhiteboard(activeStyleIndex)}
+                      title="Populate or reload this style's lyrics into whiteboard arrangement cards"
+                      className="px-2 py-0.5 rounded bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Sync Style Lyrics</span>
+                    </button>
+                  </div>
+                )}
+
+                <span className="text-slate-600">•</span>
+                <span>{blocks.length} Blocks</span>
+                <span>•</span>
+                <span>{connectors.length} Connectors</span>
+
+                {/* Nextcloud Fiber Assets Badge Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsNextcloudDrawerOpen(prev => !prev)}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition cursor-pointer ${
+                    isNextcloudDrawerOpen
+                      ? 'bg-sky-600 text-white border-sky-400'
+                      : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border-sky-700/50'
+                  }`}
+                  title="View linked audio, video, image, and stem assets from Nextcloud fiber server"
+                >
+                  <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
+                  <span>Nextcloud Assets ({linkedNextcloudAssets.length})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Isomorphic Mode Switcher (Edgeless Infinite Whiteboard vs Page Document) */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('edgeless');
+                triggerAutoSave(blocks, connectors, 'edgeless');
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                viewMode === 'edgeless'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Edgeless Infinite 2D Spatial Whiteboard (Default)"
+            >
+              <Grid className="w-4 h-4 text-indigo-300" />
+              <span>✦ EDGELESS WHITEBOARD</span>
+              {viewMode === 'edgeless' && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('page');
+                triggerAutoSave(blocks, connectors, 'page');
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                viewMode === 'page'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Linear Document Flow"
+            >
+              <FileText className="w-4 h-4 text-indigo-300" />
+              <span>PAGE DOCUMENT</span>
+            </button>
+          </div>
 
-              <span className="text-slate-600">•</span>
-              <span>{blocks.length} Blocks</span>
-              <span>•</span>
-              <span>{connectors.length} Connectors</span>
+          {/* Right: Actions, Sync Badges & Nextcloud Backups */}
+          <div className="flex items-center flex-wrap gap-2">
+            {/* 3-Song Multi-Comparison Matrix Button */}
+            <button
+              type="button"
+              onClick={() => setIsThreeSongModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-mono font-black transition shadow-lg shadow-amber-950/50 border border-amber-400/40 cursor-pointer"
+              title="Load 3 songs side-by-side with drag & drop comparison into Master version"
+            >
+              <Columns className="w-3.5 h-3.5 text-slate-950" />
+              <span>Compare 3 Songs</span>
+              <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 text-[9px]">
+                MATRIX
+              </span>
+            </button>
 
-              {/* Nextcloud Fiber Assets Badge Button */}
+            {/* Focus Mode Whiteboard Quick Action */}
+            {onToggleFocusMode && (
               <button
                 type="button"
-                onClick={() => setIsNextcloudDrawerOpen(prev => !prev)}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition cursor-pointer ${
-                  isNextcloudDrawerOpen
-                    ? 'bg-sky-600 text-white border-sky-400'
-                    : 'bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border-sky-700/50'
-                }`}
-                title="View linked audio, video, image, and stem assets from Nextcloud fiber server"
+                onClick={onToggleFocusMode}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white text-xs font-mono font-bold transition border border-purple-700/60 shadow-xs cursor-pointer group"
+                title="Enter Fullscreen Focus Mode (Hides all headers & toolbars - press Esc to exit)"
               >
-                <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
-                <span>Nextcloud Assets ({linkedNextcloudAssets.length})</span>
+                <Maximize2 className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Focus Mode</span>
+                <span className="px-1.5 py-0.2 rounded bg-purple-900/90 text-purple-200 text-[9px]">
+                  Z
+                </span>
+              </button>
+            )}
+
+            {/* Whiteboard Guide / Instructions Button */}
+            <button
+              type="button"
+              onClick={() => setIsGuideModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold transition border border-slate-700 cursor-pointer"
+              title="Whiteboard instructions, zoom shortcuts, and 3-song comparison guide"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Instructions</span>
+            </button>
+
+            {/* Firestore Sync Badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  firestoreStatus === 'saved'
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
+                    : firestoreStatus === 'saving'
+                    ? 'bg-amber-400 animate-ping'
+                    : 'bg-rose-500'
+                }`}
+              />
+              <span className="text-slate-300">
+                {firestoreStatus === 'saved' ? `Firestore: Synced` : firestoreStatus === 'saving' ? 'Saving...' : 'Offline'}
+              </span>
+            </div>
+
+            {/* Compile to Lyrics Button */}
+            <button
+              type="button"
+              onClick={handleCompileToLyrics}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer"
+              title="Compile whiteboard arrangement cards into active song lyrics"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Compile to Lyrics</span>
+            </button>
+
+            {/* Backup to Nextcloud Button */}
+            <button
+              type="button"
+              onClick={handleBackupToNextcloud}
+              disabled={isExportingNextcloud}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+              title="Backup Markdown and BlockSuite JSON directly to Nextcloud WebDAV"
+            >
+              <FolderSync className={`w-3.5 h-3.5 ${isExportingNextcloud ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline">Backup Nextcloud</span>
+            </button>
+
+            {/* Export Dropdown */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleDownloadMarkdown}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                title="Download Markdown (.md)"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadJson}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                title="Download BlockSuite JSON (.json)"
+              >
+                <FileText className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
-
-        {/* Center: Isomorphic Mode Switcher (Edgeless Infinite Whiteboard vs Page Document) */}
-        <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('edgeless');
-              triggerAutoSave(blocks, connectors, 'edgeless');
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
-              viewMode === 'edgeless'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Edgeless Infinite 2D Spatial Whiteboard (Default)"
-          >
-            <Grid className="w-4 h-4 text-indigo-300" />
-            <span>✦ EDGELESS WHITEBOARD</span>
-            {viewMode === 'edgeless' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('page');
-              triggerAutoSave(blocks, connectors, 'page');
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
-              viewMode === 'page'
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-950 ring-1 ring-indigo-400/50'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Linear Document Flow"
-          >
-            <FileText className="w-4 h-4 text-indigo-300" />
-            <span>PAGE DOCUMENT</span>
-          </button>
-        </div>
-
-        {/* Right: Actions, Sync Badges & Nextcloud Backups */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* 3-Song Multi-Comparison Matrix Button */}
-          <button
-            type="button"
-            onClick={() => setIsThreeSongModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-mono font-black transition shadow-lg shadow-amber-950/50 border border-amber-400/40 cursor-pointer"
-            title="Load 3 songs side-by-side with drag & drop comparison into Master version"
-          >
-            <Columns className="w-3.5 h-3.5 text-slate-950" />
-            <span>Compare 3 Songs</span>
-            <span className="px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 text-[9px]">
-              MATRIX
-            </span>
-          </button>
-
-          {/* Whiteboard Guide / Instructions Button */}
-          <button
-            type="button"
-            onClick={() => setIsGuideModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold transition border border-slate-700 cursor-pointer"
-            title="Whiteboard instructions, zoom shortcuts, and 3-song comparison guide"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Instructions</span>
-          </button>
-
-          {/* Firestore Sync Badge */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                firestoreStatus === 'saved'
-                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
-                  : firestoreStatus === 'saving'
-                  ? 'bg-amber-400 animate-ping'
-                  : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-slate-300">
-              {firestoreStatus === 'saved' ? `Firestore: Synced` : firestoreStatus === 'saving' ? 'Saving...' : 'Offline'}
-            </span>
-          </div>
-
-          {/* Compile to Lyrics Button */}
-          <button
-            type="button"
-            onClick={handleCompileToLyrics}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer"
-            title="Compile whiteboard arrangement cards into active song lyrics"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Compile to Lyrics</span>
-          </button>
-
-          {/* Backup to Nextcloud Button */}
-          <button
-            type="button"
-            onClick={handleBackupToNextcloud}
-            disabled={isExportingNextcloud}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-mono font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
-            title="Backup Markdown and BlockSuite JSON directly to Nextcloud WebDAV"
-          >
-            <FolderSync className={`w-3.5 h-3.5 ${isExportingNextcloud ? 'animate-spin' : ''}`} />
-            <span className="hidden md:inline">Backup Nextcloud</span>
-          </button>
-
-          {/* Export Dropdown */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleDownloadMarkdown}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-              title="Download Markdown (.md)"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadJson}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-              title="Download BlockSuite JSON (.json)"
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* QUICK START INSTRUCTIONS BANNER */}
-      {showQuickGuideBanner && !focusMode && (
+      {!focusMode && showQuickGuideBanner && (
         <div className="px-4 py-2 bg-gradient-to-r from-indigo-950/90 via-slate-900 to-amber-950/40 border-b border-indigo-500/30 flex items-center justify-between gap-3 text-xs shrink-0 animate-in slide-in-from-top-1 duration-150">
           <div className="flex items-center gap-2 flex-wrap text-slate-300">
             <span className="px-2 py-0.5 rounded bg-indigo-600 text-white font-mono text-[10px] font-bold">
@@ -1835,7 +1823,8 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       {/* ========================================================================= */}
       {/* SECONDARY TOOLBAR: PALETTE, VIEWPORT & INSERTION */}
       {/* ========================================================================= */}
-      <div className={`px-4 py-2 bg-slate-900/80 border-b border-slate-800/80 flex-wrap items-center justify-between gap-2 text-xs font-mono ${focusMode ? 'hidden' : 'flex'}`}>
+      {!focusMode && (
+        <div className="px-4 py-2 bg-slate-900/80 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
         {/* Left: Quick Insert Block Palette */}
         <div className="flex items-center flex-wrap gap-1.5">
           <span className="text-slate-400 text-[10px] uppercase font-bold mr-1">Insert Block:</span>
@@ -2055,9 +2044,10 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
           </div>
         )}
       </div>
+      )}
 
       {/* SEARCH RESULTS MATCHES DRAWER (WHEN SEARCH IS ACTIVE) */}
-      {showSearchResultsList && matchingBlocks.length > 0 && (
+      {!focusMode && showSearchResultsList && matchingBlocks.length > 0 && (
         <div className="px-4 py-2 bg-slate-950/95 border-b border-amber-500/30 flex items-center gap-2 overflow-x-auto custom-scrollbar z-30 text-xs font-mono animate-in slide-in-from-top-1 duration-150">
           <span className="text-[10px] uppercase font-bold text-amber-400 shrink-0">Matching Cards:</span>
           {matchingBlocks.map((b, idx) => (
@@ -2198,15 +2188,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 const isMasterBlock = block.x >= 1150 || block.tags?.includes('Master');
                 const isSourceSection = !isMasterBlock && block.type === 'song_section';
                 const isMasterHeader = isMasterBlock && block.tags?.includes('Header');
-
-                const isPlayingThisBlock = playingBlockId === block.id;
-                const startCue = block.startTime ?? 0;
-                const endCue = block.endTime ?? (startCue + 30);
-                const snippetDuration = Math.max(0.1, endCue - startCue);
-                const currentSnippetTime = isPlayingThisBlock ? Math.min(endCue, Math.max(startCue, currentPlayTime)) : startCue;
-                const snippetPercent = isPlayingThisBlock
-                  ? Math.min(100, Math.max(0, ((currentSnippetTime - startCue) / snippetDuration) * 100))
-                  : 0;
 
                 return (
                   <div
@@ -2385,154 +2366,97 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                         </div>
                       )}
 
-                      {/* Non-Destructive Lyric Audio Snippet Player Bar */}
-                      {block.type === 'song_section' && (
-                        <div
-                          className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/90 flex flex-col gap-1.5 touch-none"
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center gap-2">
-                            {/* Big Touch-Friendly Play / Pause Button */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTogglePlaySnippet(block);
-                              }}
-                              className={`touch-target w-8 h-8 rounded-lg flex items-center justify-center font-bold transition shadow-sm cursor-pointer shrink-0 ${
-                                isPlayingThisBlock
-                                  ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 animate-pulse'
-                                  : block.audioUrl
-                                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                              }`}
-                              title={
-                                block.audioUrl
-                                  ? isPlayingThisBlock
-                                    ? 'Pause Snippet'
-                                    : 'Play Non-Destructive Lyric Snippet'
-                                  : 'No audio source mapped'
-                              }
-                              disabled={!block.audioUrl}
-                            >
-                              {isPlayingThisBlock ? (
-                                <Pause className="w-4 h-4 fill-current" />
-                              ) : (
-                                <Play className="w-4 h-4 fill-current ml-0.5" />
-                              )}
-                            </button>
+                      {/* Interactive Audio Snippet Audition Bar for Song Section Cards */}
+                      {block.type === 'song_section' && (() => {
+                        const blockTag = block.sectionTag || block.title;
+                        const isCardSnippetPlaying =
+                          playbackState.isPlaying &&
+                          ((block.audioUrl && playbackState.audioUrl === block.audioUrl && playbackState.currentSectionTag === blockTag) ||
+                           (playbackState.currentTrackId === (block.trackId || selectedTrack.id) && playbackState.currentSectionTag === blockTag));
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between text-[10px] font-mono leading-tight">
-                                <span className="text-slate-200 font-bold truncate flex items-center gap-1">
-                                  <Volume2
-                                    className={`w-3 h-3 ${
-                                      isPlayingThisBlock ? 'text-amber-400 animate-bounce' : 'text-slate-400'
-                                    }`}
-                                  />
-                                  <span>
-                                    {formatSnippetTime(isPlayingThisBlock ? currentPlayTime : startCue)} / {formatSnippetTime(endCue)}
-                                  </span>
-                                  <span className="text-slate-500 text-[9px]">
-                                    ({Math.max(1, Math.round(endCue - startCue))}s)
-                                  </span>
-                                </span>
+                        const timing = (block.sectionStartTimeSec !== undefined && block.sectionDurationSec !== undefined)
+                          ? { startTimeSec: block.sectionStartTimeSec, durationSec: block.sectionDurationSec }
+                          : getEstimatedSectionTime(blockTag, block.orderIndex || 0, selectedTrack.bpm);
 
-                                {/* Loop Button */}
+                        return (
+                          <div
+                            onTouchStart={(e) => e.stopPropagation()}
+                            className={`flex items-center justify-between gap-1.5 p-1.5 rounded-lg border text-xs font-mono transition-all touch-none ${
+                            isCardSnippetPlaying
+                              ? 'bg-amber-950/50 border-amber-500/80 shadow-md shadow-amber-950/60 ring-1 ring-amber-400/50'
+                              : 'bg-slate-950/70 border-slate-800/80'
+                          }`}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePlayBlockSnippet(block);
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer shrink-0 ${
+                                  isCardSnippetPlaying
+                                    ? 'bg-amber-500 text-slate-950 font-black animate-pulse shadow-sm shadow-amber-500/50'
+                                    : 'bg-indigo-600/90 hover:bg-indigo-500 text-white'
+                                }`}
+                                title={isCardSnippetPlaying ? "Pause Audio Snippet" : "Audition Audio Snippet for this section"}
+                              >
+                                {isCardSnippetPlaying ? (
+                                  <>
+                                    <Pause className="w-2.5 h-2.5" />
+                                    <span>Pause</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="w-2.5 h-2.5 fill-current" />
+                                    <span>Audition</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <span className="text-[10px] font-mono text-slate-300 truncate">
+                                {formatTimeMMSS(timing.startTimeSec)} - {formatTimeMMSS(timing.startTimeSec + timing.durationSec)}
+                              </span>
+                            </div>
+
+                            {/* Live Playing Waveform Indicator or Track hint */}
+                            {isCardSnippetPlaying ? (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <div className="flex items-end gap-0.5 h-3 px-1">
+                                  <span className="w-0.5 h-2 bg-emerald-400 animate-bounce" />
+                                  <span className="w-0.5 h-3 bg-amber-400 animate-bounce [animation-delay:150ms]" />
+                                  <span className="w-0.5 h-1.5 bg-indigo-400 animate-bounce [animation-delay:300ms]" />
+                                </div>
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleToggleLoopBlock(block.id);
+                                    sectionSnippetPlayer.nudge(-5);
                                   }}
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 transition cursor-pointer ${
-                                    block.isAudioLooping
-                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                                      : 'text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800'
-                                  }`}
-                                  title="Loop this section during lyric review"
+                                  className="px-1 py-0.2 rounded bg-slate-800 text-[9px] text-slate-300 hover:text-white"
+                                  title="Rewind 5s"
                                 >
-                                  <Repeat className="w-2.5 h-2.5" />
-                                  <span>{block.isAudioLooping ? 'Loop ON' : 'Loop'}</span>
+                                  -5s
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sectionSnippetPlayer.nudge(5);
+                                  }}
+                                  className="px-1 py-0.2 rounded bg-slate-800 text-[9px] text-slate-300 hover:text-white"
+                                  title="Forward 5s"
+                                >
+                                  +5s
                                 </button>
                               </div>
-
-                              {/* Progress bar with click-to-scrub */}
-                              <div
-                                className="w-full h-1.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden mt-1 cursor-pointer relative"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleScrubSnippet(e, block);
-                                }}
-                                title="Click or tap to scrub inside section"
-                              >
-                                <div
-                                  className="h-full bg-gradient-to-r from-indigo-500 via-amber-400 to-amber-300 transition-all duration-75 rounded-full"
-                                  style={{ width: `${snippetPercent}%` }}
-                                />
-                              </div>
-                            </div>
+                            ) : (
+                              <span className="text-[9px] text-slate-500 font-mono truncate max-w-[110px]">
+                                {block.trackTitle || selectedTrack.title}
+                              </span>
+                            )}
                           </div>
-
-                          {/* Cue adjustments: In / Out timestamps with -1s / +1s nudges */}
-                          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-900/80">
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-500">In:</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'start', -1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge start cue -1s"
-                              >
-                                -1s
-                              </button>
-                              <span className="text-indigo-300 font-bold px-0.5">{formatSnippetTime(startCue)}</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'start', 1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge start cue +1s"
-                              >
-                                +1s
-                              </button>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-500">Out:</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'end', -1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge end cue -1s"
-                              >
-                                -1s
-                              </button>
-                              <span className="text-amber-300 font-bold px-0.5">{formatSnippetTime(endCue)}</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'end', 1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge end cue +1s"
-                              >
-                                +1s
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       <textarea
                         value={block.content}
@@ -2689,6 +2613,105 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 <span className="text-slate-500">Wheel: Zoom • Drag: Pan</span>
               </div>
             </div>
+
+            {/* FLOATING WHITEBOARD SECTION SHOOTOUT DECK */}
+            {playbackState.isPlaying && (
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-amber-500/70 rounded-2xl p-3 shadow-2xl backdrop-blur-xl flex items-center gap-3 text-xs font-mono ring-2 ring-amber-500/30 animate-in slide-in-from-bottom duration-200 flex-wrap sm:flex-nowrap">
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-amber-300 font-black text-xs">Section Shootout:</span>
+                      <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 text-[10px] font-bold">
+                        {playbackState.currentSectionTag}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-300 truncate max-w-[180px]">
+                      {playbackState.currentTrackTitle}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fast 3-Way Shootout Version Switcher */}
+                {blocks.some(b => b.tags?.includes('Song A') || b.tags?.includes('Song B') || b.tags?.includes('Song C')) && (
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+                    <span className="text-[10px] text-slate-400 px-1 font-bold">Audition:</span>
+                    {(['Song A', 'Song B', 'Song C'] as const).map((laneKey) => {
+                      const matchBlock = blocks.find(
+                        b => b.tags?.includes(laneKey) &&
+                        (b.sectionTag === playbackState.currentSectionTag || b.title.includes(playbackState.currentSectionTag))
+                      );
+                      if (!matchBlock) return null;
+                      const isActive = playbackState.currentTrackId === matchBlock.trackId;
+                      const btnColor = laneKey === 'Song A' ? 'text-indigo-400' : laneKey === 'Song B' ? 'text-emerald-400' : 'text-purple-400';
+                      return (
+                        <button
+                          key={laneKey}
+                          type="button"
+                          onClick={() => handlePlayBlockSnippet(matchBlock)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            isActive
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-xs ring-1 ring-amber-300'
+                              : `bg-slate-900 hover:bg-slate-850 ${btnColor} border border-slate-800`
+                          }`}
+                          title={`Instantly audition ${laneKey} for this section`}
+                        >
+                          <Play className="w-2.5 h-2.5" />
+                          <span>{laneKey}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Progress, Nudge & Loop Controls */}
+                <div className="flex items-center gap-2 border-l border-slate-800 pl-2 shrink-0">
+                  <span className="text-slate-300 font-mono text-[11px] min-w-[70px]">
+                    {formatTimeMMSS(playbackState.currentSec)} / {formatTimeMMSS(playbackState.durationSec)}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.nudge(-5)}
+                    className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] font-bold"
+                    title="Rewind 5s"
+                  >
+                    -5s
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.nudge(5)}
+                    className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] font-bold"
+                    title="Forward 5s"
+                  >
+                    +5s
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.toggleLoop()}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                      playbackState.isLooping
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}
+                    title="Toggle Loop"
+                  >
+                    Loop
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.stop()}
+                    className="p-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white cursor-pointer ml-1"
+                    title="Stop Audition"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* ===================================================================== */
@@ -2714,15 +2737,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                 .map((block, index) => {
                   const colorConfig = COLOR_OPTIONS.find(c => c.id === block.color) || COLOR_OPTIONS[0];
                   const isMatch = matchingBlockIds.includes(block.id);
-
-                  const isPlayingThisBlock = playingBlockId === block.id;
-                  const startCue = block.startTime ?? 0;
-                  const endCue = block.endTime ?? (startCue + 30);
-                  const snippetDuration = Math.max(0.1, endCue - startCue);
-                  const currentSnippetTime = isPlayingThisBlock ? Math.min(endCue, Math.max(startCue, currentPlayTime)) : startCue;
-                  const snippetPercent = isPlayingThisBlock
-                    ? Math.min(100, Math.max(0, ((currentSnippetTime - startCue) / snippetDuration) * 100))
-                    : 0;
 
                   return (
                     <div
@@ -2790,155 +2804,6 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
                               <span>Send to VideoExpress</span>
                             </button>
                           )}
-                        </div>
-                      )}
-
-                      {/* Non-Destructive Lyric Audio Snippet Player Bar */}
-                      {block.type === 'song_section' && (
-                        <div
-                          className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/90 flex flex-col gap-1.5 touch-none"
-                          onTouchStart={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center gap-2">
-                            {/* Big Touch-Friendly Play / Pause Button */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTogglePlaySnippet(block);
-                              }}
-                              className={`touch-target w-8 h-8 rounded-lg flex items-center justify-center font-bold transition shadow-sm cursor-pointer shrink-0 ${
-                                isPlayingThisBlock
-                                  ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 animate-pulse'
-                                  : block.audioUrl
-                                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                              }`}
-                              title={
-                                block.audioUrl
-                                  ? isPlayingThisBlock
-                                    ? 'Pause Snippet'
-                                    : 'Play Non-Destructive Lyric Snippet'
-                                  : 'No audio source mapped'
-                              }
-                              disabled={!block.audioUrl}
-                            >
-                              {isPlayingThisBlock ? (
-                                <Pause className="w-4 h-4 fill-current" />
-                              ) : (
-                                <Play className="w-4 h-4 fill-current ml-0.5" />
-                              )}
-                            </button>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between text-[10px] font-mono leading-tight">
-                                <span className="text-slate-200 font-bold truncate flex items-center gap-1">
-                                  <Volume2
-                                    className={`w-3 h-3 ${
-                                      isPlayingThisBlock ? 'text-amber-400 animate-bounce' : 'text-slate-400'
-                                    }`}
-                                  />
-                                  <span>
-                                    {formatSnippetTime(isPlayingThisBlock ? currentPlayTime : startCue)} / {formatSnippetTime(endCue)}
-                                  </span>
-                                  <span className="text-slate-500 text-[9px]">
-                                    ({Math.max(1, Math.round(endCue - startCue))}s)
-                                  </span>
-                                </span>
-
-                                {/* Loop Button */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleLoopBlock(block.id);
-                                  }}
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 transition cursor-pointer ${
-                                    block.isAudioLooping
-                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                                      : 'text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800'
-                                  }`}
-                                  title="Loop this section during lyric review"
-                                >
-                                  <Repeat className="w-2.5 h-2.5" />
-                                  <span>{block.isAudioLooping ? 'Loop ON' : 'Loop'}</span>
-                                </button>
-                              </div>
-
-                              {/* Progress bar with click-to-scrub */}
-                              <div
-                                className="w-full h-1.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden mt-1 cursor-pointer relative"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleScrubSnippet(e, block);
-                                }}
-                                title="Click or tap to scrub inside section"
-                              >
-                                <div
-                                  className="h-full bg-gradient-to-r from-indigo-500 via-amber-400 to-amber-300 transition-all duration-75 rounded-full"
-                                  style={{ width: `${snippetPercent}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Cue adjustments: In / Out timestamps with -1s / +1s nudges */}
-                          <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1 border-t border-slate-900/80">
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-500">In:</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'start', -1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge start cue -1s"
-                              >
-                                -1s
-                              </button>
-                              <span className="text-indigo-300 font-bold px-0.5">{formatSnippetTime(startCue)}</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'start', 1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge start cue +1s"
-                              >
-                                +1s
-                              </button>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-500">Out:</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'end', -1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge end cue -1s"
-                              >
-                                -1s
-                              </button>
-                              <span className="text-amber-300 font-bold px-0.5">{formatSnippetTime(endCue)}</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleNudgeCue(block.id, 'end', 1);
-                                }}
-                                className="px-1 py-0.2 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 active:scale-95"
-                                title="Nudge end cue +1s"
-                              >
-                                +1s
-                              </button>
-                            </div>
-                          </div>
                         </div>
                       )}
 
@@ -3225,7 +3090,7 @@ export const BlockSuiteBrainstormingTab: React.FC<BlockSuiteBrainstormingTabProp
       {/* ========================================================================= */}
       {/* FOOTER: STATS & QUICK NAVIGATION SHORTCUTS */}
       {/* ========================================================================= */}
-      <div className={`px-4 py-2 bg-slate-900 border-t border-slate-800 items-center justify-between text-[11px] font-mono text-slate-400 ${focusMode ? 'hidden' : 'flex'}`}>
+      <div className="px-4 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-400">
         <div className="flex items-center gap-3">
           <span>Active Track: <strong className="text-white">{selectedTrack.title}</strong></span>
           <span>•</span>

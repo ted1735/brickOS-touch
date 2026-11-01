@@ -47,6 +47,7 @@ import {
   ChevronRight,
   Info,
   Maximize2,
+  Minimize2,
   Database,
   Disc,
   Cloud,
@@ -356,13 +357,17 @@ export default function BrickOSMusicStudioWorkspace() {
         e.preventDefault();
         handleToggleFocusMode();
       }
-      // ESC: Close overlays if open
+      // ESC: Close overlays if open, or exit focus mode if active
       else if (e.key === 'Escape') {
+        if (focusMode) {
+          e.preventDefault();
+          handleToggleFocusMode();
+          return;
+        }
         if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
         if (isCopilotDrawerOpen) setIsCopilotDrawerOpen(false);
         if (isQuickToolsDrawerOpen) setIsQuickToolsDrawerOpen(false);
         if (isThemeModalOpen) setIsThemeModalOpen(false);
-        if (focusMode && !isCommandPaletteOpen && !isCopilotDrawerOpen && !isQuickToolsDrawerOpen && !isThemeModalOpen) handleToggleFocusMode();
       }
     };
 
@@ -402,12 +407,14 @@ export default function BrickOSMusicStudioWorkspace() {
     if (focusMode) {
       setFocusMode(false);
       setIsSideNavOpen(sideNavWasOpenBeforeFocus.current);
+      showToast('Exited Focus Mode - Studio chrome restored', 'info');
       return;
     }
 
     sideNavWasOpenBeforeFocus.current = isSideNavOpenRef.current;
     setFocusMode(true);
     setIsSideNavOpen(false);
+    showToast('Entered Fullscreen Focus Mode (Press Esc or click Exit in top right to restore)', 'info');
   }
 
   // Initialize and synchronize with Firestore Database
@@ -1924,18 +1931,23 @@ export default function BrickOSMusicStudioWorkspace() {
         </div>
       )}
 
-      {/* FOCUS MODE: minimal floating exit button (only UI visible in focus mode) */}
+      {/* FLOATING TOP-RIGHT BUTTON TO ESCAPE FOCUS MODE */}
       {focusMode && (
-        <button
-          type="button"
-          onClick={handleToggleFocusMode}
-          className="fixed top-3 right-3 z-[100] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold shadow-lg backdrop-blur-md opacity-60 hover:opacity-100 transition cursor-pointer"
-          title="Exit Focus Mode (Esc or Z)"
-          aria-label="Exit Focus Mode"
-        >
-          <span aria-hidden="true">✕</span>
-          <span>Exit Focus</span>
-        </button>
+        <div className="fixed top-3 right-3 z-50 flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
+          <button
+            type="button"
+            onClick={handleToggleFocusMode}
+            className="px-3.5 py-2 rounded-xl bg-slate-900/95 hover:bg-slate-800 text-purple-300 hover:text-white border border-purple-500/70 shadow-2xl shadow-black flex items-center gap-2 text-xs font-mono font-bold backdrop-blur-md cursor-pointer transition-all hover:scale-105 active:scale-95 group ring-2 ring-purple-500/30"
+            title="Exit Focus Mode (Esc or Z)"
+            aria-label="Exit Focus Mode"
+          >
+            <Minimize2 className="w-4 h-4 text-purple-400 group-hover:rotate-90 transition-transform duration-200" />
+            <span>Exit Focus</span>
+            <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-purple-950/80 border border-purple-700/60 text-purple-300 font-bold">
+              Esc
+            </kbd>
+          </button>
+        </div>
       )}
 
       {/* TOUCH NAVIGATION HEADER (Adaptive sleek 48px header for tablet/foldable) */}
@@ -1964,27 +1976,27 @@ export default function BrickOSMusicStudioWorkspace() {
         <SmartContextActionBar
           activeTab={activeTab}
           selectedTrack={selectedTrack}
-        onNavigateToTab={(tab) => {
-          setActiveTab(tab as any);
-          showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
-        }}
-        onQuickAction={(actionId) => {
-          if (actionId === 'copy_suno') {
-            copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
-          } else if (actionId === 'load_stems') {
-            audioMiniDaw.init();
-            const currentStems = getTrackStems(selectedTrack);
-            audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
-            setIsPlaying(true);
-            showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
-          } else if (actionId === 'measure_lufs') {
-            setActiveTab('mastering');
-            showToast('Loudness Metering Active: Target -12 LUFS', 'info');
-          } else if (actionId === 'sync_folder') {
-            setActiveTab('nextcloud_sync');
-            showToast('Refreshed Folder 207332 WebDAV assets', 'info');
-          }
-        }}
+          onNavigateToTab={(tab) => {
+            setActiveTab(tab as any);
+            showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+          }}
+          onQuickAction={(actionId) => {
+            if (actionId === 'copy_suno') {
+              copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
+            } else if (actionId === 'load_stems') {
+              audioMiniDaw.init();
+              const currentStems = getTrackStems(selectedTrack);
+              audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+              setIsPlaying(true);
+              showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
+            } else if (actionId === 'measure_lufs') {
+              setActiveTab('mastering');
+              showToast('Loudness Metering Active: Target -12 LUFS', 'info');
+            } else if (actionId === 'sync_folder') {
+              setActiveTab('nextcloud_sync');
+              showToast('Refreshed Folder 207332 WebDAV assets', 'info');
+            }
+          }}
           isDarkMode={isDarkMode}
         />
       )}
@@ -1992,7 +2004,7 @@ export default function BrickOSMusicStudioWorkspace() {
       {/* MAIN LAYOUT */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* COLLAPSIBLE / PINNABLE SIDE NAVIGATION PANEL (hidden in focus mode) */}
+        {/* COLLAPSIBLE / PINNABLE SIDE NAVIGATION PANEL */}
         {!focusMode && isSideNavOpen && (
           <>
             {/* Backdrop on mobile screens */}
@@ -2104,7 +2116,7 @@ export default function BrickOSMusicStudioWorkspace() {
           {touchMode === 'pro' && (
             <>
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
-          {activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
+          {!focusMode && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div className="flex-shrink-0">
               <StudioWorkflowGuide
                 activeTab={activeTab}
@@ -2115,7 +2127,7 @@ export default function BrickOSMusicStudioWorkspace() {
           )}
 
           {/* TRACK HEADER BANNER (Shown on single-track workbench views, hidden in Write/Lyrics/Whiteboard mode) */}
-          {activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
+          {!focusMode && activeTab !== 'kanban' && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
             <div
               className={`bento-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 transition-all duration-200 ${
                 isDarkMode
@@ -2552,6 +2564,7 @@ export default function BrickOSMusicStudioWorkspace() {
                 }}
                 isDarkMode={isDarkMode}
                 focusMode={focusMode}
+                onToggleFocusMode={handleToggleFocusMode}
               />
             </ErrorBoundary>
           )}

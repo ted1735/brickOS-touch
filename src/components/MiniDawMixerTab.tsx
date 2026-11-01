@@ -32,9 +32,27 @@ import {
   Plus,
   Trash2,
   Settings2,
-  X
+  X,
+  Cpu,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  FileAudio
 } from 'lucide-react';
 import { Track, MixerTrack, DawEffectsState, LufsMeasurementData, TrackAutomationState, MixerGroup } from '../types';
+
+export interface ChannelStemProgress {
+  channelId: number;
+  stemRole: string;
+  name: string;
+  model: string;
+  freqRange: string;
+  targetFilename: string;
+  status: 'idle' | 'queued' | 'processing' | 'done' | 'error';
+  progress: number;
+  stageNote: string;
+  color: string;
+}
 import { audioMiniDaw } from '../utils/audioEngine';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { MiniDawRealtimeChart } from './MiniDawRealtimeChart';
@@ -97,6 +115,57 @@ const getTrackStems = (track: Track): MixerTrack[] => {
   return assignDefaultGroupsToStems(getUniversalTrackStems(track));
 };
 
+export const buildDefaultChannelProgress = (trackId: string): Record<number, ChannelStemProgress> => ({
+  1: {
+    channelId: 1,
+    stemRole: 'Lead Vocal',
+    name: 'Clean Lead Vocal',
+    model: 'BS-Roformer-Viperx-1297',
+    freqRange: '250Hz - 4.5kHz Passband',
+    targetFilename: `${trackId}_Lead_Vocal_Clean_BS-Roformer.wav`,
+    status: 'idle',
+    progress: 0,
+    stageNote: 'Standby for multi-band STFT extraction',
+    color: '#8B5CF6'
+  },
+  2: {
+    channelId: 2,
+    stemRole: 'Drums & Rhythm',
+    name: 'Rhythm Section Transients',
+    model: 'Rhythm Transient Decoupler',
+    freqRange: '50Hz - 12kHz Attack Envelope',
+    targetFilename: `${trackId}_Rhythm_Section_Drums_Perc.wav`,
+    status: 'idle',
+    progress: 0,
+    stageNote: 'Standby for transient percussive separation',
+    color: '#06B6D4'
+  },
+  3: {
+    channelId: 3,
+    stemRole: 'Bass & Sub',
+    name: 'Sub-Bass & Low-End Section',
+    model: 'Sub-Bass Harmonic Filter',
+    freqRange: '20Hz - 180Hz Low-Shelf',
+    targetFilename: `${trackId}_Bass_Sub_Section.wav`,
+    status: 'idle',
+    progress: 0,
+    stageNote: 'Standby for fundamental harmonic isolation',
+    color: '#F59E0B'
+  },
+  4: {
+    channelId: 4,
+    stemRole: 'Melodic Bed',
+    name: 'Harmonic & Instrumental Bed',
+    model: 'MelBand-Roformer-Kim-Inst-V2',
+    freqRange: 'Stereo Harmonic Bed (Residue FFT)',
+    targetFilename: `${trackId}_Core_Instrumental_Bed.wav`,
+    status: 'idle',
+    progress: 0,
+    stageNote: 'Standby for stereo instrumental reconstruction',
+    color: '#10B981'
+  }
+});
+
 export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   track,
   onOpenSectionGuide,
@@ -130,13 +199,264 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [isLinkingAsset, setIsLinkingAsset] = useState<boolean>(false);
   const [linkingAssetLabel, setLinkingAssetLabel] = useState<string>('');
 
+  // UVR5 BS-Roformer Stem Separation State
+  const [isStemSeparatorModalOpen, setIsStemSeparatorModalOpen] = useState<boolean>(false);
+  const [isSeparatingStems, setIsSeparatingStems] = useState<boolean>(false);
+  const [selectedSeparationModel, setSelectedSeparationModel] = useState<string>('BS-Roformer-Viperx-1297');
+  const [overallSeparationProgress, setOverallSeparationProgress] = useState<number>(0);
+  const [separationStageLabel, setSeparationStageLabel] = useState<string>('');
+  const [targetSeparationTrackId, setTargetSeparationTrackId] = useState<string>(track.id || 'TRK-29');
+  const [channelProgress, setChannelProgress] = useState<Record<number, ChannelStemProgress>>(() =>
+    buildDefaultChannelProgress(track.id || 'TRK-29')
+  );
+  const [lastSeparationResult, setLastSeparationResult] = useState<any | null>(null);
+  const [separationLogs, setSeparationLogs] = useState<Array<{ time: string; text: string; level: 'info' | 'success' | 'warn' }>>([]);
+
   useEffect(() => {
     return audioMiniDaw.addLoadingListener(setIsLoadingAudio);
   }, []);
 
   useEffect(() => {
     setTracks(getTrackStems(track));
+    setTargetSeparationTrackId(track.id);
+    setChannelProgress(buildDefaultChannelProgress(track.id));
   }, [track.id]);
+
+  // Execute UVR5 BS-Roformer Stem Separation with live per-channel progress
+  const handleExecuteStemSeparation = async (customTrackId?: string) => {
+    const trkIdToUse = customTrackId || targetSeparationTrackId || track.id;
+    setIsSeparatingStems(true);
+    setOverallSeparationProgress(6);
+    setSeparationStageLabel('Ingesting master audio & initializing UVR5 BS-Roformer pipeline...');
+
+    const nowTime = () => new Date().toLocaleTimeString();
+    setSeparationLogs([
+      { time: nowTime(), text: `Starting UVR5 BS-Roformer stem separation pipeline for ${trkIdToUse}...`, level: 'info' },
+      { time: nowTime(), text: `Selected Primary Vocal Model: ${selectedSeparationModel}`, level: 'info' },
+      { time: nowTime(), text: `Selected Instrumental Bed Model: MelBand-Roformer-Kim-Inst-V2`, level: 'info' },
+      { time: nowTime(), text: `Target Quality: Lossless 24-Bit / 48,000 Hz Linear PCM`, level: 'info' }
+    ]);
+
+    // Initial per-channel stage state
+    setChannelProgress({
+      1: {
+        channelId: 1,
+        stemRole: 'Lead Vocal',
+        name: 'Clean Lead Vocal',
+        model: selectedSeparationModel,
+        freqRange: '250Hz - 4.5kHz Passband',
+        targetFilename: `${trkIdToUse}_Lead_Vocal_Clean_BS-Roformer.wav`,
+        status: 'processing',
+        progress: 14,
+        stageNote: 'Computing multi-band STFT & deconvolution matrix...',
+        color: '#8B5CF6'
+      },
+      2: {
+        channelId: 2,
+        stemRole: 'Drums & Rhythm',
+        name: 'Rhythm Section Transients',
+        model: 'Rhythm Transient Decoupler',
+        freqRange: '50Hz - 12kHz Attack Envelope',
+        targetFilename: `${trkIdToUse}_Rhythm_Section_Drums_Perc.wav`,
+        status: 'queued',
+        progress: 0,
+        stageNote: 'Queued for transient attack decoupling',
+        color: '#06B6D4'
+      },
+      3: {
+        channelId: 3,
+        stemRole: 'Bass & Sub',
+        name: 'Sub-Bass & Low-End Section',
+        model: 'Sub-Bass Harmonic Filter',
+        freqRange: '20Hz - 180Hz Low-Shelf',
+        targetFilename: `${trkIdToUse}_Bass_Sub_Section.wav`,
+        status: 'queued',
+        progress: 0,
+        stageNote: 'Queued for fundamental harmonic extraction',
+        color: '#F59E0B'
+      },
+      4: {
+        channelId: 4,
+        stemRole: 'Melodic Bed',
+        name: 'Harmonic & Instrumental Bed',
+        model: 'MelBand-Roformer-Kim-Inst-V2',
+        freqRange: 'Stereo Harmonic Bed (Residue FFT)',
+        targetFilename: `${trkIdToUse}_Core_Instrumental_Bed.wav`,
+        status: 'queued',
+        progress: 0,
+        stageNote: 'Queued for stereo instrumental bed reconstruction',
+        color: '#10B981'
+      }
+    });
+
+    // High-resolution multi-stage progress ticker while server executes
+    let animProgress = 6;
+    const progressTimer = setInterval(() => {
+      animProgress = Math.min(92, animProgress + Math.floor(Math.random() * 8) + 4);
+      setOverallSeparationProgress(animProgress);
+
+      setChannelProgress((prev) => {
+        const next = { ...prev };
+        if (animProgress >= 15 && animProgress < 45) {
+          next[1] = {
+            ...next[1],
+            status: 'processing',
+            progress: Math.min(95, Math.round(animProgress * 2.1)),
+            stageNote: 'BS-Roformer spectral deconvolution (250Hz - 4.5kHz)'
+          };
+        } else if (animProgress >= 45 && animProgress < 75) {
+          next[1] = {
+            ...next[1],
+            status: 'done',
+            progress: 100,
+            stageNote: 'Lead vocal isolated & normalized (24-bit PCM)'
+          };
+          next[2] = {
+            ...next[2],
+            status: 'processing',
+            progress: Math.min(95, Math.round((animProgress - 35) * 2.4)),
+            stageNote: 'Transient percussion decoupling (50Hz - 12kHz)'
+          };
+          next[3] = {
+            ...next[3],
+            status: 'processing',
+            progress: Math.min(92, Math.round((animProgress - 40) * 2.3)),
+            stageNote: 'Sub-bass 20Hz-180Hz fundamental extraction'
+          };
+        } else if (animProgress >= 75) {
+          next[2] = {
+            ...next[2],
+            status: 'done',
+            progress: 100,
+            stageNote: 'Rhythm section decoupled & normalized'
+          };
+          next[3] = {
+            ...next[3],
+            status: 'done',
+            progress: 100,
+            stageNote: 'Sub-bass harmonics isolated & phase-aligned'
+          };
+          next[4] = {
+            ...next[4],
+            status: 'processing',
+            progress: Math.min(95, Math.round((animProgress - 70) * 4.2)),
+            stageNote: 'MelBand-Kim-Inst-V2 stereo bed reconstruction'
+          };
+        }
+        return next;
+      });
+
+      if (animProgress > 20 && animProgress <= 45) {
+        setSeparationStageLabel('Stage 2/5: Isolating Clean Lead Vocal via BS-Roformer-Viperx-1297...');
+      } else if (animProgress > 45 && animProgress <= 75) {
+        setSeparationStageLabel('Stage 3/5: Decoupling Rhythm Transients & Isolating Sub-Bass Harmonics...');
+      } else if (animProgress > 75) {
+        setSeparationStageLabel('Stage 4/5: Reconstructing Melodic Bed & Serializing 24-Bit Linear PCM WAVs...');
+      }
+    }, 250);
+
+    try {
+      const resp = await fetch('/api/audio/separate-stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trackId: trkIdToUse,
+          model: selectedSeparationModel,
+          sourceType: 'track_master'
+        })
+      });
+
+      const data = await resp.json();
+      clearInterval(progressTimer);
+
+      if (data.success && Array.isArray(data.stems) && data.stems.length > 0) {
+        setOverallSeparationProgress(100);
+        setSeparationStageLabel('Stage 5/5: Separation complete! Stems saved to Nextcloud & routed to Mixer.');
+
+        // Complete all channel progress
+        setChannelProgress((prev) => ({
+          1: { ...prev[1], status: 'done', progress: 100, stageNote: 'Clean Vocal ready • 24-Bit / 48kHz PCM' },
+          2: { ...prev[2], status: 'done', progress: 100, stageNote: 'Drums & Rhythm ready • 24-Bit / 48kHz PCM' },
+          3: { ...prev[3], status: 'done', progress: 100, stageNote: 'Bass & Sub ready • 24-Bit / 48kHz PCM' },
+          4: { ...prev[4], status: 'done', progress: 100, stageNote: 'Melodic Bed ready • 24-Bit / 48kHz PCM' }
+        }));
+
+        setSeparationLogs((prev) => [
+          ...prev,
+          { time: nowTime(), text: `All 4 stems uploaded to Nextcloud: /Music-Production/${data.trackId}/stems/`, level: 'success' },
+          { time: nowTime(), text: `Firestore document tracks/${data.trackId} updated with status 'UVR5 Stem Prep'`, level: 'success' },
+          { time: nowTime(), text: `Auto-routing stems directly into Mini-DAW Channels 1, 2, 3, and 4`, level: 'success' }
+        ]);
+
+        setLastSeparationResult(data);
+
+        // Immediately auto-route stems to mixer channels
+        const mappedTracks: MixerTrack[] = data.stems.map((s: any) => ({
+          id: s.id,
+          name: `Track ${s.id}: ${s.name}`,
+          vol: 85,
+          pan: 0,
+          muted: false,
+          solo: false,
+          trimIn: 0,
+          trimOut: 100,
+          freq: s.freq || (s.id === 1 ? 240 : s.id === 2 ? 90 : s.id === 3 ? 55 : 330),
+          waveType: s.waveType || (s.id === 1 ? 'sine' : s.id === 2 ? 'triangle' : s.id === 3 ? 'sawtooth' : 'sine'),
+          color: s.color || (s.id === 1 ? '#8B5CF6' : s.id === 2 ? '#06B6D4' : s.id === 3 ? '#F59E0B' : '#10B981'),
+          audioUrl: s.audioUrl || s.streamUrl,
+          webdavPath: s.webdavPath,
+          isRealAudio: true,
+          stemType: s.stemType,
+          isUvrSeparated: true,
+          stemFilename: s.stemFilename,
+          modelUsed: s.modelUsed || selectedSeparationModel,
+          groupId: s.groupId || (s.id === 1 ? 'grp-vocal' : 'grp-music')
+        }));
+
+        setTracks(mappedTracks);
+        syncAudioEngineTracks(mappedTracks);
+        setNextcloudSyncNotice(`✓ UVR5 BS-Roformer: 4 Stems Isolated & Routed into Mixer (${data.latencyMs}ms)`);
+        setTimeout(() => setNextcloudSyncNotice(''), 6000);
+
+        if (isPlaying) {
+          audioMiniDaw.stopPlayback();
+          setTimeout(() => {
+            audioMiniDaw.startPlayback(mappedTracks, track.bpm || 78, track.key || 'G Major');
+          }, 150);
+        }
+      } else {
+        throw new Error(data.error || 'Stem separation response invalid');
+      }
+    } catch (err: any) {
+      clearInterval(progressTimer);
+      setOverallSeparationProgress(0);
+      setSeparationStageLabel(`Separation failed: ${err.message}`);
+      setSeparationLogs((prev) => [
+        ...prev,
+        { time: nowTime(), text: `ERROR: ${err.message}`, level: 'warn' }
+      ]);
+      setChannelProgress((prev) => ({
+        1: { ...prev[1], status: 'error', stageNote: 'Extraction halted' },
+        2: { ...prev[2], status: 'error', stageNote: 'Extraction halted' },
+        3: { ...prev[3], status: 'error', stageNote: 'Extraction halted' },
+        4: { ...prev[4], status: 'error', stageNote: 'Extraction halted' }
+      }));
+    } finally {
+      setIsSeparatingStems(false);
+    }
+  };
+
+  // Audition 4 separated stems synchronously
+  const handleAuditionSeparatedStems = () => {
+    if (isPlaying) {
+      audioMiniDaw.stopPlayback();
+      setIsPlaying(false);
+    } else {
+      audioMiniDaw.startPlayback(tracks, track.bpm || 78, track.key || 'G Major');
+      audioMiniDaw.updateBusRouting(effects.busRouting || 'daw', tracks);
+      setIsPlaying(true);
+    }
+  };
 
   // Assign any asset from Project Browser to a specific channel
   const handleAssignAssetToTrack = (channelId: number, asset: any) => {
@@ -804,6 +1124,29 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     <span>How To Use Mixer</span>
                   </button>
                 )}
+
+                {/* AI Stem Separator (UVR5 BS-Roformer) Launcher */}
+                <button
+                  type="button"
+                  onClick={() => setIsStemSeparatorModalOpen(true)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 transition cursor-pointer shadow-md ${
+                    isSeparatingStems
+                      ? 'bg-violet-950 text-violet-200 border-violet-500 ring-2 ring-violet-500/50 shadow-violet-900/60 animate-pulse'
+                      : lastSeparationResult?.trackId === track.id
+                      ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-indigo-950 hover:from-emerald-900 hover:to-indigo-900 text-emerald-200 border-emerald-600/70 shadow-emerald-950/40'
+                      : 'bg-gradient-to-r from-violet-950 via-purple-900 to-indigo-950 hover:from-violet-900 hover:to-indigo-900 text-violet-200 border-violet-700/60 shadow-violet-950/40 hover:scale-[1.01]'
+                  }`}
+                  title="Open AI Stem Separator (UVR5 BS-Roformer Pipeline)"
+                >
+                  <Scissors className={`w-3.5 h-3.5 text-violet-400 ${isSeparatingStems ? 'animate-spin' : ''}`} />
+                  <span>{isSeparatingStems ? `UVR5 Separating (${overallSeparationProgress}%)` : 'AI Stem Separator (UVR5)'}</span>
+                  <span className="px-1.5 py-0.2 rounded bg-violet-900/80 text-violet-300 text-[9px] font-mono border border-violet-600/40">
+                    BS-Roformer
+                  </span>
+                  {lastSeparationResult?.trackId === track.id && (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  )}
+                </button>
 
             {/* Crop Preset Selector */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
@@ -1724,6 +2067,14 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     <h4 className="text-xs font-bold text-white flex items-center gap-2 flex-wrap font-mono">
                       <span>{trk.name}</span>
 
+                      {/* UVR5 BS-Roformer Isolated Badge */}
+                      {(trk.isUvrSeparated || lastSeparationResult?.trackId === track.id) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-violet-950 text-violet-300 border border-violet-600/70 shadow-xs">
+                          <Sparkles className="w-2.5 h-2.5 text-violet-400" />
+                          <span>UVR5 {trk.modelUsed || 'BS-Roformer'}</span>
+                        </span>
+                      )}
+
                       {/* Visual Indicator in Track Header for Assigned Group */}
                       {trkGroup ? (
                         <button
@@ -2010,6 +2361,66 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                 </div>
               </div>
 
+              {/* Channel-Specific UVR5 BS-Roformer Live Separation Progress Indicator */}
+              {isSeparatingStems && channelProgress[trk.id] && (
+                <div className="w-full bg-slate-900/95 border border-violet-700/60 rounded-xl p-3 font-mono text-xs space-y-2 shadow-inner animate-fadeIn">
+                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full ${channelProgress[trk.id].status === 'processing' ? 'animate-ping' : ''}`}
+                        style={{ backgroundColor: channelProgress[trk.id].color }}
+                      />
+                      <span className="font-bold text-white flex items-center gap-1.5">
+                        <span style={{ color: channelProgress[trk.id].color }}>{channelProgress[trk.id].stemRole}:</span>
+                        <span className="text-violet-300">{channelProgress[trk.id].model}</span>
+                      </span>
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded uppercase font-bold border ${
+                          channelProgress[trk.id].status === 'done'
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-600/50'
+                            : channelProgress[trk.id].status === 'processing'
+                            ? 'bg-violet-950 text-violet-300 border-violet-600/50 animate-pulse'
+                            : 'bg-slate-950 text-slate-400 border-slate-800'
+                        }`}
+                      >
+                        {channelProgress[trk.id].status}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 truncate max-w-[220px]">
+                        {channelProgress[trk.id].targetFilename}
+                      </span>
+                      <span className="font-bold font-mono text-white text-xs" style={{ color: channelProgress[trk.id].color }}>
+                        {channelProgress[trk.id].progress}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Animated High-Precision Progress Bar */}
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                    <div
+                      className="h-full transition-all duration-300 rounded-full"
+                      style={{
+                        width: `${channelProgress[trk.id].progress}%`,
+                        backgroundColor: channelProgress[trk.id].color,
+                        backgroundImage:
+                          'linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent)',
+                        backgroundSize: '1rem 1rem'
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                    <span className="text-slate-300 italic flex items-center gap-1">
+                      {channelProgress[trk.id].status === 'processing' && <Loader2 className="w-2.5 h-2.5 animate-spin text-violet-400" />}
+                      <span>{channelProgress[trk.id].stageNote}</span>
+                    </span>
+                    <span className="text-slate-500 font-mono">{channelProgress[trk.id].freqRange}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Expandable Automation Lane Drawer */}
               {isLaneExpanded && (
                 <div
@@ -2214,6 +2625,368 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
               <div className="bg-gradient-to-r from-cyan-500 to-indigo-500 h-full w-2/3 animate-pulse rounded-full" />
             </div>
             <p className="text-[10px] text-slate-500 font-mono">Nextcloud Folder 207332 • Lossless PCM Audio Bridge</p>
+          </div>
+        </div>
+      )}
+
+      {/* UVR5 BS-ROFORMER AI STEM SEPARATOR STUDIO MODAL */}
+      {isStemSeparatorModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-violet-500/40 rounded-2xl max-w-4xl w-full shadow-2xl shadow-violet-950/80 overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 bg-gradient-to-r from-violet-950/90 via-slate-900 to-indigo-950/90 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/50 flex items-center justify-center text-violet-400 shadow-md">
+                  <Scissors className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      <span>UVR5 BS-Roformer Stem Separator Studio</span>
+                    </h3>
+                    <span className="px-2 py-0.5 rounded bg-violet-950 text-violet-300 font-mono text-[10px] font-bold border border-violet-700/60">
+                      24-Bit / 48kHz PCM Lossless
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-700/60">
+                      WebDAV Auto-Upload
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Isolate pristine Lead Vocals, Drums, Bass, and Melodic Bed via neural spectral deconvolution. Automatically routes into Mini-DAW mixer channels!
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsStemSeparatorModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Close Modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* Configuration & Track Target Row */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Target Track */}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                    <Music className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Target Production Track</span>
+                  </span>
+                  <div className="text-sm font-bold text-white font-mono truncate">
+                    {track.title}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
+                    <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-700 text-indigo-300">{track.id}</span>
+                    <span>{track.bpm} BPM</span>
+                    <span>•</span>
+                    <span>{track.key}</span>
+                  </div>
+                </div>
+
+                {/* Primary Model Selector */}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-violet-400" />
+                    <span>Vocal Isolation Engine</span>
+                  </span>
+                  <select
+                    value={selectedSeparationModel}
+                    onChange={(e) => setSelectedSeparationModel(e.target.value)}
+                    disabled={isSeparatingStems}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-violet-500 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="BS-Roformer-Viperx-1297">BS-Roformer-Viperx-1297 (Highest Vocal SDR)</option>
+                    <option value="MelBand-Roformer-Kim-Inst-V2">MelBand-Roformer-Kim-Inst-V2 (Clean Instrumental)</option>
+                    <option value="UVR5-MDX-Net-Voc-FT">UVR5-MDX-Net-Voc-FT (Fast Multi-Band)</option>
+                  </select>
+                  <span className="text-[10px] text-slate-500 font-mono block">
+                    Combined with MelBand-Roformer for bed extraction
+                  </span>
+                </div>
+
+                {/* Destination & Cloud Link */}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Nextcloud WebDAV Destination</span>
+                  </span>
+                  <div className="text-xs text-slate-300 font-mono truncate">
+                    /Music-Production/{track.id}/stems/
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Firestore: 'UVR5 Stem Prep' Sync</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall Multi-Stage Progress Banner */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 font-mono">
+                <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-violet-400" />
+                      <span>Pipeline Execution Status</span>
+                    </span>
+                    {isSeparatingStems ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-violet-950 text-violet-300 border border-violet-600/50 animate-pulse flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>PROCESSING</span>
+                      </span>
+                    ) : overallSeparationProgress === 100 ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-600/50 flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>READY IN MIXER</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-slate-400 border border-slate-800">
+                        STANDBY
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-violet-400">
+                    {overallSeparationProgress}%
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-800">
+                  <div
+                    className="h-full transition-all duration-300 rounded-full"
+                    style={{
+                      width: `${overallSeparationProgress}%`,
+                      backgroundImage: 'linear-gradient(90deg, #8B5CF6 0%, #06B6D4 50%, #10B981 100%)',
+                      boxShadow: '0 0 12px rgba(139, 92, 246, 0.5)'
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span className="text-slate-300">
+                    {separationStageLabel || 'Ready to separate master audio into 4 isolated channels.'}
+                  </span>
+                  <span className="text-slate-500 hidden sm:inline">
+                    4 Isolated WAV Channels
+                  </span>
+                </div>
+              </div>
+
+              {/* 4-Channel Live Isolation Matrix (Visual Progress Indicator for Each Channel) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
+                  <span className="font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Per-Channel UVR5 Isolation Status & Progress</span>
+                  </span>
+                  <span>4 Channels • Lossless WAV Output</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono">
+                  {[1, 2, 3, 4].map((chId) => {
+                    const ch = channelProgress[chId] || buildDefaultChannelProgress(track.id)[chId];
+                    const isProcessing = ch.status === 'processing';
+                    const isDone = ch.status === 'done';
+
+                    return (
+                      <div
+                        key={chId}
+                        className={`bg-slate-950 border rounded-xl p-4 space-y-2.5 transition-all relative overflow-hidden ${
+                          isProcessing
+                            ? 'border-violet-500 ring-1 ring-violet-500/50 shadow-lg shadow-violet-950/50'
+                            : isDone
+                            ? 'border-emerald-600/60 bg-emerald-950/10'
+                            : 'border-slate-800'
+                        }`}
+                      >
+                        {/* Color top accent line */}
+                        <div
+                          className="absolute top-0 left-0 right-0 h-1"
+                          style={{ backgroundColor: ch.color }}
+                        />
+
+                        {/* Channel Header */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-white text-xs shadow-xs"
+                              style={{ backgroundColor: ch.color }}
+                            >
+                              {chId}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                <span>{ch.stemRole}</span>
+                                <span className="text-[10px] text-slate-400">({ch.name})</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                isDone
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-600/50'
+                                  : isProcessing
+                                  ? 'bg-violet-950 text-violet-300 border-violet-600/50 animate-pulse'
+                                  : 'bg-slate-900 text-slate-400 border-slate-800'
+                              }`}
+                            >
+                              {ch.status}
+                            </span>
+                            <span className="text-xs font-bold font-mono" style={{ color: ch.color }}>
+                              {ch.progress}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+                          <div
+                            className="h-full transition-all duration-300 rounded-full"
+                            style={{
+                              width: `${ch.progress}%`,
+                              backgroundColor: ch.color,
+                              backgroundImage:
+                                'linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent)',
+                              backgroundSize: '1rem 1rem'
+                            }}
+                          />
+                        </div>
+
+                        {/* Specs & Phase Details */}
+                        <div className="space-y-1 text-[10px] text-slate-400 pt-1 border-t border-slate-900">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Model / DSP:</span>
+                            <span className="text-slate-300 font-bold">{ch.model}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Passband:</span>
+                            <span className="text-slate-300">{ch.freqRange}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Output File:</span>
+                            <span className="text-slate-400 truncate max-w-[200px]" title={ch.targetFilename}>
+                              {ch.targetFilename}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-slate-500">Phase Note:</span>
+                            <span className="text-violet-300 italic truncate max-w-[220px]">
+                              {ch.stageNote}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Realtime Separation Logs Terminal */}
+              {separationLogs.length > 0 && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[10px] space-y-1 max-h-36 overflow-y-auto">
+                  <div className="text-slate-500 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>UVR5 Pipeline Execution Terminal</span>
+                    <span>{separationLogs.length} events</span>
+                  </div>
+                  {separationLogs.map((log, idx) => (
+                    <div key={idx} className="flex items-start gap-2">
+                      <span className="text-slate-500 shrink-0">[{log.time}]</span>
+                      <span
+                        className={
+                          log.level === 'success'
+                            ? 'text-emerald-400'
+                            : log.level === 'warn'
+                            ? 'text-rose-400'
+                            : 'text-slate-300'
+                        }
+                      >
+                        {log.text}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer / Actions */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between flex-wrap gap-3 font-mono">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-400">Quick Test:</span>
+                <button
+                  type="button"
+                  onClick={() => handleExecuteStemSeparation('TRK-29')}
+                  disabled={isSeparatingStems}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                  title="Test UVR5 separation on TRK-29: Manic in the Mundane"
+                >
+                  TRK-29 (Manic)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExecuteStemSeparation('TRK-16')}
+                  disabled={isSeparatingStems}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                  title="Test UVR5 separation on TRK-16: Meet Me Here"
+                >
+                  TRK-16 (Meet Me Here)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExecuteStemSeparation('TRK-01')}
+                  disabled={isSeparatingStems}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                  title="Test UVR5 separation on TRK-01: Brick by Brick"
+                >
+                  TRK-01 (Brick by Brick)
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                {lastSeparationResult && (
+                  <button
+                    type="button"
+                    onClick={handleAuditionSeparatedStems}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-950/40"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Audition 4 Stems in Mixer</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleExecuteStemSeparation()}
+                  disabled={isSeparatingStems}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-black transition flex items-center gap-2 cursor-pointer shadow-xl shadow-violet-950/60 disabled:opacity-50"
+                >
+                  {isSeparatingStems ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Separating Stems ({overallSeparationProgress}%)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Scissors className="w-4 h-4" />
+                      <span>Start UVR5 Separation</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsStemSeparatorModalOpen(false)}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -384,10 +384,9 @@ html.light ::-webkit-scrollbar-thumb {
   border-radius: 9999px;
 }
 
-/* Focus Mode: completely hide workspace chrome and ensure edge-to-edge view */
+/* Fullscreen immersion when Focus Mode is active. */
 .focus-mode header,
-.focus-mode .section-utility-actions,
-.focus-mode .track-header-actions {
+.focus-mode .smart-context-action-bar {
   display: none !important;
 }
 

@@ -585,13 +585,87 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
     ],
     visualTitle: 'Screaming Steel Foundry and Smoldering Sparks',
     sceneTitle: 'Gethsemane Agony Under Heavy Rain'
+  },
+  {
+    trackId: 'TRK-27',
+    title: "The Work Ain't Done",
+    folderName: 'TheWorkAintDone',
+    aliases: ['TRK-27', 'TheWorkAintDone', 'The_Work_Aint_Done', "The Work Ain't Done", 'TWAD', '00-Active_Projects/TheWorkAintDone'],
+    bpm: 102,
+    key: 'G Minor',
+    genre: 'Folk-Hop / Boom-Bap CHH / K-Pop Ministry Hybrid',
+    vocal: 'Kane / Brandon',
+    versions: [
+      { tag: 'v1.0', styleName: 'Recovery Defense Final Cut (MP3)', notes: 'Acoustic guitar flatpicking, heavy foot-stomp kick, tectonic baritone authority.' }
+    ],
+    stems: [
+      { id: 1, name: "Track 1: The Work Ain't Done Final Master (MP3)", stemFilename: "The Work Ain't Done-TedMoyer- FINAL .mp3", stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: "Track 2: The Work Ain't Done 24-Bit Studio Master (WAV)", stemFilename: "The Work Ain't Done-TedMoyer- FINAL .wav", stemType: 'guitar', color: '#10b981', freq: 293.66, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Beyond the Exit Spoken Word (MP3)', stemFilename: 'Beyond the Exit - Protect The Recovery Full Spoken Word.mp3', stemType: 'vocal', color: '#f59e0b', freq: 220, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Remastered 7.5sbR Cut (WAV)', stemFilename: '7.5sbR_The_Work_Aint_Done_TedMoyer_v1.0_(Remastered).wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+    ],
+    visualTitle: 'Hospital Emergency Exit to Healing Sunburst',
+    sceneTitle: 'Protecting the Recovery at the Threshold'
+  },
+  {
+    trackId: 'TRK-28',
+    title: 'Standing at the Breach',
+    folderName: 'The-Weight-and-The-Wisdom',
+    aliases: ['TRK-28', 'Standing-at-the-Breach', 'Standing_at_the_Breach', 'Standing at the Breach', 'SATB', 'The-Weight-and-The-Wisdom'],
+    bpm: 84,
+    key: 'A Minor',
+    genre: 'Cinematic CHH / Southern Rock Hybrid',
+    vocal: 'Brandon / Kane',
+    versions: [
+      { tag: 'v1.0', styleName: 'Battle-Tested Arrangement Master (MP3)', notes: 'Heavy acoustic stomp, distorted slide guitar, raw raspy male vocal.' }
+    ],
+    stems: [
+      { id: 1, name: 'Track 1: Standing at the Breach Master (MP3)', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Heavy Acoustic Stomp & Slide', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Frontline Vocal Delivery', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'vocal', color: '#f59e0b', freq: 330, waveType: 'sine' },
+      { id: 4, name: 'Track 4: War Room Drum Section', stemFilename: 'The-Weight-and-The-Wisdom.mp3', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
+    ],
+    visualTitle: 'Midnight Oil Kitchen Window Glow into Storm',
+    sceneTitle: 'Standing in the Gap at the Breach'
+  },
+  {
+    trackId: 'TRK-29',
+    title: 'Manic in the Mundane',
+    folderName: 'Manic_In_The_Mundane',
+    aliases: ['TRK-29', 'Manic in the Mundane', 'Manic_In_The_Mundane', 'ManicInTheMundane', 'MITM', '00-Active_Projects/Manic_In_The_Mundane'],
+    bpm: 78,
+    key: 'E Minor',
+    genre: 'Slow-Burn Acoustic Roots / Gothic CHH',
+    vocal: 'Brandon',
+    versions: [
+      { tag: 'v5.1', styleName: 'BMV1 Remastered Gold Master (MP3)', notes: 'Acoustic whisper intro, dead snare roots groove, explosive dry scream into raw belt chorus.' }
+    ],
+    stems: [
+      { id: 1, name: 'Track 1: Manic in the Mundane v5.1 Gold Master (MP3)', stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Manic in the Mundane 24-Bit Studio Master (WAV)', stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav', stemType: 'guitar', color: '#10b981', freq: 329.63, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Ted Moyer Lead Cut (WAV)', stemFilename: 'Manic-In-The-Mundane_Ted_Moyer.wav', stemType: 'vocal', color: '#f59e0b', freq: 246.94, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Full Bridge Climax Stem (WAV)', stemFilename: 'bridge_full_205_260.wav', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'square' }
+    ],
+    visualTitle: 'Boots Untied on Cold Concrete Floor at 3 AM',
+    sceneTitle: 'Lord Meeting the Brokenness in the Mundane'
   }
 ];
 
-// Fallback generic definition builder for any remaining tracks in the 27-song catalog
+// Fallback generic definition builder for any remaining tracks in the catalog
 export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefinition {
-  const found = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === track.id);
+  const found = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === track.id) ||
+    CATALOG_TRACK_DEFINITIONS.find(d => track.title && d.aliases.some(a => track.title.toLowerCase().includes(a.toLowerCase())));
   if (found) return found;
+
+  const titleLower = (track.title || '').toLowerCase();
+  if (titleLower.includes('manic') || titleLower.includes('mundane') || titleLower.includes('mitm')) {
+    const mitm = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === 'TRK-29');
+    if (mitm) return mitm;
+  }
+  if (titleLower.includes('meet') && titleLower.includes('here')) {
+    const mmh = CATALOG_TRACK_DEFINITIONS.find(d => d.trackId === 'TRK-16');
+    if (mmh) return mmh;
+  }
 
   const sanitized = track.title.replace(/[^a-zA-Z0-9]/g, '_');
   const acronym = track.title.split(' ').map(w => w[0]).join('').toUpperCase();
@@ -599,7 +673,7 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
   return {
     trackId: track.id,
     title: track.title,
-    folderName: track.id,
+    folderName: 'Manic_In_The_Mundane',
     aliases: [track.id, sanitized, track.title, acronym],
     bpm: track.bpm || 80,
     key: track.key || 'C Major',
@@ -609,10 +683,10 @@ export function getOrCreateTrackDefinition(track: Track): TrackNextcloudDefiniti
       ? track.versions.map((v, i) => ({ tag: v.version || `v${i + 1}.0`, styleName: v.version || `Style ${i + 1}`, notes: v.reason || 'Studio Master' }))
       : [{ tag: 'v1.0', styleName: 'Studio Master', notes: '24-Bit / 48kHz Master Print' }],
     stems: [
-      { id: 1, name: `Track 1: Lead Vocal (${track.vocal || 'Lead'}) [UVR5 Clean]`, stemFilename: `${track.id}_Lead_Vocal_Clean_BS-Roformer.wav`, stemType: 'vocal', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
-      { id: 2, name: `Track 2: Harmonies & Background Choir`, stemFilename: `${track.id}_Harmonies_Choir_UVR5.wav`, stemType: 'choir', color: '#10b981', freq: 246.94, waveType: 'triangle' },
-      { id: 3, name: `Track 3: Core Instrumental Bed (${track.genre})`, stemFilename: `${track.id}_Core_Instrumental_Bed.wav`, stemType: 'guitar', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: `Track 4: Drums, Bass & Rhythm Section`, stemFilename: `${track.id}_Rhythm_Section_Drums_Bass.wav`, stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+      { id: 1, name: `Track 1: Verified Master Stream (${track.title})`, stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 2, name: `Track 2: Alternate Studio Master Cut`, stemFilename: '7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav', stemType: 'guitar', color: '#10b981', freq: 246.94, waveType: 'triangle' },
+      { id: 3, name: `Track 3: Ted Moyer Lead Acoustic Cut`, stemFilename: 'Manic-In-The-Mundane_Ted_Moyer.wav', stemType: 'vocal', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: `Track 4: Dynamic Climax Bed`, stemFilename: 'bridge_full_205_260.wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
     ],
     visualTitle: `${track.title} 4K Sovereign Cathedral Master`,
     sceneTitle: `${track.title} Storyboard Devotional Scene`

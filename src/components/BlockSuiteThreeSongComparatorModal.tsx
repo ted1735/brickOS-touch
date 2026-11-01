@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Columns,
   X,
@@ -15,10 +15,25 @@ import {
   SlidersHorizontal,
   ChevronDown,
   RefreshCw,
-  Award
+  Award,
+  Play,
+  Pause,
+  Volume2,
+  RotateCcw,
+  FastForward,
+  Rewind,
+  Rows,
+  LayoutGrid
 } from 'lucide-react';
 import { Track } from '../types';
 import { getSubstantiveLyrics, parseLyricSections, ParsedLyricSection } from '../utils/lyricParser';
+import {
+  sectionSnippetPlayer,
+  getEstimatedSectionTime,
+  getTrackAudioSnippetUrl,
+  formatTimeMMSS,
+  SnippetPlaybackState
+} from '../utils/sectionAudioHelper';
 
 interface BlockSuiteThreeSongComparatorModalProps {
   isOpen: boolean;
@@ -29,7 +44,7 @@ interface BlockSuiteThreeSongComparatorModalProps {
     trackA: Track,
     trackB: Track,
     trackC: Track,
-    options?: { styleA?: number; styleB?: number; styleC?: number }
+    options?: { styleA?: number; styleB?: number; styleC?: number; layoutMode?: 'sectionRows' | 'songColumns' }
   ) => void;
   onApplyDirectMasterLyrics?: (compiledLyrics: string) => void;
 }
@@ -59,6 +74,61 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
   // Tab between "Setup & Canvas Layout" and "Interactive Section Diff Matrix"
   const [activeView, setActiveView] = useState<'setup' | 'sectionDiff'>('setup');
   const [selectedSectionTag, setSelectedSectionTag] = useState<string>('all');
+
+  // Layout mode: 'sectionRows' (Verse-to-Verse Matrix, default) or 'songColumns' (Parallel Vertical)
+  const [layoutMode, setLayoutMode] = useState<'sectionRows' | 'songColumns'>('sectionRows');
+
+  // Active audio snippet playback state
+  const [playbackState, setPlaybackState] = useState<SnippetPlaybackState>(sectionSnippetPlayer.getState());
+
+  useEffect(() => {
+    const unsub = sectionSnippetPlayer.subscribe((st) => setPlaybackState({ ...st }));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      sectionSnippetPlayer.stop();
+    }
+  }, [isOpen]);
+
+  const handleToggleSnippet = (
+    track: Track,
+    styleIdx: number,
+    tag: string,
+    secIdx: number
+  ) => {
+    const isThisPlaying =
+      playbackState.isPlaying &&
+      playbackState.currentTrackId === track.id &&
+      playbackState.currentSectionTag === tag;
+
+    if (isThisPlaying) {
+      sectionSnippetPlayer.stop();
+      return;
+    }
+
+    const estimated = getEstimatedSectionTime(tag, secIdx, track.bpm);
+    const snippetMatch = track.sunoAssets?.snippets?.find(s => 
+      s.lyricSection.toLowerCase().includes(tag.toLowerCase()) || 
+      s.label.toLowerCase().includes(tag.toLowerCase()) ||
+      (tag.toLowerCase().includes('bridge') && s.label.toLowerCase().includes('bridge')) ||
+      (tag.toLowerCase().includes('scream') && s.label.toLowerCase().includes('scream'))
+    );
+    const startTimeSec = snippetMatch ? snippetMatch.startTimeSeconds : estimated.startTimeSec;
+    const durationSec = snippetMatch ? Math.max(4, snippetMatch.endTimeSeconds - snippetMatch.startTimeSeconds) : estimated.durationSec;
+    const audioUrl = getTrackAudioSnippetUrl(track, styleIdx, 'master', tag);
+
+    sectionSnippetPlayer.playSnippet({
+      url: audioUrl,
+      trackId: track.id,
+      trackTitle: track.title,
+      sectionTag: tag,
+      startTimeSec,
+      durationSec,
+      loop: false
+    });
+  };
 
   // Resolved tracks
   const trackA = useMemo(() => tracks.find(t => t.id === trackAId) || selectedTrack, [tracks, trackAId, selectedTrack]);
@@ -381,12 +451,12 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
         {/* VIEW 1: SETUP & CANVAS BOARD ACTIONS */}
         {activeView === 'setup' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 space-y-3">
+            <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400" />
                   <h3 className="text-sm font-bold text-white">
-                    Load Parallel 4-Column Canvas on BlockSuite Whiteboard
+                    Deploy 3-Song Comparison Board to Endless Whiteboard Canvas
                   </h3>
                 </div>
                 <span className="text-xs font-mono text-slate-400">
@@ -394,26 +464,84 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                 </span>
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Clicking the button below will arrange the 3 selected songs into side-by-side columns on your infinite whiteboard canvas:
-              </p>
+              {/* Layout Mode Selector (Verse-to-Verse Section Rows vs Parallel Song Columns) */}
+              <div className="space-y-2">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Choose Whiteboard Arrangement Layout:</span>
+                </label>
 
-              {/* Visual preview of columns */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2 text-xs font-mono">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Mode 1: Section Rows (Verse-to-Verse Matrix) */}
+                  <button
+                    type="button"
+                    onClick={() => setLayoutMode('sectionRows')}
+                    className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                      layoutMode === 'sectionRows'
+                        ? 'bg-amber-500/10 border-amber-500 ring-2 ring-amber-500/50 shadow-lg shadow-amber-950/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Rows className={`w-4 h-4 ${layoutMode === 'sectionRows' ? 'text-amber-400' : 'text-slate-400'}`} />
+                        <span className={`text-xs font-bold ${layoutMode === 'sectionRows' ? 'text-white' : 'text-slate-300'}`}>
+                          Verse-to-Verse Matrix (Section Rows)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                        RECOMMENDED
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                      Aligns matching sections horizontally side-by-side: <strong>Row 1 = Verse 1</strong> (Song A | Song B | Song C), <strong>Row 2 = Chorus</strong>, <strong>Row 3 = Bridge</strong>. Each card includes instant <strong>Audio Snippet Playback</strong> for A/B/C shootouts!
+                    </p>
+                  </button>
+
+                  {/* Mode 2: Parallel Song Columns */}
+                  <button
+                    type="button"
+                    onClick={() => setLayoutMode('songColumns')}
+                    className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                      layoutMode === 'songColumns'
+                        ? 'bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-950/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Columns className={`w-4 h-4 ${layoutMode === 'songColumns' ? 'text-indigo-400' : 'text-slate-400'}`} />
+                        <span className={`text-xs font-bold ${layoutMode === 'songColumns' ? 'text-white' : 'text-slate-300'}`}>
+                          Parallel Song Columns (Vertical Stacks)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                        CLASSIC
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                      Lays out each song in its own complete vertical column: Col 1 = Song A, Col 2 = Song B, Col 3 = Song C, Col 4 = Master Target Lane.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Visual preview of columns / rows */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-1 text-xs font-mono">
                 <div className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/50 space-y-1">
-                  <div className="text-indigo-300 font-bold">Column 1: Song A</div>
+                  <div className="text-indigo-300 font-bold">{layoutMode === 'sectionRows' ? 'Lane 1: Song A' : 'Column 1: Song A'}</div>
                   <div className="text-[10px] text-slate-400 truncate">{trackA.title}</div>
                   <div className="text-[10px] text-indigo-400">{sectionsA.length} draggable cards</div>
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/50 space-y-1">
-                  <div className="text-emerald-300 font-bold">Column 2: Song B</div>
+                  <div className="text-emerald-300 font-bold">{layoutMode === 'sectionRows' ? 'Lane 2: Song B' : 'Column 2: Song B'}</div>
                   <div className="text-[10px] text-slate-400 truncate">{trackB.title}</div>
                   <div className="text-[10px] text-emerald-400">{sectionsB.length} draggable cards</div>
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-purple-950/40 border border-purple-500/50 space-y-1">
-                  <div className="text-purple-300 font-bold">Column 3: Song C</div>
+                  <div className="text-purple-300 font-bold">{layoutMode === 'sectionRows' ? 'Lane 3: Song C' : 'Column 3: Song C'}</div>
                   <div className="text-[10px] text-slate-400 truncate">{trackC.title}</div>
                   <div className="text-[10px] text-purple-400">{sectionsC.length} draggable cards</div>
                 </div>
@@ -428,35 +556,93 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
               </div>
 
               {/* Big CTA */}
-              <div className="pt-3 flex items-center justify-between flex-wrap gap-3">
+              <div className="pt-2 flex items-center justify-between flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     onLoadThreeSongsToCanvas(trackA, trackB, trackC, {
                       styleA: styleAIndex,
                       styleB: styleBIndex,
-                      styleC: styleCIndex
+                      styleC: styleCIndex,
+                      layoutMode
                     });
                     onClose();
                   }}
                   className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-indigo-500 hover:from-amber-400 hover:to-indigo-400 text-slate-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-amber-950/60 transition cursor-pointer"
                 >
                   <Columns className="w-4 h-4 text-slate-950" />
-                  <span>Deploy 3-Song Comparison Board to Canvas</span>
+                  <span>
+                    Deploy {layoutMode === 'sectionRows' ? 'Verse-to-Verse Matrix' : '4-Column Board'} to Whiteboard
+                  </span>
                   <ArrowRight className="w-4 h-4 text-slate-950" />
                 </button>
 
                 <div className="text-[11px] font-mono text-slate-400">
-                  Tip: Cards have <span className="text-amber-300">★ Copy to Master</span> buttons for instant 1-click migration.
+                  Includes <span className="text-amber-300">▶ Audio Snippet Playback</span> on all lyric cards.
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* VIEW 2: SIDE-BY-SIDE SECTION DIFF MATRIX */}
+        {/* VIEW 2: SIDE-BY-SIDE SECTION DIFF MATRIX WITH AUDIO SNIPPET SHOOTOUT */}
         {activeView === 'sectionDiff' && (
           <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Global Playback Mini Banner */}
+            {playbackState.isPlaying && (
+              <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-950 via-slate-900 to-amber-950 border border-amber-500/50 flex items-center justify-between gap-3 text-xs font-mono shadow-lg animate-in slide-in-from-top duration-200">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-bold text-amber-300">Now Auditioning:</span>
+                  <span className="text-white font-bold">{playbackState.currentTrackTitle}</span>
+                  <span className="px-2 py-0.5 rounded bg-indigo-900/80 text-indigo-200 border border-indigo-700 text-[10px]">
+                    {playbackState.currentSectionTag}
+                  </span>
+                  <span className="text-slate-400">
+                    {formatTimeMMSS(playbackState.currentSec)} / {formatTimeMMSS(playbackState.durationSec)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.nudge(-5)}
+                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold"
+                    title="Rewind 5s"
+                  >
+                    -5s
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.nudge(5)}
+                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold"
+                    title="Forward 5s"
+                  >
+                    +5s
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.toggleLoop()}
+                    className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
+                      playbackState.isLooping
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}
+                    title="Toggle Loop"
+                  >
+                    Loop: {playbackState.isLooping ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sectionSnippetPlayer.stop()}
+                    className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px]"
+                  >
+                    Stop
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-300">Filter Section:</span>
@@ -494,9 +680,22 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                 .filter(tag => selectedSectionTag === 'all' || selectedSectionTag === tag)
                 .map((tag) => {
                   const clean = tag.replace(/[[\]]/g, '').trim().toLowerCase();
-                  const secA = sectionsA.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
-                  const secB = sectionsB.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
-                  const secC = sectionsC.find(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+                  const idxA = sectionsA.findIndex(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+                  const idxB = sectionsB.findIndex(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+                  const idxC = sectionsC.findIndex(s => s.cleanTag.toLowerCase() === clean || s.tag.toLowerCase() === tag.toLowerCase());
+
+                  const secA = idxA >= 0 ? sectionsA[idxA] : undefined;
+                  const secB = idxB >= 0 ? sectionsB[idxB] : undefined;
+                  const secC = idxC >= 0 ? sectionsC[idxC] : undefined;
+
+                  const timeA = secA ? getEstimatedSectionTime(secA.tag, idxA, trackA.bpm) : null;
+                  const timeB = secB ? getEstimatedSectionTime(secB.tag, idxB, trackB.bpm) : null;
+                  const timeC = secC ? getEstimatedSectionTime(secC.tag, idxC, trackC.bpm) : null;
+
+                  const isPlayingA = playbackState.isPlaying && playbackState.currentTrackId === trackA.id && playbackState.currentSectionTag === tag;
+                  const isPlayingB = playbackState.isPlaying && playbackState.currentTrackId === trackB.id && playbackState.currentSectionTag === tag;
+                  const isPlayingC = playbackState.isPlaying && playbackState.currentTrackId === trackC.id && playbackState.currentSectionTag === tag;
+
                   const currentWinner = sectionWinners[tag];
 
                   return (
@@ -504,24 +703,82 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                       key={tag}
                       className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3"
                     >
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      {/* Section Header & Fast 3-Way Shootout Bar */}
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                           <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 font-mono text-xs font-bold border border-indigo-500/30">
                             {tag}
                           </span>
-                          <span className="text-xs text-slate-400">
-                            Compare line flow and lyrical impact
+                          <span className="text-xs text-slate-400 font-mono">
+                            Section Audio Shootout & Lyrical Meter
                           </span>
                         </div>
 
-                        {currentWinner && (
-                          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-950/50 px-2 py-0.5 rounded border border-amber-600/40">
-                            <Award className="w-3.5 h-3.5" />
-                            <span>Winner: Song {currentWinner.source}</span>
-                          </div>
-                        )}
+                        {/* Fast 3-Way Shootout Selector */}
+                        <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-700/80 text-[11px] font-mono">
+                          <span className="text-amber-400 font-bold px-1.5 flex items-center gap-1">
+                            <Play className="w-3 h-3 fill-amber-400" />
+                            <span>Shootout:</span>
+                          </span>
+
+                          {secA && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSnippet(trackA, styleAIndex, tag, idxA)}
+                              className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isPlayingA
+                                  ? 'bg-indigo-600 text-white animate-pulse'
+                                  : 'bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800'
+                              }`}
+                              title={`Audition Song A ${tag}`}
+                            >
+                              {isPlayingA ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                              <span>Song A ({trackA.bpm} BPM)</span>
+                            </button>
+                          )}
+
+                          {secB && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSnippet(trackB, styleBIndex, tag, idxB)}
+                              className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isPlayingB
+                                  ? 'bg-emerald-600 text-white animate-pulse'
+                                  : 'bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800'
+                              }`}
+                              title={`Audition Song B ${tag}`}
+                            >
+                              {isPlayingB ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                              <span>Song B ({trackB.bpm} BPM)</span>
+                            </button>
+                          )}
+
+                          {secC && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSnippet(trackC, styleCIndex, tag, idxC)}
+                              className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isPlayingC
+                                  ? 'bg-purple-600 text-white animate-pulse'
+                                  : 'bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800'
+                              }`}
+                              title={`Audition Song C ${tag}`}
+                            >
+                              {isPlayingC ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                              <span>Song C ({trackC.bpm} BPM)</span>
+                            </button>
+                          )}
+
+                          {currentWinner && (
+                            <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-600/40 ml-1">
+                              <Award className="w-3 h-3" />
+                              <span>Winner: {currentWinner.source}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
+                      {/* 3 Columns: Song A, Song B, Song C */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         
                         {/* Song A Section */}
@@ -535,6 +792,28 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                               <span>Song A • {trackA.title}</span>
                               <span className="text-slate-500">{secA ? `${secA.lineCount} lines` : 'Missing'}</span>
                             </div>
+
+                            {/* Audio Snippet Audition Button */}
+                            {secA && timeA && (
+                              <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-indigo-950/80 border border-indigo-700/60 font-mono text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSnippet(trackA, styleAIndex, tag, idxA)}
+                                  className={`px-2 py-1 rounded font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                    isPlayingA
+                                      ? 'bg-amber-500 text-slate-950 font-black'
+                                      : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                  }`}
+                                >
+                                  {isPlayingA ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 fill-current" />}
+                                  <span>{isPlayingA ? 'Pause Audio' : 'Play Snippet'}</span>
+                                </button>
+                                <span className="text-indigo-300 font-mono">
+                                  {formatTimeMMSS(timeA.startTimeSec)} - {formatTimeMMSS(timeA.startTimeSec + timeA.durationSec)}
+                                </span>
+                              </div>
+                            )}
+
                             <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                               {secA?.content || <span className="text-slate-600 italic">No {tag} in this version</span>}
                             </pre>
@@ -567,6 +846,28 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                               <span>Song B • {trackB.title}</span>
                               <span className="text-slate-500">{secB ? `${secB.lineCount} lines` : 'Missing'}</span>
                             </div>
+
+                            {/* Audio Snippet Audition Button */}
+                            {secB && timeB && (
+                              <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-emerald-950/80 border border-emerald-700/60 font-mono text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSnippet(trackB, styleBIndex, tag, idxB)}
+                                  className={`px-2 py-1 rounded font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                    isPlayingB
+                                      ? 'bg-amber-500 text-slate-950 font-black'
+                                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                  }`}
+                                >
+                                  {isPlayingB ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 fill-current" />}
+                                  <span>{isPlayingB ? 'Pause Audio' : 'Play Snippet'}</span>
+                                </button>
+                                <span className="text-emerald-300 font-mono">
+                                  {formatTimeMMSS(timeB.startTimeSec)} - {formatTimeMMSS(timeB.startTimeSec + timeB.durationSec)}
+                                </span>
+                              </div>
+                            )}
+
                             <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                               {secB?.content || <span className="text-slate-600 italic">No {tag} in this version</span>}
                             </pre>
@@ -599,6 +900,28 @@ export const BlockSuiteThreeSongComparatorModal: React.FC<BlockSuiteThreeSongCom
                               <span>Song C • {trackC.title}</span>
                               <span className="text-slate-500">{secC ? `${secC.lineCount} lines` : 'Missing'}</span>
                             </div>
+
+                            {/* Audio Snippet Audition Button */}
+                            {secC && timeC && (
+                              <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-purple-950/80 border border-purple-700/60 font-mono text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSnippet(trackC, styleCIndex, tag, idxC)}
+                                  className={`px-2 py-1 rounded font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                    isPlayingC
+                                      ? 'bg-amber-500 text-slate-950 font-black'
+                                      : 'bg-purple-600 hover:bg-purple-500 text-white'
+                                  }`}
+                                >
+                                  {isPlayingC ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 fill-current" />}
+                                  <span>{isPlayingC ? 'Pause Audio' : 'Play Snippet'}</span>
+                                </button>
+                                <span className="text-purple-300 font-mono">
+                                  {formatTimeMMSS(timeC.startTimeSec)} - {formatTimeMMSS(timeC.startTimeSec + timeC.durationSec)}
+                                </span>
+                              </div>
+                            )}
+
                             <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
                               {secC?.content || <span className="text-slate-600 italic">No {tag} in this version</span>}
                             </pre>
