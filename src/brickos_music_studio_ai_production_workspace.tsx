@@ -75,11 +75,6 @@ import { getTrackStems } from './data/nextcloudAssetIndex';
 import { KanbanDashboardTab } from './components/KanbanDashboardTab';
 import { LyricsAndSunoTab } from './components/LyricsAndSunoTab';
 import { MiniDawMixerTab } from './components/MiniDawMixerTab';
-import { MasteringLufsSuite } from './components/MasteringLufsSuite';
-import { YouTubeSEOTab } from './components/YouTubeSEOTab';
-import { OmniPostTab } from './components/OmniPostTab';
-import { LiveMinistryChartsTab } from './components/LiveMinistryChartsTab';
-import { RelationalDatabaseAndMatrixTab } from './components/RelationalDatabaseAndMatrixTab';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { CatalogSidebar } from './components/CatalogSidebar';
 import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
@@ -87,19 +82,33 @@ import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { GlobalAudioTransport } from './components/GlobalAudioTransport';
 import { KeyboardShortcutsOverlay } from './components/KeyboardShortcutsOverlay';
 import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts';
-import { NextcloudBentoSyncTab } from './components/NextcloudBentoSyncTab';
-import { PromptEngineeringLibraryTab } from './components/PromptEngineeringLibraryTab';
-import { VideoExpressAgentTab } from './components/VideoExpressAgentTab';
-import { SongVersionCompareTab } from './components/SongVersionCompareTab';
-import { BlockSuiteBrainstormingTab } from './components/BlockSuiteBrainstormingTab';
-import { GoogleFlowIntegrationHub } from './components/GoogleFlowIntegrationHub';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
 import { SectionQuickHelpBanner } from './components/SectionQuickHelpBanner';
-import { VeoVisualsTab } from './components/VeoVisualsTab';
-import { NightCafeTab } from './components/NightCafeTab';
-import { TelemetryTab } from './components/TelemetryTab';
-import { StudioCopilotTab } from './components/StudioCopilotTab';
-import { SearchGroundingTab } from './components/SearchGroundingTab';
+
+// Lazy-loaded secondary studio workspaces for instant app boot and code-splitting
+const MasteringLufsSuite = React.lazy(() => import('./components/MasteringLufsSuite').then(m => ({ default: m.MasteringLufsSuite })));
+const YouTubeSEOTab = React.lazy(() => import('./components/YouTubeSEOTab').then(m => ({ default: m.YouTubeSEOTab })));
+const OmniPostTab = React.lazy(() => import('./components/OmniPostTab').then(m => ({ default: m.OmniPostTab })));
+const LiveMinistryChartsTab = React.lazy(() => import('./components/LiveMinistryChartsTab').then(m => ({ default: m.LiveMinistryChartsTab })));
+const RelationalDatabaseAndMatrixTab = React.lazy(() => import('./components/RelationalDatabaseAndMatrixTab').then(m => ({ default: m.RelationalDatabaseAndMatrixTab })));
+const NextcloudBentoSyncTab = React.lazy(() => import('./components/NextcloudBentoSyncTab').then(m => ({ default: m.NextcloudBentoSyncTab })));
+const PromptEngineeringLibraryTab = React.lazy(() => import('./components/PromptEngineeringLibraryTab').then(m => ({ default: m.PromptEngineeringLibraryTab })));
+const VideoExpressAgentTab = React.lazy(() => import('./components/VideoExpressAgentTab').then(m => ({ default: m.VideoExpressAgentTab })));
+const SongVersionCompareTab = React.lazy(() => import('./components/SongVersionCompareTab').then(m => ({ default: m.SongVersionCompareTab })));
+const BlockSuiteBrainstormingTab = React.lazy(() => import('./components/BlockSuiteBrainstormingTab').then(m => ({ default: m.BlockSuiteBrainstormingTab })));
+const GoogleFlowIntegrationHub = React.lazy(() => import('./components/GoogleFlowIntegrationHub').then(m => ({ default: m.GoogleFlowIntegrationHub })));
+const VeoVisualsTab = React.lazy(() => import('./components/VeoVisualsTab').then(m => ({ default: m.VeoVisualsTab })));
+const NightCafeTab = React.lazy(() => import('./components/NightCafeTab').then(m => ({ default: m.NightCafeTab })));
+const TelemetryTab = React.lazy(() => import('./components/TelemetryTab').then(m => ({ default: m.TelemetryTab })));
+const StudioCopilotTab = React.lazy(() => import('./components/StudioCopilotTab').then(m => ({ default: m.StudioCopilotTab })));
+const SearchGroundingTab = React.lazy(() => import('./components/SearchGroundingTab').then(m => ({ default: m.SearchGroundingTab })));
+
+const TabSuspenseFallback: React.FC = () => (
+  <div className="w-full min-h-[380px] flex flex-col items-center justify-center p-12 rounded-2xl bg-slate-900/40 border border-slate-800/80 animate-pulse space-y-3 font-mono">
+    <div className="w-7 h-7 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+    <span className="text-xs uppercase tracking-widest text-slate-400 font-bold">Mounting Studio Module...</span>
+  </div>
+);
 import { StudioCommandPalette } from './components/StudioCommandPalette';
 import { StudioCopilotDrawer } from './components/StudioCopilotDrawer';
 import { StudioQuickToolsDrawer } from './components/StudioQuickToolsDrawer';
@@ -2670,6 +2679,9 @@ export default function BrickOSMusicStudioWorkspace() {
             />
           )}
 
+          {/* ASYNC SUSPENSE BOUNDARY FOR CODE-SPLIT MODULES */}
+          <React.Suspense fallback={<TabSuspenseFallback />}>
+
           {/* TAB: KANBAN & PRODUCTION DASHBOARD */}
           {activeTab === 'kanban' && (
             <KanbanDashboardTab
@@ -2944,6 +2956,7 @@ export default function BrickOSMusicStudioWorkspace() {
               onOpenSectionGuide={handleOpenSectionGuide}
             />
           )}
+          </React.Suspense>
 
         </main>
       </div>

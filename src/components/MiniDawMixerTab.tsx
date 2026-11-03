@@ -646,12 +646,14 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
     let frameId: number;
     let tick = 0;
+    let lastCommitTime = 0;
+    const lastDispatchedControls: { [id: number]: { vol: number; pan: number; muted: boolean; solo: boolean; hasSolo: boolean } } = {};
+
     const updateMeters = () => {
       tick++;
       const now = Date.now();
       const elapsedSec = ((now - (playbackStartTimeRef.current || now)) / 1000) % 60;
       const progressPercent = (elapsedSec / 60) * 100;
-      setPlaybackProgressPercent(progressPercent);
 
       const anySolo = tracks.some((t) => t.solo);
       const levels: { [id: number]: { l: number; r: number } } = {};
@@ -675,9 +677,25 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         }
         dynamicVals[trk.id] = { vol: effVol, pan: effPan };
 
-        // Dispatch real-time automation to Web Audio engine
-        const hasSolo = tracks.some((t) => t.solo);
-        audioMiniDaw.updateTrackControls(trk.id, effVol, effPan, trk.muted, hasSolo, trk.solo);
+        // Efficient dispatch: only update Web Audio params if parameters actually changed
+        const last = lastDispatchedControls[trk.id];
+        if (
+          !last ||
+          last.vol !== effVol ||
+          last.pan !== effPan ||
+          last.muted !== trk.muted ||
+          last.solo !== trk.solo ||
+          last.hasSolo !== anySolo
+        ) {
+          audioMiniDaw.updateTrackControls(trk.id, effVol, effPan, trk.muted, anySolo, trk.solo);
+          lastDispatchedControls[trk.id] = {
+            vol: effVol,
+            pan: effPan,
+            muted: trk.muted,
+            solo: trk.solo,
+            hasSolo: anySolo
+          };
+        }
 
         const isAudible = !trk.muted && (!anySolo || trk.solo);
         if (!isAudible) {
@@ -701,23 +719,28 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         audibleCount++;
       });
 
-      setChannelLevels(levels);
-      setLiveDynamicValues(dynamicVals);
+      // Throttle React state commits to ~28 FPS (36ms interval) to avoid continuous 60fps full-tree re-renders
+      if (now - lastCommitTime >= 36) {
+        lastCommitTime = now;
+        setPlaybackProgressPercent(progressPercent);
+        setChannelLevels(levels);
+        setLiveDynamicValues(dynamicVals);
 
-      // Compute Master Output Bus Summed Levels
-      if (audibleCount > 0 && !isMasterMuted) {
-        const masterMult = isMasterDimmed ? (masterVolume / 100) * 0.15 : (masterVolume / 100);
-        const normalizer = Math.sqrt(audibleCount);
-        let mLeft = Math.min(100, Math.round((sumL / normalizer) * masterMult));
-        let mRight = Math.min(100, Math.round((sumR / normalizer) * masterMult));
-        if (isMonoCollapsed) {
-          const monoAvg = Math.round((mLeft + mRight) / 2);
-          mLeft = monoAvg;
-          mRight = monoAvg;
+        // Compute Master Output Bus Summed Levels
+        if (audibleCount > 0 && !isMasterMuted) {
+          const masterMult = isMasterDimmed ? (masterVolume / 100) * 0.15 : (masterVolume / 100);
+          const normalizer = Math.sqrt(audibleCount);
+          let mLeft = Math.min(100, Math.round((sumL / normalizer) * masterMult));
+          let mRight = Math.min(100, Math.round((sumR / normalizer) * masterMult));
+          if (isMonoCollapsed) {
+            const monoAvg = Math.round((mLeft + mRight) / 2);
+            mLeft = monoAvg;
+            mRight = monoAvg;
+          }
+          setMasterLevels({ l: mLeft, r: mRight });
+        } else {
+          setMasterLevels({ l: 0, r: 0 });
         }
-        setMasterLevels({ l: mLeft, r: mRight });
-      } else {
-        setMasterLevels({ l: 0, r: 0 });
       }
 
       frameId = requestAnimationFrame(updateMeters);

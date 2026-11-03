@@ -153,6 +153,21 @@ export const D3ChannelWaveformVisualizer: React.FC<D3ChannelWaveformVisualizerPr
     return points;
   }, [track.id, track.name, profile]);
 
+  const lastMetricsTimeRef = useRef(0);
+  const progressRef = useRef(playbackProgressPercent);
+
+  // High-performance direct playhead positioning without rebuilding D3 data graphs
+  useEffect(() => {
+    progressRef.current = playbackProgressPercent;
+    if (svgRef.current) {
+      const playheadX = (playbackProgressPercent / 100) * dimensions.width;
+      const svg = d3.select(svgRef.current);
+      svg.select('.playhead-line').attr('x1', playheadX).attr('x2', playheadX);
+      svg.select('.playhead-bead').attr('cx', playheadX);
+      svg.select('.played-region-rect').attr('width', Math.max(0, playheadX));
+    }
+  }, [playbackProgressPercent, dimensions.width]);
+
   // Live Audio Render Loop via D3 and Web Audio Analyser
   useEffect(() => {
     const svgElement = svgRef.current;
@@ -208,11 +223,15 @@ export const D3ChannelWaveformVisualizer: React.FC<D3ChannelWaveformVisualizerPr
         sumSq = peakLinear * peakLinear;
       }
 
-      // Compute RMS and Peak dB for live readouts
-      const rmsLinear = Math.sqrt(sumSq / dataToRender.length);
-      const peakDb = peakLinear > 1e-4 ? Math.round(20 * Math.log10(peakLinear) * 10) / 10 : -90;
-      const rmsDb = rmsLinear > 1e-4 ? Math.round(20 * Math.log10(rmsLinear) * 10) / 10 : -90;
-      setLiveMetrics({ peakDb, rmsDb });
+      // Compute RMS and Peak dB for live readouts (throttled to 200ms to eliminate React state thrashing)
+      const nowMs = performance.now();
+      if (nowMs - lastMetricsTimeRef.current > 200) {
+        lastMetricsTimeRef.current = nowMs;
+        const rmsLinear = Math.sqrt(sumSq / dataToRender.length);
+        const peakDb = peakLinear > 1e-4 ? Math.round(20 * Math.log10(peakLinear) * 10) / 10 : -90;
+        const rmsDb = rmsLinear > 1e-4 ? Math.round(20 * Math.log10(rmsLinear) * 10) / 10 : -90;
+        setLiveMetrics({ peakDb, rmsDb });
+      }
 
       // Build D3 Scales
       const xScale = d3.scaleLinear()
@@ -250,19 +269,6 @@ export const D3ChannelWaveformVisualizer: React.FC<D3ChannelWaveformVisualizerPr
         .datum(dataToRender)
         .attr('d', centerLine);
 
-      // Update playhead scrubber
-      const playheadX = (playbackProgressPercent / 100) * width;
-      svg.select('.playhead-line')
-        .attr('x1', playheadX)
-        .attr('x2', playheadX);
-
-      svg.select('.playhead-bead')
-        .attr('cx', playheadX);
-
-      // Update played region tint
-      svg.select('.played-region-rect')
-        .attr('width', Math.max(0, playheadX));
-
       if (isPlaying) {
         animId = requestAnimationFrame(renderFrame);
       }
@@ -273,7 +279,7 @@ export const D3ChannelWaveformVisualizer: React.FC<D3ChannelWaveformVisualizerPr
     return () => {
       if (animId) cancelAnimationFrame(animId);
     };
-  }, [dimensions, isPlaying, track.id, track.vol, track.muted, playbackProgressPercent, stemEnvelopeData, profile]);
+  }, [dimensions, isPlaying, track.id, track.vol, track.muted, stemEnvelopeData, profile]);
 
   // Click & Drag to Seek
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
