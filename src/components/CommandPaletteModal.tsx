@@ -16,6 +16,7 @@ import {
   X,
   Clock,
   Compass,
+  Calendar,
   Check
 } from 'lucide-react';
 import { Track } from '../types';
@@ -103,6 +104,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     const stages: Array<{ id: string; name: string; subtitle: string; icon: any }> = [
       { id: 'home', name: 'Studio Home Hub', subtitle: 'Label overview, quick jump, and system health', icon: Layers },
       { id: 'kanban', name: 'Master Kanban Pipeline', subtitle: '4 EPs, 26 tracks, lifecycle progression', icon: Compass },
+      { id: 'timeline', name: 'Production Timeline & Milestone Gantt', subtitle: '5-Phase Nashville SOP roadmap, deadlines & critical path', icon: Calendar },
       { id: 'lyrics', name: 'Lyrics & Suno v5.5 Engine', subtitle: '4-block multi-model compilation and editing', icon: Sparkles },
       { id: 'mixer', name: 'Mini-DAW 4-Track Mixer', subtitle: '24-bit/48kHz stem balance & EQ/compression', icon: Scissors },
       { id: 'nextcloud_sync', name: 'Nextcloud WebDAV & Folder 207332', subtitle: 'Live UVR5 stems and cloud asset linking', icon: HardDrive },

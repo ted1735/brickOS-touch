@@ -37,9 +37,11 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  FileAudio
+  FileAudio,
+  Archive
 } from 'lucide-react';
-import { Track, MixerTrack, DawEffectsState, LufsMeasurementData, TrackAutomationState, MixerGroup } from '../types';
+import { Track, MixerTrack, DawEffectsState, LufsMeasurementData, TrackAutomationState, MixerGroup, ProjectArchiveManifest } from '../types';
+import { ProjectArchiveModal } from './ProjectArchiveModal';
 
 export interface ChannelStemProgress {
   channelId: number;
@@ -60,6 +62,8 @@ import { MiniDawSpectrumVisualizer } from './MiniDawSpectrumVisualizer';
 import { MasteringRack } from './MasteringRack';
 import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
 import { AutomationLaneEditor, interpolateAutomationValue } from './AutomationLaneEditor';
+import { D3ChannelWaveformVisualizer } from './D3ChannelWaveformVisualizer';
+import { RotaryPanKnob } from './RotaryPanKnob';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -190,6 +194,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [editGroupName, setEditGroupName] = useState<string>('');
   const [editGroupColor, setEditGroupColor] = useState<string>('#8B5CF6');
   const [isExportingWav, setIsExportingWav] = useState(false);
+  const [isProjectArchiveModalOpen, setIsProjectArchiveModalOpen] = useState<boolean>(false);
   const [cropPreset, setCropPreset] = useState<'30s' | '60s' | 'full'>('60s');
   const [isNextcloudSyncing, setIsNextcloudSyncing] = useState<boolean>(false);
   const [nextcloudSyncNotice, setNextcloudSyncNotice] = useState<string>('');
@@ -644,12 +649,14 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
     let frameId: number;
     let tick = 0;
+    let lastCommitTime = 0;
+    const lastDispatchedControls: { [id: number]: { vol: number; pan: number; muted: boolean; solo: boolean; hasSolo: boolean } } = {};
+
     const updateMeters = () => {
       tick++;
       const now = Date.now();
       const elapsedSec = ((now - (playbackStartTimeRef.current || now)) / 1000) % 60;
       const progressPercent = (elapsedSec / 60) * 100;
-      setPlaybackProgressPercent(progressPercent);
 
       const anySolo = tracks.some((t) => t.solo);
       const levels: { [id: number]: { l: number; r: number } } = {};
@@ -673,9 +680,25 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         }
         dynamicVals[trk.id] = { vol: effVol, pan: effPan };
 
-        // Dispatch real-time automation to Web Audio engine
-        const hasSolo = tracks.some((t) => t.solo);
-        audioMiniDaw.updateTrackControls(trk.id, effVol, effPan, trk.muted, hasSolo, trk.solo);
+        // Efficient dispatch: only update Web Audio params if parameters actually changed
+        const last = lastDispatchedControls[trk.id];
+        if (
+          !last ||
+          last.vol !== effVol ||
+          last.pan !== effPan ||
+          last.muted !== trk.muted ||
+          last.solo !== trk.solo ||
+          last.hasSolo !== anySolo
+        ) {
+          audioMiniDaw.updateTrackControls(trk.id, effVol, effPan, trk.muted, anySolo, trk.solo);
+          lastDispatchedControls[trk.id] = {
+            vol: effVol,
+            pan: effPan,
+            muted: trk.muted,
+            solo: trk.solo,
+            hasSolo: anySolo
+          };
+        }
 
         const isAudible = !trk.muted && (!anySolo || trk.solo);
         if (!isAudible) {
@@ -699,23 +722,28 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         audibleCount++;
       });
 
-      setChannelLevels(levels);
-      setLiveDynamicValues(dynamicVals);
+      // Throttle React state commits to ~28 FPS (36ms interval) to avoid continuous 60fps full-tree re-renders
+      if (now - lastCommitTime >= 36) {
+        lastCommitTime = now;
+        setPlaybackProgressPercent(progressPercent);
+        setChannelLevels(levels);
+        setLiveDynamicValues(dynamicVals);
 
-      // Compute Master Output Bus Summed Levels
-      if (audibleCount > 0 && !isMasterMuted) {
-        const masterMult = isMasterDimmed ? (masterVolume / 100) * 0.15 : (masterVolume / 100);
-        const normalizer = Math.sqrt(audibleCount);
-        let mLeft = Math.min(100, Math.round((sumL / normalizer) * masterMult));
-        let mRight = Math.min(100, Math.round((sumR / normalizer) * masterMult));
-        if (isMonoCollapsed) {
-          const monoAvg = Math.round((mLeft + mRight) / 2);
-          mLeft = monoAvg;
-          mRight = monoAvg;
+        // Compute Master Output Bus Summed Levels
+        if (audibleCount > 0 && !isMasterMuted) {
+          const masterMult = isMasterDimmed ? (masterVolume / 100) * 0.15 : (masterVolume / 100);
+          const normalizer = Math.sqrt(audibleCount);
+          let mLeft = Math.min(100, Math.round((sumL / normalizer) * masterMult));
+          let mRight = Math.min(100, Math.round((sumR / normalizer) * masterMult));
+          if (isMonoCollapsed) {
+            const monoAvg = Math.round((mLeft + mRight) / 2);
+            mLeft = monoAvg;
+            mRight = monoAvg;
+          }
+          setMasterLevels({ l: mLeft, r: mRight });
+        } else {
+          setMasterLevels({ l: 0, r: 0 });
         }
-        setMasterLevels({ l: mLeft, r: mRight });
-      } else {
-        setMasterLevels({ l: 0, r: 0 });
       }
 
       frameId = requestAnimationFrame(updateMeters);
@@ -814,6 +842,61 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     } finally {
       setIsExportingWav(false);
     }
+  };
+
+  // Restore live DAW session state from a verified Project Archive JSON manifest
+  const handleRestoreProjectArchive = (archive: ProjectArchiveManifest) => {
+    if (!archive) return;
+
+    // Restore channels
+    if (Array.isArray(archive.channels) && archive.channels.length > 0) {
+      setTracks(archive.channels);
+      syncAudioEngineTracks(archive.channels);
+    }
+
+    // Restore custom groups
+    if (Array.isArray(archive.groups)) {
+      setGroups(archive.groups);
+    }
+
+    // Restore master effects rack
+    if (archive.effects) {
+      setEffects(archive.effects);
+      audioMiniDaw.updateBusRouting(archive.effects.busRouting || 'daw', archive.channels || tracks);
+      if (archive.effects.targetLufs) {
+        audioMiniDaw.setTargetLufs(archive.effects.targetLufs, archive.effects.truePeakCeilingDb || -1.0);
+      }
+    }
+
+    // Restore automation lanes & envelopes
+    if (archive.automation) {
+      setTrackAutomation(archive.automation);
+    }
+
+    // Restore master transport controls
+    if (archive.dawState) {
+      const vol = typeof archive.dawState.masterVolume === 'number' ? archive.dawState.masterVolume : masterVolume;
+      const muted = typeof archive.dawState.isMasterMuted === 'boolean' ? archive.dawState.isMasterMuted : isMasterMuted;
+      const dimmed = typeof archive.dawState.isMasterDimmed === 'boolean' ? archive.dawState.isMasterDimmed : isMasterDimmed;
+      const mono = typeof archive.dawState.isMonoCollapsed === 'boolean' ? archive.dawState.isMonoCollapsed : isMonoCollapsed;
+
+      setMasterVolume(vol);
+      setIsMasterMuted(muted);
+      setIsMasterDimmed(dimmed);
+      setIsMonoCollapsed(mono);
+      applyMasterGain(vol, muted, dimmed);
+      audioMiniDaw.setMonoCollapse(mono);
+
+      if (archive.dawState.cropPreset) {
+        setCropPreset(archive.dawState.cropPreset);
+      }
+      if (archive.dawState.activeFxPresetId) {
+        setActiveFxPresetId(archive.dawState.activeFxPresetId);
+      }
+    }
+
+    setNextcloudSyncNotice(`✓ Restored Project Archive: ${archive.track.id} – ${archive.track.title}`);
+    setTimeout(() => setNextcloudSyncNotice(''), 6000);
   };
 
   // Synchronize audio engine for all tracks
@@ -1168,11 +1251,25 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
             <button
               onClick={handleExportWav}
               disabled={isExportingWav}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
               title="Export Lossless 24-Bit / 48kHz WAV Master"
             >
               <Download className="w-3.5 h-3.5 text-emerald-400" />
               <span>{isExportingWav ? 'Rendering...' : 'Bounce 24-Bit WAV'}</span>
+            </button>
+
+            {/* Project Archive Button */}
+            <button
+              type="button"
+              onClick={() => setIsProjectArchiveModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950 hover:from-amber-900 hover:to-indigo-900 text-amber-200 text-xs font-bold font-mono border border-amber-600/50 flex items-center gap-1.5 transition cursor-pointer shadow-md hover:scale-[1.01]"
+              title="Open Project Archive System (Bundle DAW tracks, stereo pan, FX rack & metadata into downloadable JSON manifest)"
+            >
+              <Archive className="w-3.5 h-3.5 text-amber-400" />
+              <span>Project Archive</span>
+              <span className="px-1.5 py-0.2 rounded bg-amber-900/80 text-amber-300 text-[9px] font-mono border border-amber-500/40">
+                JSON
+              </span>
             </button>
 
             {/* Master Volume Slider */}
@@ -2264,24 +2361,15 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     </div>
                   </div>
 
-                  {/* Stereo Pan */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase text-slate-500">Pan</span>
-                    <input
-                      type="range"
-                      min="-100"
-                      max="100"
-                      value={trk.pan}
-                      onChange={(e) => handleUpdateTrack(trk.id, 'pan', parseInt(e.target.value))}
-                      className="w-16 accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                    />
-                    <span className="text-[10px] font-mono text-slate-400 w-8 text-center">
-                      {(() => {
-                        const effectivePan = (!autoState.panBypass && dynamicPan !== undefined) ? dynamicPan : trk.pan;
-                        return effectivePan === 0 ? 'C' : effectivePan < 0 ? `L${Math.abs(effectivePan)}` : `R${effectivePan}`;
-                      })()}
-                    </span>
-                  </div>
+                  {/* Stereo Positional Panning Rotary Knob */}
+                  <RotaryPanKnob
+                    value={(!autoState.panBypass && dynamicPan !== undefined) ? dynamicPan : trk.pan}
+                    onChange={(newPan) => handleUpdateTrack(trk.id, 'pan', newPan)}
+                    size={38}
+                    trackColor={trkGroup ? trkGroup.color : trk.color}
+                    isAutomated={!autoState.panBypass && autoState.panNodes && autoState.panNodes.length > 0}
+                    isDarkMode={isDarkMode}
+                  />
 
                   {/* Volume Slider */}
                   <div className="flex items-center gap-2">
@@ -2420,6 +2508,20 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Real-time D3 Waveform Visualizer reflecting UVR5 Stem Data */}
+              <div className="w-full">
+                <D3ChannelWaveformVisualizer
+                  track={trk}
+                  isPlaying={isPlaying}
+                  playbackProgressPercent={playbackProgressPercent}
+                  height={76}
+                  isDarkMode={isDarkMode}
+                  onSeekPercent={(pct) => {
+                    setPlaybackProgressPercent(pct);
+                  }}
+                />
+              </div>
 
               {/* Expandable Automation Lane Drawer */}
               {isLaneExpanded && (
@@ -2990,6 +3092,30 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Project Archive & DAW State Manifest Modal */}
+      <ProjectArchiveModal
+        isOpen={isProjectArchiveModalOpen}
+        onClose={() => setIsProjectArchiveModalOpen(false)}
+        track={track}
+        channels={tracks}
+        groups={groups}
+        effects={effects}
+        automation={trackAutomation}
+        masterVolume={masterVolume}
+        isMasterMuted={isMasterMuted}
+        isMasterDimmed={isMasterDimmed}
+        isMonoCollapsed={isMonoCollapsed}
+        cropPreset={cropPreset}
+        lufsData={lufsData}
+        activeFxPresetId={activeFxPresetId}
+        onRestoreArchive={handleRestoreProjectArchive}
+        onToast={(msg) => {
+          setNextcloudSyncNotice(msg);
+          setTimeout(() => setNextcloudSyncNotice(''), 4500);
+        }}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };

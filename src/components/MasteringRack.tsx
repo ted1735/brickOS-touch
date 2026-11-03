@@ -54,32 +54,47 @@ export const MasteringRack: React.FC<MasteringRackProps> = ({
     let peakHoldVal = 0;
     let peakHoldTimestamp = 0;
     let pulseVal = 0;
+    let lastPollTime = 0;
+    let lastCompGr = -1;
+    let lastLimGr = -1;
 
     const pollReduction = () => {
-      const compGr = audioMiniDaw.getCompressorGainReduction();
-      let limGr = audioMiniDaw.getLimiterGainReduction();
-
-      // If simulated pulse is active, blend it in
-      if (pulseVal > 0.05) {
-        pulseVal *= 0.92; // smooth decay
-        setSimulatedPulseDb(pulseVal);
-        limGr = Math.max(limGr, pulseVal);
-      } else if (pulseVal !== 0) {
-        pulseVal = 0;
-        setSimulatedPulseDb(0);
-      }
-
-      setCompGrDb(compGr);
-      setLimiterGrDb(limGr);
-
       const now = Date.now();
-      if (limGr >= peakHoldVal) {
-        peakHoldVal = limGr;
-        peakHoldTimestamp = now;
-        setLimiterPeakHoldDb(peakHoldVal);
-      } else if (now - peakHoldTimestamp > 1400) {
-        peakHoldVal = Math.max(0, peakHoldVal - 0.12);
-        setLimiterPeakHoldDb(peakHoldVal);
+      // Throttle to 30fps and only update state on meaningful changes
+      if (now - lastPollTime >= 33) {
+        lastPollTime = now;
+        const compGr = audioMiniDaw.getCompressorGainReduction();
+        let limGr = audioMiniDaw.getLimiterGainReduction();
+
+        // If simulated pulse is active, blend it in
+        if (pulseVal > 0.05) {
+          pulseVal *= 0.92; // smooth decay
+          setSimulatedPulseDb(pulseVal);
+          limGr = Math.max(limGr, pulseVal);
+        } else if (pulseVal !== 0) {
+          pulseVal = 0;
+          setSimulatedPulseDb(0);
+        }
+
+        // Only dispatch React state when value changed noticeably or transitioned to zero
+        if (Math.abs(compGr - lastCompGr) > 0.08 || (compGr === 0 && lastCompGr !== 0)) {
+          lastCompGr = compGr;
+          setCompGrDb(compGr);
+        }
+
+        if (Math.abs(limGr - lastLimGr) > 0.08 || (limGr === 0 && lastLimGr !== 0)) {
+          lastLimGr = limGr;
+          setLimiterGrDb(limGr);
+        }
+
+        if (limGr >= peakHoldVal) {
+          peakHoldVal = limGr;
+          peakHoldTimestamp = now;
+          setLimiterPeakHoldDb(peakHoldVal);
+        } else if (now - peakHoldTimestamp > 1400) {
+          peakHoldVal = Math.max(0, peakHoldVal - 0.12);
+          setLimiterPeakHoldDb(peakHoldVal);
+        }
       }
 
       animId = requestAnimationFrame(pollReduction);

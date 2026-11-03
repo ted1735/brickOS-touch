@@ -17,7 +17,8 @@ import {
   MessageSquare,
   Search,
   Columns,
-  Grid
+  Grid,
+  Calendar
 } from 'lucide-react';
 
 export interface StudioNavItem {
@@ -55,6 +56,23 @@ export const TIER_1_NAV_ITEMS: StudioNavItem[] = [
     sopRule: 'Rule 1: Mandatory Selah 24h prayer gate before final distribution.',
     badge: 'Master',
     shortcut: 'Alt+1'
+  },
+  {
+    id: 'timeline',
+    name: 'Production Timeline & Gantt Roadmap',
+    shortName: 'Timeline',
+    tier: 'tier1',
+    tierLabel: 'Tier 1 • Audio Engine',
+    tierBadgeColor: 'bg-indigo-950/80 text-indigo-400 border-indigo-800/40',
+    icon: Calendar,
+    accentColor: 'text-indigo-400',
+    activeBg: 'bg-indigo-600',
+    activeBorder: 'border-indigo-400',
+    glowColor: 'shadow-indigo-500/30',
+    description: 'Chronological 5-Phase Nashville SOP roadmap visualizing lyric drafting, Suno audio synthesis, BS-Roformer stem prep, and release deadlines.',
+    sopRule: 'Rule 1b: All EP milestones must adhere to 5-phase critical path sequencing.',
+    badge: 'Gantt v4.7',
+    shortcut: 'Alt+T'
   },
   {
     id: 'lyrics',

@@ -15,7 +15,8 @@ import {
   Radio,
   Sliders,
   Flame,
-  CheckCircle2
+  CheckCircle2,
+  Calendar
 } from 'lucide-react';
 
 interface TouchToolsDrawerProps {
@@ -48,6 +49,17 @@ export const TouchToolsDrawer: React.FC<TouchToolsDrawerProps> = ({
       color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
       action: () => {
         onOpenSelahModal();
+        onClose();
+      }
+    },
+    {
+      id: 'timeline',
+      title: 'Production Timeline & Gantt',
+      desc: 'Milestone tracking, stage gates & release roadmap',
+      icon: Calendar,
+      color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
+      action: () => {
+        onNavigateToTab('timeline');
         onClose();
       }
     },
