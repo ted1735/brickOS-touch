@@ -61,6 +61,7 @@ import { MasteringRack } from './MasteringRack';
 import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
 import { AutomationLaneEditor, interpolateAutomationValue } from './AutomationLaneEditor';
 import { D3ChannelWaveformVisualizer } from './D3ChannelWaveformVisualizer';
+import { RotaryPanKnob } from './RotaryPanKnob';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -2265,24 +2266,15 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     </div>
                   </div>
 
-                  {/* Stereo Pan */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase text-slate-500">Pan</span>
-                    <input
-                      type="range"
-                      min="-100"
-                      max="100"
-                      value={trk.pan}
-                      onChange={(e) => handleUpdateTrack(trk.id, 'pan', parseInt(e.target.value))}
-                      className="w-16 accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                    />
-                    <span className="text-[10px] font-mono text-slate-400 w-8 text-center">
-                      {(() => {
-                        const effectivePan = (!autoState.panBypass && dynamicPan !== undefined) ? dynamicPan : trk.pan;
-                        return effectivePan === 0 ? 'C' : effectivePan < 0 ? `L${Math.abs(effectivePan)}` : `R${effectivePan}`;
-                      })()}
-                    </span>
-                  </div>
+                  {/* Stereo Positional Panning Rotary Knob */}
+                  <RotaryPanKnob
+                    value={(!autoState.panBypass && dynamicPan !== undefined) ? dynamicPan : trk.pan}
+                    onChange={(newPan) => handleUpdateTrack(trk.id, 'pan', newPan)}
+                    size={38}
+                    trackColor={trkGroup ? trkGroup.color : trk.color}
+                    isAutomated={!autoState.panBypass && autoState.panNodes && autoState.panNodes.length > 0}
+                    isDarkMode={isDarkMode}
+                  />
 
                   {/* Volume Slider */}
                   <div className="flex items-center gap-2">
