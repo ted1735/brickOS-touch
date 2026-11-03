@@ -37,9 +37,11 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  FileAudio
+  FileAudio,
+  Archive
 } from 'lucide-react';
-import { Track, MixerTrack, DawEffectsState, LufsMeasurementData, TrackAutomationState, MixerGroup } from '../types';
+import { Track, MixerTrack, DawEffectsState, LufsMeasurementData, TrackAutomationState, MixerGroup, ProjectArchiveManifest } from '../types';
+import { ProjectArchiveModal } from './ProjectArchiveModal';
 
 export interface ChannelStemProgress {
   channelId: number;
@@ -192,6 +194,7 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   const [editGroupName, setEditGroupName] = useState<string>('');
   const [editGroupColor, setEditGroupColor] = useState<string>('#8B5CF6');
   const [isExportingWav, setIsExportingWav] = useState(false);
+  const [isProjectArchiveModalOpen, setIsProjectArchiveModalOpen] = useState<boolean>(false);
   const [cropPreset, setCropPreset] = useState<'30s' | '60s' | 'full'>('60s');
   const [isNextcloudSyncing, setIsNextcloudSyncing] = useState<boolean>(false);
   const [nextcloudSyncNotice, setNextcloudSyncNotice] = useState<string>('');
@@ -841,6 +844,61 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     }
   };
 
+  // Restore live DAW session state from a verified Project Archive JSON manifest
+  const handleRestoreProjectArchive = (archive: ProjectArchiveManifest) => {
+    if (!archive) return;
+
+    // Restore channels
+    if (Array.isArray(archive.channels) && archive.channels.length > 0) {
+      setTracks(archive.channels);
+      syncAudioEngineTracks(archive.channels);
+    }
+
+    // Restore custom groups
+    if (Array.isArray(archive.groups)) {
+      setGroups(archive.groups);
+    }
+
+    // Restore master effects rack
+    if (archive.effects) {
+      setEffects(archive.effects);
+      audioMiniDaw.updateBusRouting(archive.effects.busRouting || 'daw', archive.channels || tracks);
+      if (archive.effects.targetLufs) {
+        audioMiniDaw.setTargetLufs(archive.effects.targetLufs, archive.effects.truePeakCeilingDb || -1.0);
+      }
+    }
+
+    // Restore automation lanes & envelopes
+    if (archive.automation) {
+      setTrackAutomation(archive.automation);
+    }
+
+    // Restore master transport controls
+    if (archive.dawState) {
+      const vol = typeof archive.dawState.masterVolume === 'number' ? archive.dawState.masterVolume : masterVolume;
+      const muted = typeof archive.dawState.isMasterMuted === 'boolean' ? archive.dawState.isMasterMuted : isMasterMuted;
+      const dimmed = typeof archive.dawState.isMasterDimmed === 'boolean' ? archive.dawState.isMasterDimmed : isMasterDimmed;
+      const mono = typeof archive.dawState.isMonoCollapsed === 'boolean' ? archive.dawState.isMonoCollapsed : isMonoCollapsed;
+
+      setMasterVolume(vol);
+      setIsMasterMuted(muted);
+      setIsMasterDimmed(dimmed);
+      setIsMonoCollapsed(mono);
+      applyMasterGain(vol, muted, dimmed);
+      audioMiniDaw.setMonoCollapse(mono);
+
+      if (archive.dawState.cropPreset) {
+        setCropPreset(archive.dawState.cropPreset);
+      }
+      if (archive.dawState.activeFxPresetId) {
+        setActiveFxPresetId(archive.dawState.activeFxPresetId);
+      }
+    }
+
+    setNextcloudSyncNotice(`✓ Restored Project Archive: ${archive.track.id} – ${archive.track.title}`);
+    setTimeout(() => setNextcloudSyncNotice(''), 6000);
+  };
+
   // Synchronize audio engine for all tracks
   const syncAudioEngineTracks = (updatedTracks: MixerTrack[]) => {
     const hasSolo = updatedTracks.some((t) => t.solo);
@@ -1193,11 +1251,25 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
             <button
               onClick={handleExportWav}
               disabled={isExportingWav}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
               title="Export Lossless 24-Bit / 48kHz WAV Master"
             >
               <Download className="w-3.5 h-3.5 text-emerald-400" />
               <span>{isExportingWav ? 'Rendering...' : 'Bounce 24-Bit WAV'}</span>
+            </button>
+
+            {/* Project Archive Button */}
+            <button
+              type="button"
+              onClick={() => setIsProjectArchiveModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950 hover:from-amber-900 hover:to-indigo-900 text-amber-200 text-xs font-bold font-mono border border-amber-600/50 flex items-center gap-1.5 transition cursor-pointer shadow-md hover:scale-[1.01]"
+              title="Open Project Archive System (Bundle DAW tracks, stereo pan, FX rack & metadata into downloadable JSON manifest)"
+            >
+              <Archive className="w-3.5 h-3.5 text-amber-400" />
+              <span>Project Archive</span>
+              <span className="px-1.5 py-0.2 rounded bg-amber-900/80 text-amber-300 text-[9px] font-mono border border-amber-500/40">
+                JSON
+              </span>
             </button>
 
             {/* Master Volume Slider */}
@@ -3020,6 +3092,30 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Project Archive & DAW State Manifest Modal */}
+      <ProjectArchiveModal
+        isOpen={isProjectArchiveModalOpen}
+        onClose={() => setIsProjectArchiveModalOpen(false)}
+        track={track}
+        channels={tracks}
+        groups={groups}
+        effects={effects}
+        automation={trackAutomation}
+        masterVolume={masterVolume}
+        isMasterMuted={isMasterMuted}
+        isMasterDimmed={isMasterDimmed}
+        isMonoCollapsed={isMonoCollapsed}
+        cropPreset={cropPreset}
+        lufsData={lufsData}
+        activeFxPresetId={activeFxPresetId}
+        onRestoreArchive={handleRestoreProjectArchive}
+        onToast={(msg) => {
+          setNextcloudSyncNotice(msg);
+          setTimeout(() => setNextcloudSyncNotice(''), 4500);
+        }}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };

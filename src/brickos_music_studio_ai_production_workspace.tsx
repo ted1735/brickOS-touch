@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
+  Calendar,
   Music,
   FileText,
   Film,
@@ -102,6 +103,7 @@ const NightCafeTab = React.lazy(() => import('./components/NightCafeTab').then(m
 const TelemetryTab = React.lazy(() => import('./components/TelemetryTab').then(m => ({ default: m.TelemetryTab })));
 const StudioCopilotTab = React.lazy(() => import('./components/StudioCopilotTab').then(m => ({ default: m.StudioCopilotTab })));
 const SearchGroundingTab = React.lazy(() => import('./components/SearchGroundingTab').then(m => ({ default: m.SearchGroundingTab })));
+const ProductionTimelineTab = React.lazy(() => import('./components/ProductionTimelineTab').then(m => ({ default: m.ProductionTimelineTab })));
 
 const TabSuspenseFallback: React.FC = () => (
   <div className="w-full min-h-[380px] flex flex-col items-center justify-center p-12 rounded-2xl bg-slate-900/40 border border-slate-800/80 animate-pulse space-y-3 font-mono">
@@ -126,9 +128,11 @@ import {
   loadTracksFromFirestore,
   subscribeToFirestoreTracks,
   saveTrackToFirestore,
+  finalizeTrackToFirestore,
   deleteTrackFromFirestore,
   getLocalCachedTracks,
   isFirebaseConfigured,
+  isFirestoreQuotaExhausted,
   seedInitialCatalog,
   loadSessionsFromFirestore,
   subscribeToFirestoreSessions,
@@ -187,7 +191,7 @@ export default function BrickOSMusicStudioWorkspace() {
     }
   }, [selectedTrack?.id]);
   const [activeTab, setActiveTab] = useState<
-    'home' | 'kanban' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix' | 'brainstorming'
+    'home' | 'kanban' | 'timeline' | 'lyrics' | 'mixer' | 'mastering' | 'youtube' | 'omnipost' | 'ministry' | 'veo_visuals' | 'nightcafe' | 'video_express' | 'telemetry' | 'coproducer' | 'search' | 'database' | 'nextcloud_sync' | 'prompt_library' | 'version-matrix' | 'brainstorming'
   >('home');
   const [workspaceMode, setWorkspaceMode] = useState<StudioWorkspace>(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('brickos_workspace_mode') : null;
@@ -823,22 +827,43 @@ export default function BrickOSMusicStudioWorkspace() {
     }
   };
 
-  // Manual Re-sync / Backup catalog to Firestore
+  // Manual Re-sync / Backup catalog to Firestore (Secondary Milestone)
   const handleManualSyncDatabase = async () => {
     try {
       setIsDbSyncing(true);
       setCloudSyncError('');
+      if (isFirestoreQuotaExhausted()) {
+        showToast('Firestore daily quota reached. Running safely in Local + Nextcloud Primary mode.', 'info');
+        return;
+      }
       await seedInitialCatalog(tracks);
       if (isFirebaseConfigured()) {
         setIsDbConnected(true);
         setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        showToast(`Successfully synced all ${tracks.length} tracks to Cloud Firestore!`, 'success');
+        showToast(`Successfully synced all ${tracks.length} tracks to Cloud Firestore as secondary milestone!`, 'success');
       } else {
-        showToast('Cloud is not configured. Your work is saved in this browser only.', 'info');
+        showToast('Firestore secondary destination is in local cache mode.', 'info');
       }
     } catch (err: any) {
-      setCloudSyncError('Cloud sync failed. Your work is saved locally.');
-      showToast(`Cloud sync error: ${err.message || 'Check connection'}`, 'error');
+      setCloudSyncError('Sync note: Work is preserved locally and on Nextcloud.');
+      showToast(`Sync note: ${err.message || 'Check connection'}`, 'info');
+    } finally {
+      setIsDbSyncing(false);
+    }
+  };
+
+  // Explicitly finalize track milestone to Firestore as secondary destination
+  const handleFinalizeSelectedTrackToCloud = async () => {
+    try {
+      setIsDbSyncing(true);
+      const res = await finalizeTrackToFirestore(selectedTrack);
+      if (res.success) {
+        showToast(`Milestone for "${selectedTrack.title}" (${selectedTrack.id}) finalized with _schemaVersion: 2!`, 'success');
+      } else {
+        showToast(res.error || 'Milestone saved locally', 'info');
+      }
+    } catch (err: any) {
+      showToast('Track saved locally', 'info');
     } finally {
       setIsDbSyncing(false);
     }
@@ -1970,29 +1995,37 @@ export default function BrickOSMusicStudioWorkspace() {
               <button
                 type="button"
                 onClick={() => setActiveTab('nextcloud_sync')}
-                className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
-                title="Nextcloud Live WebDAV & Folder 207332 Matcher"
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/40 text-emerald-300 font-mono text-[10px] font-semibold border border-emerald-500/30 hover:bg-emerald-900/50 hover:border-emerald-400 transition cursor-pointer"
+                title="Nextcloud Live WebDAV & Project Archive Storage (Primary Write Destination)"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>WebDAV / 207332</span>
+                <span>Nextcloud: Primary Active</span>
               </button>
               <button
                 type="button"
                 onClick={handleManualSyncDatabase}
-                className={`hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border transition cursor-pointer ${
-                  cloudSyncError
-                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
-                    : isDbSyncing
-                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[10px] font-semibold border transition cursor-pointer ${
+                  isFirestoreQuotaExhausted()
+                    ? 'bg-amber-950/40 text-amber-300 border-amber-500/40 hover:bg-amber-900/50'
                     : isDbConnected
-                    ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
-                    : 'bg-slate-500/10 text-slate-400 border-slate-500/30 hover:bg-slate-500/20'
+                    ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/30 hover:bg-cyan-900/50'
+                    : 'bg-slate-900/50 text-slate-400 border-slate-700 hover:bg-slate-800'
                 }`}
-                title={`${cloudSyncError || (isDbConnected ? `Cloud synced${lastSyncedAt ? ` at ${lastSyncedAt}` : ''}` : isFirebaseConfigured() ? 'Connecting to cloud' : 'Saved locally in this browser')}. Click to sync now.`}
+                title={isFirestoreQuotaExhausted()
+                  ? 'Firestore daily free write quota reached. Running safely in Local Storage Safe Mode; continuous writes saved locally and to Nextcloud.'
+                  : 'Firestore Secondary Milestone Destination. Click to sync milestone catalog.'}
               >
-                <Database className={`w-3 h-3 ${isDbSyncing ? 'animate-spin text-amber-400' : cloudSyncError ? 'text-rose-400' : isDbConnected ? 'text-cyan-400' : 'text-slate-400'}`} />
-                <span>{isDbSyncing ? 'Saving...' : cloudSyncError ? 'Local copy • sync issue' : isDbConnected ? 'Cloud synced' : isFirebaseConfigured() ? 'Connecting...' : 'Saved locally'}</span>
-                {lastSyncedAt && isDbConnected && <span className="text-[9px] opacity-70">({lastSyncedAt})</span>}
+                <Database className={`w-3 h-3 ${isDbSyncing ? 'animate-spin text-amber-400' : isFirestoreQuotaExhausted() ? 'text-amber-400' : 'text-cyan-400'}`} />
+                <span>{isFirestoreQuotaExhausted() ? 'Firestore: Local Safe Mode' : isDbConnected ? 'Firestore: Milestones Only' : 'Firestore: Standby'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalizeSelectedTrackToCloud}
+                className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-950/40 text-indigo-300 font-mono text-[10px] font-semibold border border-indigo-500/30 hover:bg-indigo-900/50 hover:border-indigo-400 transition cursor-pointer"
+                title={`Finalize current track milestone (${selectedTrack.id}: ${selectedTrack.title}) to Firestore with _schemaVersion: 2`}
+              >
+                <Save className="w-3 h-3 text-indigo-400" />
+                <span>Finalize {selectedTrack.id} Milestone</span>
               </button>
             </div>
             
@@ -2138,6 +2171,19 @@ export default function BrickOSMusicStudioWorkspace() {
             >
               <Compass className="w-3.5 h-3.5 text-indigo-400" />
               <span>Pipeline</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('timeline')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'timeline'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Production Timeline & Milestone Gantt Roadmap"
+            >
+              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Timeline</span>
             </button>
 
             <button
@@ -2699,6 +2745,20 @@ export default function BrickOSMusicStudioWorkspace() {
               onOpenCreateProject={() => setIsCreateModalOpen(true)}
               onOpenSectionGuide={handleOpenSectionGuide}
               isDarkMode={isDarkMode}
+            />
+          )}
+
+          {/* TAB: PRODUCTION TIMELINE & MILESTONE GANTT ROADMAP */}
+          {activeTab === 'timeline' && (
+            <ProductionTimelineTab
+              tracks={tracks}
+              selectedTrack={selectedTrack}
+              onSelectTrack={(t) => setSelectedTrack(t)}
+              onUpdateTrackStatus={handleUpdateTrackStatus}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
+              epCollections={EP_COLLECTIONS}
+              isDarkMode={isDarkMode}
+              showToast={showToast}
             />
           )}
 

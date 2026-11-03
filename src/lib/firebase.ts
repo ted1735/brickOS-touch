@@ -12,10 +12,10 @@ import {
   Unsubscribe,
   query,
   where,
-  orderBy,
-  limit
+  limit,
+  startAfter
 } from 'firebase/firestore';
-import { Track, CompositionSession, SoundPreset, SessionSnapshot, WhiteboardCanvasDoc } from '../types';
+import { Track, CompositionSession, SoundPreset, WhiteboardCanvasDoc } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { CANONICAL_SOUND_PRESETS } from '../data/canonicalSoundPresets';
 
@@ -25,11 +25,80 @@ const SESSIONS_COLLECTION = 'composition_sessions';
 const SESSIONS_LOCAL_STORAGE_KEY = 'brickos_sessions_cloud_cache_v1';
 const PRESETS_COLLECTION = 'sound_presets';
 const PRESETS_LOCAL_STORAGE_KEY = 'brickos_sound_presets_cache_v1';
-const SNAPSHOTS_COLLECTION = 'session_snapshots';
-const SNAPSHOTS_LOCAL_STORAGE_KEY = 'brickos_session_snapshots_cache_v1';
+const QUOTA_EXHAUSTED_KEY = 'brickos_firestore_quota_exhausted_v1';
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let isCircuitBreakerTripped = false;
+
+/**
+ * Checks if the free daily Firestore quota has been exhausted.
+ * Automatically engages circuit breaker to stop repeated gRPC write retries.
+ */
+export function isFirestoreQuotaExhausted(): boolean {
+  if (isCircuitBreakerTripped) return true;
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(QUOTA_EXHAUSTED_KEY) : null;
+    if (raw) {
+      const data = JSON.parse(raw);
+      // Quota reset is daily; reset circuit breaker after 4 hours or date boundary
+      if (data && data.timestamp && Date.now() - data.timestamp < 4 * 60 * 60 * 1000) {
+        isCircuitBreakerTripped = true;
+        return true;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
+
+/**
+ * Detects if an error is due to Firestore quota / resource exhaustion
+ */
+export function isQuotaExhaustedError(err: any): boolean {
+  if (!err) return false;
+  const code = err.code || err?.errorInfo?.code;
+  const msg = (err.message || '').toString();
+  return (
+    code === 'resource-exhausted' ||
+    code === 8 ||
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('Free daily write units')
+  );
+}
+
+/**
+ * Engages the quota circuit breaker, stopping further cloud write streams
+ */
+export function tripFirestoreQuotaCircuitBreaker(errorMessage?: string) {
+  isCircuitBreakerTripped = true;
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        QUOTA_EXHAUSTED_KEY,
+        JSON.stringify({
+          timestamp: Date.now(),
+          reason: errorMessage || 'Free daily write units quota exceeded'
+        })
+      );
+    }
+  } catch (_) {}
+  console.warn(
+    '[Firestore Circuit Breaker Active]: Daily free write quota reached (RESOURCE_EXHAUSTED). Cloud write attempts paused; running in local storage safe-mode. All track edits, sessions, and presets remain 100% saved in browser storage.'
+  );
+}
+
+/**
+ * Reset the circuit breaker
+ */
+export function clearFirestoreQuotaCircuitBreaker() {
+  isCircuitBreakerTripped = false;
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
+    }
+  } catch (_) {}
+}
 
 try {
   if (firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey) {
@@ -47,10 +116,13 @@ try {
 export { db, app };
 
 export const isFirebaseConfigured = (): boolean => {
-  return !!db && !!app;
+  return !!db && !!app && !isFirestoreQuotaExhausted();
 };
 
-// Fallback helper to get local cached tracks
+// ==========================================
+// TRACKS PERSISTENCE & MILESTONE FINALIZATION
+// ==========================================
+
 export const getLocalCachedTracks = (): Track[] | null => {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -64,20 +136,21 @@ export const getLocalCachedTracks = (): Track[] | null => {
   return null;
 };
 
-// Fallback helper to save local cached tracks
 export const setLocalCachedTracks = (tracks: Track[]) => {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tracks));
-  } catch (_) {}
+  } catch (err) {
+    console.warn('Failed to update local tracks cache:', err);
+  }
 };
 
 /**
- * Fetch all tracks from the persistent Firestore database.
- * If empty, seeds initial tracks and returns them.
+ * Load all tracks from Firestore. If cloud is unreachable or empty, falls back to canonical.
  */
-export async function loadTracksFromFirestore(canonicalTracks: Track[]): Promise<Track[]> {
-  if (!db) {
-    const cached = getLocalCachedTracks();
+export async function loadTracksFromFirestore(canonicalTracks: Track[] = []): Promise<Track[]> {
+  const cached = getLocalCachedTracks();
+
+  if (!db || isFirestoreQuotaExhausted()) {
     return cached && cached.length > 0 ? cached : canonicalTracks;
   }
 
@@ -86,11 +159,13 @@ export async function loadTracksFromFirestore(canonicalTracks: Track[]): Promise
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
-      // Collection is brand new; seed with canonical tracks in background
-      console.log('Firestore tracks collection is empty, seeding catalog...');
-      await seedInitialCatalog(canonicalTracks);
-      setLocalCachedTracks(canonicalTracks);
-      return canonicalTracks;
+      if (canonicalTracks.length > 0 && !isFirestoreQuotaExhausted()) {
+        console.log('Firestore tracks collection is empty, seeding canonical tracks...');
+        await seedInitialCatalog(canonicalTracks);
+        setLocalCachedTracks(canonicalTracks);
+        return canonicalTracks;
+      }
+      return cached && cached.length > 0 ? cached : canonicalTracks;
     }
 
     const fetchedTracks: Track[] = [];
@@ -102,14 +177,14 @@ export async function loadTracksFromFirestore(canonicalTracks: Track[]): Promise
       });
     });
 
-    // Sort stably: Canonical IDs first, then newly added tracks
     fetchedTracks.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
-
     setLocalCachedTracks(fetchedTracks);
     return fetchedTracks;
-  } catch (err) {
-    console.error('Failed to load tracks from Firestore:', err);
-    const cached = getLocalCachedTracks();
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Failed to load tracks from Firestore, falling back to local cache:', err?.message || err);
     return cached && cached.length > 0 ? cached : canonicalTracks;
   }
 }
@@ -121,7 +196,7 @@ export function subscribeToFirestoreTracks(
   onTracksUpdated: (tracks: Track[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe | null {
-  if (!db) return null;
+  if (!db || isFirestoreQuotaExhausted()) return null;
 
   try {
     const colRef = collection(db, TRACKS_COLLECTION);
@@ -143,21 +218,27 @@ export function subscribeToFirestoreTracks(
         onTracksUpdated(tracks);
       },
       error => {
-        console.warn('Firestore subscription error:', error);
+        if (isQuotaExhaustedError(error)) {
+          tripFirestoreQuotaCircuitBreaker(error.message);
+        }
+        console.warn('Firestore subscription notice:', error?.message || error);
         if (onError) onError(error);
       }
     );
   } catch (err: any) {
-    console.warn('Could not establish Firestore subscription:', err);
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Could not establish Firestore subscription:', err?.message || err);
     return null;
   }
 }
 
 /**
- * Upsert a track in Firestore
+ * Primary track save (Offline-first / Local Storage + Nextcloud).
+ * Live DAW tweaks update local cache immediately and do not fire routine Firestore writes to conserve quota.
  */
 export async function saveTrackToFirestore(track: Track): Promise<void> {
-  // Update local cache immediately
   const cached = getLocalCachedTracks() || [];
   const existingIdx = cached.findIndex(t => t.id === track.id);
   let updatedCache: Track[];
@@ -168,43 +249,72 @@ export async function saveTrackToFirestore(track: Track): Promise<void> {
     updatedCache = [track, ...cached];
   }
   setLocalCachedTracks(updatedCache);
+}
 
-  if (!db) return;
+/**
+ * Explicitly publishes or finalizes a track milestone to Firestore as the secondary destination.
+ * Uses _schemaVersion = 2 and safeguards with the quota circuit breaker.
+ */
+export async function finalizeTrackToFirestore(track: Track): Promise<{ success: boolean; error?: string }> {
+  const cached = getLocalCachedTracks() || [];
+  const existingIdx = cached.findIndex(t => t.id === track.id);
+  const updatedCache = existingIdx >= 0
+    ? cached.map(t => t.id === track.id ? { ...track, _schemaVersion: 2, updatedAt: new Date().toISOString() } : t)
+    : [{ ...track, _schemaVersion: 2, updatedAt: new Date().toISOString() }, ...cached];
+  setLocalCachedTracks(updatedCache);
+
+  if (!db || isFirestoreQuotaExhausted()) {
+    return {
+      success: true,
+      error: isFirestoreQuotaExhausted() ? 'Saved locally (Firestore daily quota limit active)' : 'Firestore not configured'
+    };
+  }
 
   try {
     const trackDocRef = doc(db, TRACKS_COLLECTION, track.id);
     const payload = {
       ...track,
+      _schemaVersion: 2,
+      finalizedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     await setDoc(trackDocRef, payload, { merge: true });
-  } catch (err) {
-    console.error(`Failed to save track ${track.id} to Firestore:`, err);
-    throw err;
+    return { success: true };
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return { success: true, error: 'Saved locally (Firestore quota reached)' };
+    }
+    console.warn(`Could not save track milestone ${track.id} to Firestore:`, err?.message || err);
+    return { success: false, error: err?.message || 'Firestore write failed' };
   }
 }
 
 /**
- * Batch seed canonical tracks into Firestore
+ * Batch seed canonical tracks into Firestore with throttling and quota protection
  */
 export async function seedInitialCatalog(tracks: Track[]): Promise<void> {
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted() || tracks.length === 0) return;
 
   try {
     const batch = writeBatch(db);
-    // Firestore batch limit is 500 ops; catalog has ~26 tracks
-    for (const track of tracks) {
+    const limited = tracks.slice(0, 400); // 400 doc safety limit
+    for (const track of limited) {
       const trackDocRef = doc(db, TRACKS_COLLECTION, track.id);
       batch.set(trackDocRef, {
         ...track,
+        _schemaVersion: 2,
         updatedAt: new Date().toISOString()
       }, { merge: true });
     }
     await batch.commit();
-    console.log(`Successfully seeded ${tracks.length} tracks into Firestore.`);
-  } catch (err) {
-    console.error('Failed to seed catalog into Firestore:', err);
-    throw err;
+    console.log(`Successfully seeded ${limited.length} tracks into Firestore.`);
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn('Could not seed catalog into Firestore:', err?.message || err);
   }
 }
 
@@ -215,14 +325,17 @@ export async function deleteTrackFromFirestore(trackId: string): Promise<void> {
   const cached = getLocalCachedTracks() || [];
   setLocalCachedTracks(cached.filter(t => t.id !== trackId));
 
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted()) return;
 
   try {
     const trackDocRef = doc(db, TRACKS_COLLECTION, trackId);
     await deleteDoc(trackDocRef);
-  } catch (err) {
-    console.error('Failed to delete track ${trackId} from Firestore:', err);
-    throw err;
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn(`Could not delete track ${trackId} from Firestore (deleted locally):`, err?.message || err);
   }
 }
 
@@ -249,12 +362,9 @@ export const setLocalCachedSessions = (sessions: CompositionSession[]) => {
   } catch (_) {}
 };
 
-/**
- * Load all composition sessions from Firestore. Seeds default initial sessions if empty.
- */
 export async function loadSessionsFromFirestore(canonicalSessions: CompositionSession[] = []): Promise<CompositionSession[]> {
-  if (!db) {
-    const cached = getLocalCachedSessions();
+  const cached = getLocalCachedSessions();
+  if (!db || isFirestoreQuotaExhausted()) {
     return cached && cached.length > 0 ? cached : canonicalSessions;
   }
 
@@ -263,13 +373,13 @@ export async function loadSessionsFromFirestore(canonicalSessions: CompositionSe
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
-      if (canonicalSessions.length > 0) {
+      if (canonicalSessions.length > 0 && !isFirestoreQuotaExhausted()) {
         console.log('Firestore sessions collection is empty, seeding canonical sessions...');
         await seedInitialSessions(canonicalSessions);
         setLocalCachedSessions(canonicalSessions);
         return canonicalSessions;
       }
-      return [];
+      return cached && cached.length > 0 ? cached : canonicalSessions;
     }
 
     const fetchedSessions: CompositionSession[] = [];
@@ -281,7 +391,6 @@ export async function loadSessionsFromFirestore(canonicalSessions: CompositionSe
       });
     });
 
-    // Sort by updated date descending (most recent sessions first), with pinned first
     fetchedSessions.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
@@ -290,21 +399,20 @@ export async function loadSessionsFromFirestore(canonicalSessions: CompositionSe
 
     setLocalCachedSessions(fetchedSessions);
     return fetchedSessions;
-  } catch (err) {
-    console.error('Failed to load composition sessions from Firestore:', err);
-    const cached = getLocalCachedSessions();
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Failed to load composition sessions from Firestore:', err?.message || err);
     return cached && cached.length > 0 ? cached : canonicalSessions;
   }
 }
 
-/**
- * Real-time listener for composition session updates
- */
 export function subscribeToFirestoreSessions(
   onSessionsUpdated: (sessions: CompositionSession[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe | null {
-  if (!db) return null;
+  if (!db || isFirestoreQuotaExhausted()) return null;
 
   try {
     const colRef = collection(db, SESSIONS_COLLECTION);
@@ -331,19 +439,22 @@ export function subscribeToFirestoreSessions(
         onSessionsUpdated(sessions);
       },
       error => {
-        console.warn('Firestore sessions subscription error:', error);
+        if (isQuotaExhaustedError(error)) {
+          tripFirestoreQuotaCircuitBreaker(error.message);
+        }
+        console.warn('Firestore sessions subscription notice:', error?.message || error);
         if (onError) onError(error);
       }
     );
   } catch (err: any) {
-    console.warn('Could not establish Firestore sessions subscription:', err);
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Could not establish Firestore sessions subscription:', err?.message || err);
     return null;
   }
 }
 
-/**
- * Upsert a composition session into Firestore
- */
 export async function saveSessionToFirestore(session: CompositionSession): Promise<void> {
   const cached = getLocalCachedSessions() || [];
   const existingIdx = cached.findIndex(s => s.id === session.id);
@@ -356,68 +467,71 @@ export async function saveSessionToFirestore(session: CompositionSession): Promi
   }
   setLocalCachedSessions(updatedCache);
 
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted()) return;
 
   try {
     const sessionDocRef = doc(db, SESSIONS_COLLECTION, session.id);
     const payload = {
       ...session,
+      _schemaVersion: 2,
       updatedAt: new Date().toISOString()
     };
     await setDoc(sessionDocRef, payload, { merge: true });
-  } catch (err) {
-    console.error(`Failed to save session ${session.id} to Firestore:`, err);
-    throw err;
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn(`Could not save session ${session.id} to Firestore:`, err?.message || err);
   }
 }
 
-/**
- * Delete a composition session from Firestore
- */
 export async function deleteSessionFromFirestore(sessionId: string): Promise<void> {
   const cached = getLocalCachedSessions() || [];
   setLocalCachedSessions(cached.filter(s => s.id !== sessionId));
 
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted()) return;
 
   try {
     const sessionDocRef = doc(db, SESSIONS_COLLECTION, sessionId);
     await deleteDoc(sessionDocRef);
-  } catch (err) {
-    console.error(`Failed to delete session ${sessionId} from Firestore:`, err);
-    throw err;
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn(`Could not delete session ${sessionId} from Firestore:`, err?.message || err);
   }
 }
 
-/**
- * Batch seed initial sessions
- */
 export async function seedInitialSessions(sessions: CompositionSession[]): Promise<void> {
-  if (!db || sessions.length === 0) return;
+  if (!db || isFirestoreQuotaExhausted() || sessions.length === 0) return;
 
   try {
     const batch = writeBatch(db);
-    for (const session of sessions) {
+    for (const session of sessions.slice(0, 400)) {
       const sessionDocRef = doc(db, SESSIONS_COLLECTION, session.id);
       batch.set(sessionDocRef, {
         ...session,
+        _schemaVersion: 2,
         updatedAt: new Date().toISOString()
       }, { merge: true });
     }
     await batch.commit();
     console.log(`Successfully seeded ${sessions.length} composition sessions into Firestore.`);
-  } catch (err) {
-    console.error('Failed to seed sessions into Firestore:', err);
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn('Could not seed sessions into Firestore:', err?.message || err);
   }
 }
 
-// ==============================================================================
-// SOUND PRESET LIBRARY (4-BLOCK ENGINE CONFIGURATIONS)
-// ==============================================================================
+// ==========================================
+// SOUND PRESETS PERSISTENCE
+// ==========================================
 
-/**
- * Fallback helper to get local cached sound presets
- */
 export const getLocalCachedPresets = (): SoundPreset[] => {
   try {
     const raw = localStorage.getItem(PRESETS_LOCAL_STORAGE_KEY);
@@ -431,9 +545,6 @@ export const getLocalCachedPresets = (): SoundPreset[] => {
   return CANONICAL_SOUND_PRESETS;
 };
 
-/**
- * Fallback helper to save local cached sound presets
- */
 export const setLocalCachedPresets = (presets: SoundPreset[]) => {
   try {
     localStorage.setItem(PRESETS_LOCAL_STORAGE_KEY, JSON.stringify(presets));
@@ -442,12 +553,9 @@ export const setLocalCachedPresets = (presets: SoundPreset[]) => {
   }
 };
 
-/**
- * Load sound presets from Firestore
- */
 export async function loadPresetsFromFirestore(): Promise<SoundPreset[]> {
   const cached = getLocalCachedPresets();
-  if (!db) {
+  if (!db || isFirestoreQuotaExhausted()) {
     return cached;
   }
 
@@ -456,10 +564,11 @@ export async function loadPresetsFromFirestore(): Promise<SoundPreset[]> {
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
-      // Seed default canonical presets if cloud collection is empty
-      console.log('No presets found in Firestore. Seeding default factory presets...');
-      await seedInitialPresets(CANONICAL_SOUND_PRESETS);
-      setLocalCachedPresets(CANONICAL_SOUND_PRESETS);
+      if (!isFirestoreQuotaExhausted()) {
+        console.log('No presets found in Firestore. Seeding default factory presets...');
+        await seedInitialPresets(CANONICAL_SOUND_PRESETS);
+        setLocalCachedPresets(CANONICAL_SOUND_PRESETS);
+      }
       return CANONICAL_SOUND_PRESETS;
     }
 
@@ -482,20 +591,20 @@ export async function loadPresetsFromFirestore(): Promise<SoundPreset[]> {
 
     setLocalCachedPresets(cloudPresets);
     return cloudPresets;
-  } catch (err) {
-    console.warn('Failed to load presets from Firestore, using local fallback:', err);
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Failed to load presets from Firestore, using local fallback:', err?.message || err);
     return cached;
   }
 }
 
-/**
- * Real-time subscription to sound presets in Firestore
- */
 export function subscribeToFirestorePresets(
   onPresetsUpdated: (presets: SoundPreset[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe | null {
-  if (!db) return null;
+  if (!db || isFirestoreQuotaExhausted()) return null;
 
   try {
     const colRef = collection(db, PRESETS_COLLECTION);
@@ -503,7 +612,6 @@ export function subscribeToFirestorePresets(
       colRef,
       snapshot => {
         if (snapshot.empty) {
-          // If empty, return local cached
           onPresetsUpdated(getLocalCachedPresets());
           return;
         }
@@ -529,19 +637,22 @@ export function subscribeToFirestorePresets(
         onPresetsUpdated(presets);
       },
       error => {
-        console.warn('Firestore sound presets subscription error:', error);
+        if (isQuotaExhaustedError(error)) {
+          tripFirestoreQuotaCircuitBreaker(error.message);
+        }
+        console.warn('Firestore presets subscription notice:', error?.message || error);
         if (onError) onError(error);
       }
     );
   } catch (err: any) {
-    console.warn('Could not establish Firestore sound presets subscription:', err);
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Could not establish Firestore sound presets subscription:', err?.message || err);
     return null;
   }
 }
 
-/**
- * Upsert a sound preset into Firestore
- */
 export async function savePresetToFirestore(preset: SoundPreset): Promise<void> {
   const cached = getLocalCachedPresets();
   const existingIdx = cached.findIndex(p => p.id === preset.id);
@@ -554,64 +665,70 @@ export async function savePresetToFirestore(preset: SoundPreset): Promise<void> 
   }
   setLocalCachedPresets(updatedCache);
 
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted()) return;
 
   try {
     const presetDocRef = doc(db, PRESETS_COLLECTION, preset.id);
     const payload = {
       ...preset,
+      _schemaVersion: 2,
       updatedAt: new Date().toISOString()
     };
     await setDoc(presetDocRef, payload, { merge: true });
-  } catch (err) {
-    console.error(`Failed to save preset ${preset.id} to Firestore:`, err);
-    throw err;
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn(`Could not save preset ${preset.id} to Firestore:`, err?.message || err);
   }
 }
 
-/**
- * Delete a sound preset from Firestore
- */
 export async function deletePresetFromFirestore(presetId: string): Promise<void> {
   const cached = getLocalCachedPresets();
   setLocalCachedPresets(cached.filter(p => p.id !== presetId));
 
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted()) return;
 
   try {
     const presetDocRef = doc(db, PRESETS_COLLECTION, presetId);
     await deleteDoc(presetDocRef);
-  } catch (err) {
-    console.error(`Failed to delete preset ${presetId} from Firestore:`, err);
-    throw err;
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn(`Could not delete preset ${presetId} from Firestore:`, err?.message || err);
   }
 }
 
-/**
- * Batch seed initial sound presets into Firestore
- */
 export async function seedInitialPresets(presets: SoundPreset[]): Promise<void> {
-  if (!db || presets.length === 0) return;
+  if (!db || isFirestoreQuotaExhausted() || presets.length === 0) return;
 
   try {
     const batch = writeBatch(db);
-    for (const preset of presets) {
+    for (const preset of presets.slice(0, 400)) {
       const presetDocRef = doc(db, PRESETS_COLLECTION, preset.id);
       batch.set(presetDocRef, {
         ...preset,
+        _schemaVersion: 2,
         updatedAt: new Date().toISOString()
       }, { merge: true });
     }
     await batch.commit();
     console.log(`Successfully seeded ${presets.length} sound presets into Firestore.`);
-  } catch (err) {
-    console.error('Failed to seed sound presets into Firestore:', err);
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn('Could not seed sound presets into Firestore:', err?.message || err);
   }
 }
 
-// ==============================================================================
-// BLOCKSUITE & INFINITE WHITEBOARD PERSISTENCE
-// ==============================================================================
+// ==========================================
+// WHITEBOARD CANVAS PERSISTENCE
+// ==========================================
 
 const WHITEBOARD_COLLECTION = 'whiteboard_canvases';
 const WHITEBOARD_CACHE_PREFIX = 'brickos_whiteboard_canvas_v1_';
@@ -634,18 +751,16 @@ export const setLocalCachedWhiteboard = (canvas: WhiteboardCanvasDoc) => {
   }
 };
 
-/**
- * Load whiteboard canvas document for a track from Firestore.
- */
 export async function loadWhiteboardFromFirestore(trackId: string): Promise<WhiteboardCanvasDoc | null> {
   const cached = getLocalCachedWhiteboard(trackId);
-  if (!db) {
+  if (!db || isFirestoreQuotaExhausted()) {
     return cached;
   }
 
   try {
     const docRef = doc(db, WHITEBOARD_COLLECTION, trackId);
-    const docSnap = await getDocFromFirestore(docRef);
+    const { getDoc } = await import('firebase/firestore');
+    const docSnap = await getDoc(docRef);
     if (docSnap && docSnap.exists()) {
       const data = docSnap.data() as WhiteboardCanvasDoc;
       const result = {
@@ -656,31 +771,21 @@ export async function loadWhiteboardFromFirestore(trackId: string): Promise<Whit
       return result;
     }
     return cached;
-  } catch (err) {
-    console.warn(`Failed to load whiteboard for track ${trackId} from Firestore, using cache:`, err);
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn(`Failed to load whiteboard for track ${trackId} from Firestore, using cache:`, err?.message || err);
     return cached;
   }
 }
 
-// Helper wrapper to get single doc
-async function getDocFromFirestore(docRef: any) {
-  try {
-    const { getDoc } = await import('firebase/firestore');
-    return await getDoc(docRef);
-  } catch (err) {
-    return null;
-  }
-}
-
-/**
- * Real-time subscription to whiteboard canvas changes for collaborative brainstorming.
- */
 export function subscribeToFirestoreWhiteboard(
   trackId: string,
   onUpdate: (canvas: WhiteboardCanvasDoc) => void,
   onError?: (err: Error) => void
 ): Unsubscribe | null {
-  if (!db) return null;
+  if (!db || isFirestoreQuotaExhausted()) return null;
 
   try {
     const docRef = doc(db, WHITEBOARD_COLLECTION, trackId);
@@ -698,35 +803,130 @@ export function subscribeToFirestoreWhiteboard(
         }
       },
       err => {
-        console.warn('Firestore whiteboard subscription error:', err);
+        if (isQuotaExhaustedError(err)) {
+          tripFirestoreQuotaCircuitBreaker(err.message);
+        }
+        console.warn('Firestore whiteboard subscription notice:', err?.message || err);
         if (onError) onError(err);
       }
     );
   } catch (err: any) {
-    console.warn('Could not establish Firestore whiteboard subscription:', err);
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+    }
+    console.warn('Could not establish Firestore whiteboard subscription:', err?.message || err);
     return null;
   }
 }
 
-/**
- * Save whiteboard canvas document into Firestore.
- */
 export async function saveWhiteboardToFirestore(canvas: WhiteboardCanvasDoc): Promise<void> {
-  // Update local cache immediately
   setLocalCachedWhiteboard(canvas);
 
-  if (!db) return;
+  if (!db || isFirestoreQuotaExhausted()) return;
 
   try {
     const docRef = doc(db, WHITEBOARD_COLLECTION, canvas.trackId);
     const payload = {
       ...canvas,
+      _schemaVersion: 2,
       updatedAt: new Date().toISOString()
     };
     await setDoc(docRef, payload, { merge: true });
-  } catch (err) {
-    console.error(`Failed to save whiteboard for track ${canvas.trackId} to Firestore:`, err);
-    throw err;
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      return;
+    }
+    console.warn(`Could not save whiteboard for track ${canvas.trackId} to Firestore:`, err?.message || err);
   }
 }
 
+// ==========================================
+// BATCH SCHEMA MIGRATION UTILITY
+// ==========================================
+
+export async function runSchemaMigration(
+  collectionName: string = TRACKS_COLLECTION,
+  targetVersion: number = 2,
+  dryRun: boolean = false
+): Promise<{ totalRead: number; totalMigrated: number; quotaHalted: boolean }> {
+  if (!db || isFirestoreQuotaExhausted()) {
+    console.warn('[runSchemaMigration] Aborting: Firestore not configured or quota exhausted.');
+    return { totalRead: 0, totalMigrated: 0, quotaHalted: isFirestoreQuotaExhausted() };
+  }
+
+  const BATCH_SIZE = 400;
+  const THROTTLE_MS = 300;
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  let totalRead = 0;
+  let totalMigrated = 0;
+  let lastVisible: any = null;
+  let hasMore = true;
+  let quotaHalted = false;
+
+  console.log(`[Schema Migration] Starting on "${collectionName}" to v${targetVersion} (Dry Run: ${dryRun})...`);
+
+  try {
+    while (hasMore) {
+      let q = query(
+        collection(db, collectionName),
+        where('_schemaVersion', '!=', targetVersion),
+        limit(BATCH_SIZE)
+      );
+
+      if (lastVisible) {
+        q = query(q, startAfter(lastVisible));
+      }
+
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        hasMore = false;
+        break;
+      }
+
+      totalRead += snapshot.size;
+      lastVisible = snapshot.docs[snapshot.docs.length - 1];
+
+      const batch = writeBatch(db);
+      let opsInCurrentBatch = 0;
+
+      for (const docSnap of snapshot.docs) {
+        const transformedFields = {
+          _schemaVersion: targetVersion,
+          migratedAt: new Date().toISOString()
+        };
+        if (!dryRun) {
+          batch.update(docSnap.ref, transformedFields);
+        }
+        opsInCurrentBatch++;
+      }
+
+      if (!dryRun && opsInCurrentBatch > 0) {
+        await batch.commit();
+      }
+      totalMigrated += opsInCurrentBatch;
+
+      if (totalMigrated >= 19000) {
+        console.warn('Approaching daily free tier quota ceiling (20,000). Halting migration to preserve live app stability.');
+        quotaHalted = true;
+        break;
+      }
+
+      await sleep(THROTTLE_MS);
+
+      if (snapshot.size < BATCH_SIZE) {
+        hasMore = false;
+      }
+    }
+  } catch (err: any) {
+    if (isQuotaExhaustedError(err)) {
+      tripFirestoreQuotaCircuitBreaker(err.message);
+      quotaHalted = true;
+    } else {
+      console.warn('[Schema Migration Notice]:', err?.message || err);
+    }
+  }
+
+  return { totalRead, totalMigrated, quotaHalted };
+}

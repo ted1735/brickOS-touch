@@ -116,6 +116,8 @@ export interface Track {
   camelotKey?: string;
   notes?: string;
   sunoAssets?: SunoTrackAssets;
+  _schemaVersion?: number;
+  finalizedAt?: string;
 }
 
 export interface SunoAudioTake {
@@ -825,6 +827,53 @@ export interface SessionSnapshot {
 export type MasteringModuleId = 'eq' | 'compressor' | 'limiter';
 
 // ==============================================================================
+// PROJECT ARCHIVE & DAW STATE MANIFEST DEFINITIONS
+// ==============================================================================
+
+export interface ProjectArchiveManifest {
+  schemaVersion: 'brickos-project-archive-v1.0';
+  archiveId: string;
+  generatedAt: string;
+  studioVersion: string;
+  track: {
+    id: string;
+    title: string;
+    ep: string;
+    genre: string;
+    bpm: number;
+    key: string;
+    status: TrackStatus;
+    thesis?: string;
+    vocal?: string;
+    vocalCast?: string;
+    camelotKey?: string;
+  };
+  dawState: {
+    cropPreset: '30s' | '60s' | 'full';
+    masterVolume: number;
+    isMasterMuted: boolean;
+    isMasterDimmed: boolean;
+    isMonoCollapsed: boolean;
+    activeFxPresetId?: string;
+    targetLufs: number;
+    truePeakCeilingDb: number;
+    correctionGainDb: number;
+  };
+  channels: MixerTrack[];
+  groups?: MixerGroup[];
+  effects: DawEffectsState;
+  automation: Record<number, TrackAutomationState>;
+  lufsProfile?: LufsMeasurementData;
+  nextcloud: {
+    baseWebdavUrl: string;
+    targetFolder: string;
+    manifestPath: string;
+    stemsRemotePath: string;
+  };
+  checksum: string;
+}
+
+// ==============================================================================
 // BLOCKSUITE & INFINITE WHITEBOARD DATA STRUCTURES
 // ==============================================================================
 
@@ -901,3 +950,21 @@ export interface WhiteboardCanvasDoc {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface TrackMilestone {
+  id: string;
+  name: string;
+  phase: 'lyrics' | 'suno' | 'stems' | 'mastering' | 'release';
+  targetDate: string; // YYYY-MM-DD
+  completed: boolean;
+  notes?: string;
+}
+
+export interface TrackTimelineData {
+  trackId: string;
+  startDate: string;
+  targetReleaseDate: string;
+  milestones: TrackMilestone[];
+  criticalPath?: boolean;
+}
+
