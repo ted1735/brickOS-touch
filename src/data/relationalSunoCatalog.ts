@@ -269,7 +269,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Verse 1]\nStreets hum with a hymn, but the chords feel hollow,\nLost sheep, every step in the shadow they follow.\nCobblestone paths crack under the weight of sorrow,\nSearching for the dawn but borrowin"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Brick-by-Brick",
+    "sunoTakesDirectory": "Music-Production/Brick-by-Brick/SunoTakes"
   },
   {
     "id": "TRK-02",
@@ -462,7 +464,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | Ambient Hum | Distant Metal Percussion]\n\n[Verse 1 | intimate | dry vocals | sparse electric guitar]\nI laid the heart on the table,\nright beneath the steady light,\nI thought the edges were too"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/The-Masters-Hand",
+    "sunoTakesDirectory": "Music-Production/The-Masters-Hand/SunoTakes"
   },
   {
     "id": "TRK-03",
@@ -583,7 +587,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Cool, controlled vocal]\nThe shadows tried to take your light,\nAnd keep every morning still,\nNo, they never met the spirit,\nOf a \"Thy will be done\" kind of will.\nThrough the seasons of the silence,\nAn"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Every-Candles-Victory",
+    "sunoTakesDirectory": "Music-Production/Every-Candles-Victory/SunoTakes"
   },
   {
     "id": "TRK-04",
@@ -872,7 +878,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro] [Heavy 808 Bass and distorted Brass] [Vocalist (Deep, gravelly ad-lib): \"Yeah. From the dust to the river. Let\u2019s work.\"]\n\n[Verse 1] [Male Rap - Hard Hitting / Aggressive] River in the drought."
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Nothing-But-the-Blood",
+    "sunoTakesDirectory": "Music-Production/Nothing-But-the-Blood/SunoTakes"
   },
   {
     "id": "TRK-05",
@@ -933,7 +941,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro]\n[Hard stomp-clap rhythm, heavy on the 1 and 3]\nThe clock doesn't stop, \nThe doors never close, \nTwenty-four-seven, \nHighs and lows, \nWe see the charts, \nWe see the trends, \nBut that\u2019s only whe"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/The-Higher-Measure",
+    "sunoTakesDirectory": "Music-Production/The-Higher-Measure/SunoTakes"
   },
   {
     "id": "TRK-07",
@@ -1102,7 +1112,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | rhythmic percussive guitar tapping | driving acoustic strumming | 76 BPM]\n\n[Verse 1 | raspy male vocal | intimate | raw emotion]\nI was praying for a shoreline,\nWhere the waves don\u2019t ever brea"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Leaning-Not-Leaving",
+    "sunoTakesDirectory": "Music-Production/Leaning-Not-Leaving/SunoTakes"
   },
   {
     "id": "TRK-08",
@@ -1283,7 +1295,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Brandon]\n[Weathered, raspy, campfire storyteller. Start intimate and conversational. Build into a tent-revival roar. Preserve breath, grit, and emotional cracks. No polished pop deli"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/CheckYourHeartLight",
+    "sunoTakesDirectory": "Music-Production/CheckYourHeartLight/SunoTakes"
   },
   {
     "id": "TRK-09",
@@ -1596,7 +1610,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[VERSE 1]\nThe paint was holding up, the bones were good\nI looked like all the other houses in the neighborhood\nBut inside there was silence, a chill in the air\nI'd gotten used to no one knowing I was"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Glitter",
+    "sunoTakesDirectory": "Music-Production/Glitter/SunoTakes"
   },
   {
     "id": "TRK-10",
@@ -1621,7 +1637,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro]\n(Steady drum kick and heavy rhythmic acoustic strumming)\n(Electric guitar with warm overdrive swells)\n\n[Verse 1]\nBefore the sparks fly or the morning light breaks\nI give thanks for the breath"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/The-Blueprint-and-The-Blood",
+    "sunoTakesDirectory": "Music-Production/The-Blueprint-and-The-Blood/SunoTakes"
   },
   {
     "id": "TRK-11",
@@ -1670,7 +1688,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Tempo Change: 140 BPM]\n[Vocal Archetype: Monica and Kane]\n[Specific Delivery Instruction: Aggressive, powerhouse duet. Monica delivers gritty, raspy alto rap-singing; Kane brings deep, sub-sonic bari"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Unity-In-The-Friction",
+    "sunoTakesDirectory": "Music-Production/Unity-In-The-Friction/SunoTakes"
   },
   {
     "id": "TRK-12",
@@ -2055,7 +2075,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | sparse | soulful grand piano]\n\n[Verse 1 | intimate | piano-led]\nIt was ninety-five, when I saw your face,\nA girl who\u2019d moved, from place to place.\nAn Army daughter, world-traveled and wise,\nW"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/The-Anchor",
+    "sunoTakesDirectory": "Music-Production/The-Anchor/SunoTakes"
   },
   {
     "id": "TRK-13",
@@ -2080,7 +2102,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: The Combatant - High Intensity, Nasal Percussive Tenor, Aggressive Breathwork, No Melody]\n\n[Intro]\n(Fast, mechanical clock-ticking hi-hats)\n(Heavy, labored breathing into the mask)\n("
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Calvary-Grit",
+    "sunoTakesDirectory": "Music-Production/Calvary-Grit/SunoTakes"
   },
   {
     "id": "TRK-14",
@@ -2105,7 +2129,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | Cinematic Whistle & Heavy K-Pop 808 Pulse]\n[Vocal: The Pop Prodigy | Assertive & Focused]\n\n[Verse 1]\nPink venom in the veins, but the soul\u2019s turning gold\nGreatest show on the planet in the st"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Venom-into-Victory",
+    "sunoTakesDirectory": "Music-Production/Venom-into-Victory/SunoTakes"
   },
   {
     "id": "TRK-15",
@@ -2142,7 +2168,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro]\n[Cinematic Piano and Soft Strings]\n[Subtle Acoustic Guitar Strumming]\n\n[Verse 1]\n[Soaring Male Tenor]\n[Intimate and Clear]\nWhen the King speaks His decree,\nNo earthly force can set it free.\nWh"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/The-Final-Say",
+    "sunoTakesDirectory": "Music-Production/The-Final-Say/SunoTakes"
   },
   {
     "id": "TRK-16",
@@ -2215,7 +2243,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Brandon or PATD]\n[Intro: Spoken Word, Cinematic rain, slow heavy rhythmic heartbeat kick drum]\n(Spoken - Heavy, exhausted pauses)\nThey see the uniform... \nThey see the... \"I got it.\""
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Meet_Me_Here",
+    "sunoTakesDirectory": "Music-Production/Meet_Me_Here/SunoTakes"
   },
   {
     "id": "TRK-17",
@@ -2708,7 +2738,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Style: Intimate Duo, Piano & Guitar Only, Female Lead start]\n\n[Intro]\n(Warm Acoustic Guitar fingerpicking)\n(Gentle Piano melody enters)\n(Female vocal - soft and close)\nHmmmmm...\n\n[Verse 1 - Female Le"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/In-Our-Veins",
+    "sunoTakesDirectory": "Music-Production/In-Our-Veins/SunoTakes"
   },
   {
     "id": "TRK-18",
@@ -2949,7 +2981,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro]\n(Cinematic strings swelling, massive tribal drum beat enters)\n(Orchestral tension)\n\n[Verse 1 - Aggressive Rap Flow]\nCheck the posture, we entering the gates with the thanks\nFilling up the room"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/We-Bow-We-Shout",
+    "sunoTakesDirectory": "Music-Production/We-Bow-We-Shout/SunoTakes"
   },
   {
     "id": "TRK-19",
@@ -2974,7 +3008,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": false,
         "promptExcerpt": ""
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Through-the-Valley-Or-the-Flame",
+    "sunoTakesDirectory": "Music-Production/Through-the-Valley-Or-the-Flame/SunoTakes"
   },
   {
     "id": "TRK-20",
@@ -3059,7 +3095,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Neon Gospel]\n[Specific Delivery: Boss Energy Female. High alto soprano. Verse 1: Crisp, detached. Verse 2: Raw, breathless grit. Chorus: Massive, soaring cinematic belt. Bridge: Dry/"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Ghost-In-The-Machine",
+    "sunoTakesDirectory": "Music-Production/Ghost-In-The-Machine/SunoTakes"
   },
   {
     "id": "TRK-21",
@@ -3084,7 +3122,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Monica - Gritty Soulful Raspy]\n[Specific Delivery: Aggressive, motivational, building intensity from focused to anthemic]\n\n[Verse 1]\n[Driving percussion, low synth growl]\nTwenty-six"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Milestone",
+    "sunoTakesDirectory": "Music-Production/Milestone/SunoTakes"
   },
   {
     "id": "TRK-22",
@@ -3133,7 +3173,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro: Warm piano melody, ambient pads, light acoustic guitar strumming]\n\n[Verse 1: Intimate, narrative focus]\nWe bolted doors and stayed in the shadows,\nWe scarred the wood and we nursed our grief."
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Breath-and-Bone",
+    "sunoTakesDirectory": "Music-Production/Breath-and-Bone/SunoTakes"
   },
   {
     "id": "TRK-23",
@@ -3266,7 +3308,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | solo cello | rhythmic acoustic tapping]\n\n[Verse 1 | Male Voice | intimate | dry]\nI\u2019m staring at the table, \nyou\u2019re tracing out a line, \nTrying to find a future, \nwhere the stars and logic ali"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Blindfold-Blessing",
+    "sunoTakesDirectory": "Music-Production/Blindfold-Blessing/SunoTakes"
   },
   {
     "id": "TRK-24",
@@ -3315,7 +3359,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Specific Delivery Instruction: ABSOLUTE A CAPPELLA START. NO INSTRUMENTS. Spoken Word, intimate, close-mic, dry. Ms T is talking to herself in a quiet room. Keep the raw breaths and lip smacks.]\n\n[Ve"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Trading-In-The-Mask",
+    "sunoTakesDirectory": "Music-Production/Trading-In-The-Mask/SunoTakes"
   },
   {
     "id": "TRK-25",
@@ -3448,7 +3494,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | rhythmic acoustic tapping | distant ambient shimmer]\n(The neverending... what's next?)\n\n[Verse 1 | intimate | dry vocal | close-mic]\nI\u2019m living in the margins of a calendar that bleeds,\nPlant"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Neverending-Whats-Next",
+    "sunoTakesDirectory": "Music-Production/Neverending-Whats-Next/SunoTakes"
   },
   {
     "id": "TRK-27",
@@ -3473,7 +3521,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Brandon]\n[Soulful Mid-Tempo Baritone, Conversational Pocket, Frontline Authority]\n\n[Verse 1]\n[Grounded 102 BPM pocket, dynamic grand piano, clean muted guitar chops, punchy kick and"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/TheWorkAintDone",
+    "sunoTakesDirectory": "Music-Production/TheWorkAintDone/SunoTakes"
   },
   {
     "id": "TRK-30",
@@ -3522,7 +3572,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro]\n[Ticking clock percussion]\n(Pop!)\n(Pop!)\n[Whispered] Hard work. Heart work. His work.\n\n[Verse 1: The School Grind]\nScreen is glowing like a neon sign,\nTrying to finish by the deadline line.\nBa"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-31",
@@ -3571,7 +3623,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Brandon]\n[Vocal Texture: Gritty, raspy male vocal, dry upfront, rapid Southern-tinged cadence]\n\n[Intro]\n[Instrumental only, muted flatpicked acoustic guitar, dark 808 sub-bass pulse,"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-32",
@@ -3704,7 +3758,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Brandon]\n[Solo Male Lead, Dry Rasp]\n\n[Verse 1]\n[Acoustic, Whisper]\nBoots untied by the kitchen door\nCan't bring myself to cross the floor\nKeys dropped heavy on the counter space\nHand"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Manic_In_The_Mundane",
+    "sunoTakesDirectory": "Music-Production/Manic_In_The_Mundane/SunoTakes"
   },
   {
     "id": "TRK-33",
@@ -3837,7 +3893,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | gritty | distant staccato strings]\n(Breathy intake)\nYeah... factory settings.\nTime to crack the mold.\n\n[Verse 1 | intimate | dry | sharp staccato]\nWoke up locked inside a dead routine,\nStarin"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-34",
@@ -4018,7 +4076,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Monica]\n[High Range, Gritty Soulful Raspy, Aggressive Powerhouse]\n\n[Intro]\n[Acapella Crowd Chant, Stadium Energy, Rhythmic Clapping]\n[Live group gang vocals]\nMSC World America!\nTake"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-35",
@@ -4151,7 +4211,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Verse 1 | intimate | lower register]\nThe sun\u2019s just breaking over the neighbors\u2019 roof,\nI\u2019m pulling in, \nTired and living proof,\nThat the world keeps spinning while I\u2019m on the clock,\nBut you\u2019re my mor"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-36",
@@ -4212,7 +4274,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Kane]\n[Delivery: Aggressive, rhythmic rock-rap, high-clarity plosives]\n\n[Verse 1]\n[Fast-paced, syncopated CHH swing]\nTelemetry ringing, yeah the rhythms are tight,\nA vibrant young cr"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-37",
@@ -4285,7 +4349,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "\"Man on Fire\" (V4 Polish)\n(Verse 1)\nHe walks the floor, and the unit is his stage\nHe can feel the heat, from a fire he won't contain\nA burning desire that's deep inside his soul\nHe's not just a man, h"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Man-on-Fire",
+    "sunoTakesDirectory": "Music-Production/Man-on-Fire/SunoTakes"
   },
   {
     "id": "TRK-38",
@@ -4358,7 +4424,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Instrumental]"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-39",
@@ -4383,7 +4451,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Spoken Word]\nLet me ask you a question\nHow do we define a successful discharge\nMost people would say the patient left the hospital\nBut I don't think that's the right answer\nBecause every one of us ha"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-40",
@@ -4408,7 +4478,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Intro | rhythmic acoustic guitar | energetic stomp-clap]\n\n[Verse 1 | intimate | storyteller]\nWork boots kicked off, \nby the kitchen door, \nA heavy world, \nresting on the floor. \nYou\u2019re tugging on my"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-41",
@@ -4433,7 +4505,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "Song Title: Built to Last\n(Tempo: Mid-tempo, acoustic country-rock style)\n[Verse 1]\nI\u2019ve spent a lifetime managing the chaos and the lines\nBetween the hospital halls and the CNC designs\nI\u2019ve got silve"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-42",
@@ -4470,7 +4544,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Vocal Archetype: Brandon]\n[Delivery: Laid-back Island Rock, gravelly but joyful, conversational flow, \"Dad-swagger\"]\n\n[Verse 1]\n[Atmospheric: Deep engine idle, seatbelt clicks]\nRaptor\u2019s humming, tire"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-43",
@@ -4507,7 +4583,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "[Verse 1]\nWhen the night was loud around me\nShadows shouting I was done\nYou stepped in and stood before me\nSpoke my story: \u201cChild\nYou\u2019ve won\u201d\n\n[Pre-Chorus]\nEvery chain\nHit the ground\nWhen You raised\nJ"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/Triumph-in-Your-Name",
+    "sunoTakesDirectory": "Music-Production/Triumph-in-Your-Name/SunoTakes"
   },
   {
     "id": "TRK-44",
@@ -4844,7 +4922,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": false,
         "promptExcerpt": ""
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   },
   {
     "id": "TRK-45",
@@ -5025,7 +5105,9 @@ export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
         "hasLyrics": true,
         "promptExcerpt": "(Verse 1)\nHe walks the floor, and the unit is his stage\nHe can feel the heat, but he can't stop the rage\nOf a burning desire that's deep inside his soul\nHe's not just a man, he's a force to take contr"
       }
-    ]
+    ],
+    "nextcloudDirectory": "Music-Production/SunoMasterFiles",
+    "sunoTakesDirectory": "Music-Production/SunoMasterFiles"
   }
 ];
 
