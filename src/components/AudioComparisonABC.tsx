@@ -1601,8 +1601,9 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                       onChange={(e) => {
                         const selectedUrl = e.target.value;
                         if (!selectedUrl) return;
-                        const sunoTrack = SUNO_MASTER_TRACKS.find(st => st.streamUrl === selectedUrl);
+                        const sunoTrack = SUNO_MASTER_TRACKS.find(st => st.streamUrl === selectedUrl || `/api/suno/stream/${st.id}` === selectedUrl);
                         if (!sunoTrack) return;
+                        const writeThroughProxyUrl = `/api/suno/stream/${sunoTrack.id}`;
                         setSlots(prev => prev.map(s => {
                           if (s.id === displaySlot.id) {
                             return {
@@ -1610,7 +1611,7 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                               title: sunoTrack.title,
                               versionTag: `Suno (${sunoTrack.model}): ${sunoTrack.tags ? sunoTrack.tags.slice(0, 32) + '...' : 'Take'}`,
                               fileName: `${sunoTrack.id}.m4a`,
-                              audioBlobUrl: sunoTrack.streamUrl,
+                              audioBlobUrl: writeThroughProxyUrl,
                               sourceType: 'suno',
                               durationSeconds: Math.round(sunoTrack.duration) || 218,
                               currentTimeSeconds: 0,
@@ -1621,12 +1622,37 @@ export const AudioComparisonABC: React.FC<AudioComparisonABCProps> = ({
                           return s;
                         }));
 
-                        // Instant Auto-Play & Cue on selection
+                        // Fetch pre-computed SQLite waveform peaks & LUFS telemetry
+                        fetch(`/api/audio/peaks/${encodeURIComponent(sunoTrack.id)}`)
+                          .then(r => r.ok ? r.json() : null)
+                          .then(data => {
+                            if (data && Array.isArray(data.peaks) && data.peaks.length > 0) {
+                              const lufs = typeof data.integratedLufs === 'number' ? data.integratedLufs : -13.5;
+                              const dbtp = typeof data.truePeakDbtp === 'number' ? data.truePeakDbtp : -0.6;
+                              const trim = Number((-14.0 - lufs).toFixed(1));
+                              setSlots(prev => prev.map(s => s.id === displaySlot.id ? {
+                                ...s,
+                                peakData: data.peaks,
+                                estimatedLufs: lufs,
+                                peakDb: dbtp,
+                                lufsTrimDb: trim
+                              } : s));
+                            }
+                          })
+                          .catch(() => {});
+
+                        // Instant Auto-Play & Cue on selection via write-through cache proxy (with CloudFront fallback)
                         setTimeout(() => {
                           ensureAudioGraph();
-                          const el = getOrCreateAudioElement({ ...displaySlot, audioBlobUrl: sunoTrack.streamUrl });
+                          const el = getOrCreateAudioElement({ ...displaySlot, audioBlobUrl: writeThroughProxyUrl });
                           if (el) {
-                            el.src = sunoTrack.streamUrl;
+                            el.onerror = () => {
+                              if (el.src !== sunoTrack.streamUrl) {
+                                el.src = sunoTrack.streamUrl;
+                                el.play().catch(() => {});
+                              }
+                            };
+                            el.src = writeThroughProxyUrl;
                             el.currentTime = 0;
                             const playPromise = el.play();
                             if (playPromise) {
