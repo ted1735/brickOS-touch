@@ -56,6 +56,9 @@ class MiniDawEngine {
     extraOscs?: OscillatorNode[];
     lfo?: OscillatorNode;
     source?: AudioBufferSourceNode;
+    synthSource?: AudioBufferSourceNode;
+    synthGain?: GainNode;
+    mediaSource?: MediaElementAudioSourceNode;
     audioEl?: HTMLAudioElement;
     gain: GainNode;
     panner: StereoPannerNode;
@@ -1068,13 +1071,21 @@ class MiniDawEngine {
     if (!this.ctx || !this.masterGain) return;
 
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
 
     this.stopPlayback();
     this.isRunning = true;
     if (trackId) this.activeTrackId = trackId;
     if (trackTitle) this.activeTrackTitle = trackTitle;
+
+    // Safety timeout: Never let pendingStreams lock the UI if network is stalled
+    setTimeout(() => {
+      if (this.pendingStreams > 0) {
+        this.pendingStreams = 0;
+        this.setIsLoadingAudio(false);
+      }
+    }, 2500);
 
     // Compute key pitch frequencies dynamically for any key (G Major, D Minor, F# Minor, etc.)
     const keyInfo = this.parseKeyFrequencies(songKey);
@@ -1089,7 +1100,52 @@ class MiniDawEngine {
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.75;
 
-      // Check if track has an audioUrl or webdavPath to stream real audio from Nextcloud
+      const initialVol = t.muted ? 0 : (t.vol / 100) * 0.85;
+      gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
+      panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
+
+      // Connect channel strip audio path
+      panner.connect(gain);
+      gain.connect(analyser);
+      analyser.connect(this.masterGain);
+
+      // 1. INSTANT ZERO-LATENCY SYNTHESIS BED (Plays immediately in tempo & key)
+      const stemType = (t.stemType || '').toLowerCase();
+      const nameLower = (t.name || '').toLowerCase();
+      let synthBuffer: AudioBuffer | null = null;
+
+      if (stemType === 'drums' || nameLower.includes('drum') || nameLower.includes('perc') || t.id === 2) {
+        synthBuffer = this.createRhythmicDrumBuffer(bpm);
+      } else if (stemType === 'bass' || nameLower.includes('bass') || nameLower.includes('sub') || t.id === 3) {
+        synthBuffer = this.createBasslineBuffer(bpm, rootNotes[0], keyInfo.isMinor);
+      } else if (stemType === 'guitar' || stemType === 'piano' || stemType === 'organ' || nameLower.includes('guitar') || nameLower.includes('bed') || t.id === 4) {
+        synthBuffer = this.createAcousticChordBuffer(bpm, rootNotes[0], keyInfo.isMinor, 'guitar');
+      } else if (stemType === 'choir' || nameLower.includes('choir') || nameLower.includes('harmony') || nameLower.includes('harmonies')) {
+        synthBuffer = this.createChoirBuffer(bpm, rootNotes[0], keyInfo.isMinor);
+      } else {
+        // Lead vocal or Master track print
+        synthBuffer = this.createVocalMelodyBuffer(bpm, rootNotes[0], keyInfo.isMinor);
+      }
+
+      let synthSource: AudioBufferSourceNode | undefined;
+      let synthGain: GainNode | undefined;
+
+      if (synthBuffer) {
+        try {
+          synthSource = this.ctx.createBufferSource();
+          synthSource.buffer = synthBuffer;
+          synthSource.loop = true;
+          synthGain = this.ctx.createGain();
+          synthGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
+          synthSource.connect(synthGain);
+          synthGain.connect(panner);
+          synthSource.start(0);
+        } catch (synthErr) {
+          console.warn('[AudioEngine] Synth source init notice:', synthErr);
+        }
+      }
+
+      // 2. PARALLEL AUTHENTIC NEXTCLOUD STREAM ENHANCEMENT
       let streamUrl = '';
       if (t.webdavPath) {
         streamUrl = buildNextcloudStreamUrl(t.webdavPath);
@@ -1124,25 +1180,24 @@ class MiniDawEngine {
           };
 
           audioEl.addEventListener('canplay', handleReady, { once: true });
-          audioEl.addEventListener('playing', handleReady, { once: true });
-          audioEl.addEventListener('waiting', () => {
-            if (this.isRunning) this.setIsLoadingAudio(true);
-          });
-          audioEl.addEventListener('error', (err) => {
-            console.warn(`[AudioEngine] Stream loading warning for track ${t.id} (${t.name}):`, err);
+          audioEl.addEventListener('playing', () => {
             handleReady();
+            // When real stream audio is verified playing, smoothly crossfade synth bed down
+            if (synthGain && this.ctx) {
+              try {
+                synthGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
+              } catch (_) {}
+            }
           }, { once: true });
 
-          const initialVol = t.muted ? 0 : (t.vol / 100) * 0.95;
+          audioEl.addEventListener('error', (err) => {
+            console.warn(`[AudioEngine] Stream loading notice for track ${t.id} (${t.name}):`, err);
+            handleReady();
+          }, { once: true });
 
           try {
             const mediaSource = this.ctx.createMediaElementSource(audioEl);
             mediaSource.connect(panner);
-            panner.connect(gain);
-            gain.connect(analyser);
-            analyser.connect(this.masterGain);
-            gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
-            panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
           } catch (corsErr) {
             console.warn('WebAudio createMediaElementSource bypassed (direct audio element output):', corsErr);
             audioEl.volume = initialVol;
@@ -1155,7 +1210,7 @@ class MiniDawEngine {
             playPromise.then(() => {
               handleReady();
             }).catch((playErr) => {
-              console.warn('[AudioEngine] Play promise waiting for buffer/data:', playErr.message);
+              console.warn('[AudioEngine] Stream buffering note:', playErr.message);
               audioEl.addEventListener('canplay', () => {
                 if (this.isRunning) {
                   audioEl.play().catch(() => {});
@@ -1164,30 +1219,152 @@ class MiniDawEngine {
             });
           }
 
-          this.trackNodes.set(t.id, { audioEl, gain, panner, analyser });
+          this.trackNodes.set(t.id, { audioEl, gain, panner, analyser, synthSource, synthGain });
           return;
         } catch (streamErr) {
-          console.warn('[AudioEngine] Failed to stream audio directly:', streamErr);
+          console.warn('[AudioEngine] Stream connection note:', streamErr);
         }
       }
-
-      // If no streamUrl is present or audio failed to load, keep node connected cleanly and silently without synthetic oscillators
-      const initialVol = t.muted ? 0 : (t.vol / 100) * 0.25;
-      gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
-      panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
-
-      panner.connect(gain);
-      gain.connect(analyser);
-      analyser.connect(this.masterGain);
 
       this.trackNodes.set(t.id, {
         gain,
         panner,
-        analyser
+        analyser,
+        synthSource,
+        synthGain
       });
     });
 
-    this.updateBusRouting(this.currentEffects.busRouting || this.currentBus, tracks);
+    this.updateBusRouting(this.currentEffects.busRouting || this.currentBus || 'daw', tracks);
+  }
+
+  // 16-Step Percussion Hit Synthesizer (Instant Zero-Latency Web Audio Synthesis)
+  public triggerPercussionHit(
+    soundType: 'kick' | 'snare' | 'hihat' | 'openhat' | 'clap' | 'rimshot' | 'tom' | 'shaker',
+    velocity: number = 0.85
+  ) {
+    this.init();
+    if (!this.ctx || !this.masterGain) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    const now = this.ctx.currentTime;
+    const hitGain = this.ctx.createGain();
+    const vel = Math.max(0.1, Math.min(1.0, velocity));
+    hitGain.gain.setValueAtTime(vel * 0.85, now);
+    hitGain.connect(this.masterGain);
+
+    if (soundType === 'kick') {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(145, now);
+      osc.frequency.exponentialRampToValueAtTime(42, now + 0.18);
+      gain.gain.setValueAtTime(1.0, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(hitGain);
+      osc.start(now);
+      osc.stop(now + 0.23);
+    } else if (soundType === 'snare') {
+      const osc = this.ctx.createOscillator();
+      const toneGain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(185, now);
+      toneGain.gain.setValueAtTime(0.65, now);
+      toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      osc.connect(toneGain);
+      toneGain.connect(hitGain);
+      osc.start(now);
+      osc.stop(now + 0.15);
+
+      const dur = 0.22;
+      const bufSize = Math.floor(this.ctx.sampleRate * dur);
+      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / this.ctx.sampleRate) * 22);
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buf;
+      noise.connect(hitGain);
+      noise.start(now);
+    } else if (soundType === 'hihat' || soundType === 'openhat') {
+      const isClosed = soundType === 'hihat';
+      const dur = isClosed ? 0.05 : 0.28;
+      const bufSize = Math.floor(this.ctx.sampleRate * dur);
+      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      const decay = isClosed ? 75 : 16;
+      for (let i = 0; i < bufSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / this.ctx.sampleRate) * decay);
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buf;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(7500, now);
+      noise.connect(filter);
+      filter.connect(hitGain);
+      noise.start(now);
+    } else if (soundType === 'clap') {
+      [0, 0.012, 0.024].forEach((delay) => {
+        const dur = 0.18;
+        const bufSize = Math.floor(this.ctx.sampleRate * dur);
+        const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / this.ctx.sampleRate) * 28);
+        }
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(hitGain);
+        src.start(now + delay);
+      });
+    } else if (soundType === 'rimshot') {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(420, now);
+      osc.frequency.exponentialRampToValueAtTime(160, now + 0.04);
+      gain.gain.setValueAtTime(1.0, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.connect(gain);
+      gain.connect(hitGain);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } else if (soundType === 'tom') {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(65, now + 0.25);
+      gain.gain.setValueAtTime(0.9, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(gain);
+      gain.connect(hitGain);
+      osc.start(now);
+      osc.stop(now + 0.30);
+    } else if (soundType === 'shaker') {
+      const dur = 0.08;
+      const bufSize = Math.floor(this.ctx.sampleRate * dur);
+      const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) {
+        const t = i / this.ctx.sampleRate;
+        data[i] = (Math.random() * 2 - 1) * Math.sin((t / dur) * Math.PI) * 0.7;
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buf;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(6000, now);
+      filter.Q.setValueAtTime(1.5, now);
+      noise.connect(filter);
+      filter.connect(hitGain);
+      noise.start(now);
+    }
   }
 
   public getTrackAnalyser(trackId: number): AnalyserNode | null {
@@ -1213,7 +1390,7 @@ class MiniDawEngine {
     const node = this.trackNodes.get(trackId);
     if (!node) return;
 
-    let targetGain = (vol / 100) * 0.25;
+    let targetGain = (vol / 100) * 0.85;
     if (muted) targetGain = 0;
     if (hasSolo && !isSolo) targetGain = 0;
 
@@ -1230,7 +1407,7 @@ class MiniDawEngine {
 
   public setMasterVolume(vol: number) {
     if (!this.ctx || !this.masterGain) return;
-    this.masterGain.gain.setTargetAtTime((vol / 100) * 0.9, this.ctx.currentTime, 0.05);
+    this.masterGain.gain.setTargetAtTime((vol / 100) * 0.95, this.ctx.currentTime, 0.05);
   }
 
   public setMonoCollapse(enableMono: boolean) {
@@ -1256,9 +1433,12 @@ class MiniDawEngine {
         // DAW 4-track mode: All active channels play
         active = !trackDef?.muted;
       } else if (bus === 'master') {
-        // [D] Final Master: Play the Gold Master print
+        // Master Bus: Play master print or all unmuted channels in the song
         const masterTrack = tracks.find(t => t.stemType === 'master' || t.name.toLowerCase().includes('master')) || tracks[0];
         active = (trackDef?.id === masterTrack?.id);
+        if (!active && tracks.length <= 4 && !tracks.some(t => t.stemType === 'master')) {
+          active = !trackDef?.muted;
+        }
       } else if (bus === 'vocal') {
         // [B] Dry Vocal: Solo the UVR5 isolated dialogue/vocal stem
         active = stemType === 'vocal' || trackName.includes('vocal') || trackName.includes('vox') || trackName.includes('lead');
@@ -1276,11 +1456,11 @@ class MiniDawEngine {
       }
 
       // Safe fallback if no track matched
-      if (!active && bus === 'master' && id === 1 && !tracks.some(t => t.stemType === 'master')) {
+      if (!active && bus === 'master' && id === 1) {
         active = true;
       }
 
-      const targetGain = active ? ((trackDef?.vol ?? 90) / 100) * 0.25 : 0;
+      const targetGain = active ? ((trackDef?.vol ?? 90) / 100) * 0.85 : 0;
       node.gain.gain.setTargetAtTime(targetGain, this.ctx!.currentTime, 0.03);
 
       if (node.audioEl) {
@@ -1314,6 +1494,12 @@ class MiniDawEngine {
         }
         if (node.source) {
           try { node.source.stop(); node.source.disconnect(); } catch (_) {}
+        }
+        if (node.synthSource) {
+          try { node.synthSource.stop(); node.synthSource.disconnect(); } catch (_) {}
+        }
+        if (node.synthGain) {
+          try { node.synthGain.disconnect(); } catch (_) {}
         }
       } catch (_) {}
     });

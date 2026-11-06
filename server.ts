@@ -1200,8 +1200,10 @@ async function smartFetchWithFailover(
 
     const startT = Date.now();
     try {
+      const fetchSignal = options.signal || AbortSignal.timeout(route === 'primary' ? 4000 : 8000);
       const response = await undiciFetch(targetUrl, {
         ...options,
+        signal: fetchSignal,
         dispatcher
       });
 
@@ -2186,9 +2188,10 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
 });
 
 // 13a. Nextcloud WebDAV Interactive File Explorer Browse Endpoint (PROPFIND Depth 1)
-app.post('/api/nextcloud/browse', async (req, res) => {
+const handleBrowseRequest = async (req: any, res: any) => {
   const startTime = Date.now();
   try {
+    const params = { ...(req.query || {}), ...(req.body || {}) };
     const {
       path = '/remote.php/dav/files/ncted/Music-Production',
       serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
@@ -2196,7 +2199,7 @@ app.post('/api/nextcloud/browse', async (req, res) => {
       password = '',
       search = '',
       filter = 'ALL'
-    } = req.body;
+    } = params;
 
     const cleanServerUrl = serverUrl.replace(/\/$/, '');
     const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
@@ -2503,7 +2506,10 @@ app.post('/api/nextcloud/browse', async (req, res) => {
       latencyMs
     });
   }
-});
+};
+
+app.post('/api/nextcloud/browse', handleBrowseRequest);
+app.get('/api/nextcloud/browse', handleBrowseRequest);
 
 // 13a-2. Targeted Lazy-Loading Track Assets Endpoint (RFC 4918 Depth: 1 Targeted Query)
 // Directly queries a single track's folder and stem directories without scanning entire catalog
@@ -3774,32 +3780,32 @@ const CANONICAL_TRACK_REAL_AUDIO: Record<string, string> = {
   'TRK-01': '/remote.php/dav/files/ncted/Music-Production/Brick-by-Brick/Brick-by-Brick-Extended-Remastered-_02-44-v3.5.flac',
   'TRK-02': '/remote.php/dav/files/ncted/Music-Production/The-Masters-Hand/The-Masters-Hand-v3.0a-Remastered.mp3',
   'TRK-03': '/remote.php/dav/files/ncted/Music-Production/Every-Candles-Victory/Every-Candles-Victory-Gospel-v2.1.mp3',
-  'TRK-04': '/remote.php/dav/files/ncted/Music-Production/CheckYourHeartLight/CheckYourHeartLight.mp3',
-  'TRK-05': '/remote.php/dav/files/ncted/Music-Production/Hands-Under-the-Table/Hands-Under-the-Table.mp3',
-  'TRK-06': '/remote.php/dav/files/ncted/Music-Production/Nothing-But-the-Blood/Nothing-But-the-Blood.mp3',
-  'TRK-07': '/remote.php/dav/files/ncted/Music-Production/Calvary-Grit/Calvary-Grit.mp3',
+  'TRK-04': '/remote.php/dav/files/ncted/Music-Production/CheckYourHeartLight/6.5sbR_Check_Your_Heart_Light_Kane_v1.5_(Remastered).wav',
+  'TRK-05': '/remote.php/dav/files/ncted/Music-Production/Hands-Under-the-Table/7sbR_Hands_Under_The_Table_TedMoyer_v1.0_(Remastered).wav',
+  'TRK-06': '/remote.php/dav/files/ncted/Music-Production/Nothing-But-the-Blood/Modern-Worship/NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3',
+  'TRK-07': '/remote.php/dav/files/ncted/Music-Production/Calvary-Grit/Calvary-Grit-V4.55b-Team-Edit-Remastered.flac',
   'TRK-08': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
-  'TRK-09': '/remote.php/dav/files/ncted/Music-Production/The-Anchor/The-Anchor.mp3',
-  'TRK-10': '/remote.php/dav/files/ncted/Music-Production/The-Blueprint-and-The-Blood/The-Blueprint-and-The-Blood.mp3',
-  'TRK-11': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/The-Weight-and-The-Wisdom.mp3',
-  'TRK-12': '/remote.php/dav/files/ncted/Music-Production/Leaning-Not-Leaving/Leaning-Not-Leaving.mp3',
-  'TRK-13': '/remote.php/dav/files/ncted/Music-Production/Unity-In-The-Friction/Unity-In-The-Friction.mp3',
-  'TRK-14': '/remote.php/dav/files/ncted/Music-Production/Venom-into-Victory/Venom_Into_Victory.flac',
+  'TRK-09': '/remote.php/dav/files/ncted/Music-Production/The-Anchor/Rock-Ballad/The-Anchor-v17.0a-Rock-Ballad-Remastered.mp3',
+  'TRK-10': '/remote.php/dav/files/ncted/Music-Production/The-Blueprint-and-The-Blood/v11.5-The-Blueprint-and-the-Blood-Persona-Upbeat-Remastered.flac',
+  'TRK-11': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/7.5sbR_The_Weight_and_The_Wisdom_Brandon_v4.5_(Remastered).wav',
+  'TRK-12': '/remote.php/dav/files/ncted/Music-Production/Leaning-Not-Leaving/Leaning-Not-Leaving-v7.5-Worship-Group.flac',
+  'TRK-13': '/remote.php/dav/files/ncted/Music-Production/Unity-In-The-Friction/Ted_Moyer_Unity_GOLD_MASTER.flac',
+  'TRK-14': '/remote.php/dav/files/ncted/Music-Production/Venom-into-Victory/Identity-Anthem/Venom_Into_Victory.flac',
   'TRK-15': '/remote.php/dav/files/ncted/Music-Production/The-Final-Say/The_Final_Say_v3b_BMV3_MASTER.flac',
-  'TRK-16': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3',
+  'TRK-16': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.wav',
   'TRK-17': '/remote.php/dav/files/ncted/Music-Production/In-Our-Veins/6.5s-In-Our-Veins-v3.5-Brandon-Josiah-Remastered-_03-28-v3.5.flac',
   'TRK-18': '/remote.php/dav/files/ncted/Music-Production/We-Bow-We-Shout/1-v9.93-We-Bow-We-Shout-Remastered-FLAC00086400-2025-12-06-23_12_05-14.flac',
   'TRK-19': '/remote.php/dav/files/ncted/Music-Production/Through-the-Valley-Or-the-Flame/Remastered-412568Db-E312-402A-92Ff-9D416B1Df3A7-Christian-Country-7s-Through-the-Valley-Or-The-Flame.mp3',
   'TRK-20': '/remote.php/dav/files/ncted/Music-Production/Ghost-In-The-Machine/Ghost-In-The-Machine-CHH-v2.5bv2-Remastered.wav',
   'TRK-21': '/remote.php/dav/files/ncted/Music-Production/Milestone/The Milestone-Uni50-Mastered.wav',
-  'TRK-22': '/remote.php/dav/files/ncted/Music-Production/Breath-and-Bone/v3.6r-Breath-&-Bone-Male-Remastered.flac',
-  'TRK-23': '/remote.php/dav/files/ncted/Music-Production/Blindfold-Blessing/Blindfold_Blessing_CEDM-PUNCH.mp3',
+  'TRK-22': '/remote.php/dav/files/ncted/Music-Production/Breath-and-Bone/Worship-Ballad/v3.6r-Breath-%26-Bone-Male-Remastered.flac',
+  'TRK-23': '/remote.php/dav/files/ncted/Music-Production/Blindfold-Blessing/Blindfold-Blessing-v3.5-Ultimate-Remastered.mp3',
   'TRK-24': '/remote.php/dav/files/ncted/Music-Production/Trading-In-The-Mask/Trading-In-The-Mask-v5.5b2-Remastered.wav',
   'TRK-25': '/remote.php/dav/files/ncted/Music-Production/Neverending-Whats-Next/NWN-v1.0ab-Spoken-Intro-Edit-Remastered.flac',
-  'TRK-26': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3',
+  'TRK-26': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.wav',
   'TRK-27': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
-  'TRK-28': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/The-Weight-and-The-Wisdom.mp3',
-  'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3',
+  'TRK-28': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/7.5sbR_The_Weight_and_The_Wisdom_Brandon_v4.5_(Remastered).wav',
+  'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav',
 };
 
 const handleNextcloudStream = async (req: any, res: any) => {
@@ -3876,7 +3882,10 @@ const handleNextcloudStream = async (req: any, res: any) => {
     let contentType = getMimeType(cleanPath);
 
     try {
-      let { response: upstream, usedRoute } = await smartFetchWithFailover(cleanPath, { headers });
+      let { response: upstream, usedRoute } = await smartFetchWithFailover(cleanPath, {
+        headers,
+        signal: AbortSignal.timeout(3000)
+      });
 
       // Intelligent Auto-Resolution: If requested file is not found (404), resolve actual authentic audio track
       if (upstream.status === 404) {
@@ -3898,16 +3907,50 @@ const handleNextcloudStream = async (req: any, res: any) => {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-16'];
           } else if (lowerPath.includes('brick-by-brick') || lowerPath.includes('brick_by_brick')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-01'];
-          } else if (lowerPath.includes('masters-hand') || lowerPath.includes('the_masters_hand')) {
+          } else if (lowerPath.includes('masters-hand') || lowerPath.includes('the_masters_hand') || lowerPath.includes('mastershand')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-02'];
-          } else if (lowerPath.includes('every-candles-victory') || lowerPath.includes('candle-gospel')) {
+          } else if (lowerPath.includes('every-candles-victory') || lowerPath.includes('candle-gospel') || lowerPath.includes('candle')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-03'];
+          } else if (lowerPath.includes('heartlight') || lowerPath.includes('heart-light') || lowerPath.includes('checkyourheartlight') || lowerPath.includes('check_your_heart_light')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-04'];
+          } else if (lowerPath.includes('hands-under-the-table') || lowerPath.includes('hands_under_the_table')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-05'];
+          } else if (lowerPath.includes('nothing-but-the-blood') || lowerPath.includes('nothing_but_the_blood') || lowerPath.includes('nbtb')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-06'];
+          } else if (lowerPath.includes('calvary-grit') || lowerPath.includes('calvary_grit')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-07'];
+          } else if (lowerPath.includes('the-anchor') || lowerPath.includes('the_anchor') || lowerPath.includes('anchor')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-09'];
+          } else if (lowerPath.includes('blueprint') || lowerPath.includes('the-blueprint-and-the-blood')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-10'];
+          } else if (lowerPath.includes('weight-and-the-wisdom') || lowerPath.includes('the-weight-and-the-wisdom') || lowerPath.includes('weight')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-11'];
+          } else if (lowerPath.includes('leaning-not-leaving') || lowerPath.includes('leaning_not_leaving') || lowerPath.includes('lnl')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-12'];
+          } else if (lowerPath.includes('unity-in-the-friction') || lowerPath.includes('unity_in_the_friction') || lowerPath.includes('unity')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-13'];
+          } else if (lowerPath.includes('venom-into-victory') || lowerPath.includes('venom_into_victory') || lowerPath.includes('venom')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-14'];
+          } else if (lowerPath.includes('the-final-say') || lowerPath.includes('the_final_say') || lowerPath.includes('final_say')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-15'];
           } else if (lowerPath.includes('in-our-veins') || lowerPath.includes('in_our_veins')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-17'];
-          } else if (lowerPath.includes('trading-in-the-mask')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-24'];
-          } else if (lowerPath.includes('ghost-in-the-machine')) {
+          } else if (lowerPath.includes('we-bow-we-shout') || lowerPath.includes('we_bow_we_shout') || lowerPath.includes('we-bow')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-18'];
+          } else if (lowerPath.includes('through-the-valley') || lowerPath.includes('valley-or-the-flame')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-19'];
+          } else if (lowerPath.includes('ghost-in-the-machine') || lowerPath.includes('ghost_in_the_machine')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-20'];
+          } else if (lowerPath.includes('milestone') || lowerPath.includes('the-milestone')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-21'];
+          } else if (lowerPath.includes('breath-and-bone') || lowerPath.includes('breath-&-bone') || lowerPath.includes('breath_and_bone')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-22'];
+          } else if (lowerPath.includes('blindfold-blessing') || lowerPath.includes('blindfold_blessing')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-23'];
+          } else if (lowerPath.includes('trading-in-the-mask') || lowerPath.includes('trading_in_the_mask')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-24'];
+          } else if (lowerPath.includes('neverending-whats-next') || lowerPath.includes('neverending') || lowerPath.includes('nwn')) {
+            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-25'];
           } else if (lowerPath.includes('theworkaintdone') || lowerPath.includes('the-work-aint-done')) {
             fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-27'];
           } else if (lowerPath.includes('manic') || lowerPath.includes('mundane') || lowerPath.includes('mitm')) {
@@ -3923,7 +3966,10 @@ const handleNextcloudStream = async (req: any, res: any) => {
             message: `Auto-resolving ${cleanPath.split('/').pop()} to real authentic music: ${fallbackCandidate.split('/').pop()}`,
             details: { requestedPath: cleanPath, resolvedPath: fallbackCandidate }
           });
-          const retryResult = await smartFetchWithFailover(fallbackCandidate, { headers });
+          const retryResult = await smartFetchWithFailover(fallbackCandidate, {
+            headers,
+            signal: AbortSignal.timeout(3000)
+          });
           if (retryResult.response.status === 200 || retryResult.response.status === 206) {
             upstream = retryResult.response;
             usedRoute = retryResult.usedRoute;

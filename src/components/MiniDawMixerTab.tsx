@@ -64,6 +64,8 @@ import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
 import { AutomationLaneEditor, interpolateAutomationValue } from './AutomationLaneEditor';
 import { D3ChannelWaveformVisualizer } from './D3ChannelWaveformVisualizer';
 import { RotaryPanKnob } from './RotaryPanKnob';
+import { MidiStepSequencer } from './MidiStepSequencer';
+import { NextcloudFileExplorer } from './NextcloudFileExplorer';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -550,6 +552,8 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   // Master Bus FX Rack states
   const [effects, setEffects] = useState<DawEffectsState>({ ...DEFAULT_DAW_EFFECTS });
   const [showFxRack, setShowFxRack] = useState<boolean>(true);
+  const [showMidiSequencer, setShowMidiSequencer] = useState<boolean>(true);
+  const [showFileExplorer, setShowFileExplorer] = useState<boolean>(true);
   const [showSecondaryChart, setShowSecondaryChart] = useState<boolean>(false);
   const [activeFxPresetId, setActiveFxPresetId] = useState<string>('fx_nashville_master');
 
@@ -1345,6 +1349,34 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowFileExplorer(!showFileExplorer)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition border ${
+                showFileExplorer
+                  ? 'bg-cyan-950/70 border-cyan-500/60 text-cyan-300 shadow-cyan-950/30'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+              title="Toggle Nextcloud WebDAV File Explorer for Drag & Drop to Mixer"
+            >
+              <HardDrive className="w-3 h-3 text-cyan-400" />
+              <span>WebDAV Explorer</span>
+              {showFileExplorer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            <button
+              onClick={() => setShowMidiSequencer(!showMidiSequencer)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition border ${
+                showMidiSequencer
+                  ? 'bg-amber-950/70 border-amber-500/60 text-amber-300 shadow-amber-950/30'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+              title="Toggle 16-Step MIDI Percussion Sequencer Grid"
+            >
+              <Music className="w-3 h-3 text-amber-400" />
+              <span>16-Step Sequencer</span>
+              {showMidiSequencer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            <button
               onClick={() => setShowFxRack(!showFxRack)}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition border ${
                 showFxRack
@@ -1452,6 +1484,33 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         bpm={track.bpm}
         keySignature={track.key}
       />
+
+      {/* 16-STEP MIDI PERCUSSION SEQUENCER RACK */}
+      {showMidiSequencer && (
+        <MidiStepSequencer
+          initialBpm={track.bpm}
+          isDawPlaying={isPlaying}
+          onClose={() => setShowMidiSequencer(false)}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* NEXTCLOUD WEBDAV ASSET EXPLORER & DRAG-AND-DROP ORCHESTRATION */}
+      {showFileExplorer && (
+        <NextcloudFileExplorer
+          currentTrack={track}
+          onAssignAssetToTrack={handleAssignAssetToTrack}
+          onBatchAssignStems={(stems) => {
+            stems.forEach(s => handleAssignAssetToTrack(s.channelId, s.asset));
+          }}
+          onClose={() => setShowFileExplorer(false)}
+          isDarkMode={isDarkMode}
+          onRelinkSuccess={(count) => {
+            setNextcloudSyncNotice(`✓ Relinked ${count} assets with authentic Nextcloud WebDAV audio`);
+            setTimeout(() => setNextcloudSyncNotice(''), 4000);
+          }}
+        />
+      )}
 
       {/* EXPANDABLE MASTER BUS FX & MASTERING RACK */}
       {showFxRack && (

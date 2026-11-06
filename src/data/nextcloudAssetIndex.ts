@@ -113,10 +113,10 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
       { tag: 'v12.55', styleName: 'Mrs T Gospel Anthem Master', notes: 'Intimate gospel roots with electronic undertones.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Modern NBTB Worship Leader v3.0b', stemFilename: 'NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Modern NBTB Worship Leader v2.86 Remaster', stemFilename: 'NBTB-v2.86_Modern_Nothing_but_the_Blood_-The__Worship_Leader__Edit-_-Remastered-f03c878f-e28a-4794-912b-256eb3d6e925.mp3', stemType: 'vocal', color: '#10b981', freq: 329.63, waveType: 'square' },
-      { id: 3, name: 'Track 3: Mrs T Gospel Anthem v12.55 Remastered', stemFilename: 'v12.55-Nothing-But-the-Blood-Mrs-T-Gospel-Anthem-Remastered.mp3', stemType: 'choir', color: '#f59e0b', freq: 246.94, waveType: 'sawtooth' },
-      { id: 4, name: 'Track 4: Mrs T Gospel Anthem v12.5 (04:04)', stemFilename: 'Nothing-But-the-Blood-Mrs-T-Gospel-Anthem_04-04-v12.5.mp3', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'triangle' }
+      { id: 1, name: 'Track 1: Modern NBTB Worship Leader v3.0b', stemFilename: 'Modern-Worship/NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3', stemType: 'master', color: '#6366f1', freq: 164.81, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Modern NBTB Worship Leader v2.86 Remaster', stemFilename: 'Modern-Worship/NBTB-v2.86_Modern_Nothing_but_the_Blood_-The__Worship_Leader__Edit-_-Remastered-f03c878f-e28a-4794-912b-256eb3d6e925.mp3', stemType: 'vocal', color: '#10b981', freq: 329.63, waveType: 'square' },
+      { id: 3, name: 'Track 3: Modern NBTB Master Edit (FLAC)', stemFilename: 'Modern-Worship/v2.86-Modern-Nothing-but-the-Blood.flac', stemType: 'choir', color: '#f59e0b', freq: 246.94, waveType: 'sawtooth' },
+      { id: 4, name: 'Track 4: Modern NBTB Worship Leader v3.0b (FLAC)', stemFilename: 'Modern-Worship/v2.86-Modern-Nothing-but-the-Blood.flac', stemType: 'drums', color: '#ec4899', freq: 82.41, waveType: 'triangle' }
     ],
     visualTitle: 'Ancient Weathered Cedar Cross at Dawn',
     sceneTitle: 'Scarlet River Over Dark Timber Valley'
@@ -198,10 +198,10 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
       { tag: 'v1.0', styleName: 'Swamptronica Master', notes: 'Gritty bayou acoustic slide guitar with electronic groove.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Check That Heart Light Swamptronica v1.0', stemFilename: 'Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
+      { id: 1, name: 'Track 1: Check Your Heart Light Kane Remastered (WAV)', stemFilename: '6.5sbR_Check_Your_Heart_Light_Kane_v1.5_(Remastered).wav', stemType: 'master', color: '#6366f1', freq: 196, waveType: 'sawtooth' },
       { id: 2, name: 'Track 2: Check That Heart Light Radio Cut (6s)', stemFilename: '6s Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'organ', color: '#10b981', freq: 392, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Swamptronica Instrumental Bed', stemFilename: 'Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'guitar', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
-      { id: 4, name: 'Track 4: Vocal Groove & Soul Percussion', stemFilename: '6s Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
+      { id: 3, name: 'Track 3: Check That Heart Light Swamptronica v1.0', stemFilename: 'Check That Heart Light 🚨 v1.0 Swamptronica .mp3', stemType: 'guitar', color: '#f59e0b', freq: 293.66, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Check Your Heart Light Swamptronica Bed', stemFilename: '6.5sbR_Check_Your_Heart_Light_Kane_v1.5_(Remastered).wav', stemType: 'drums', color: '#ec4899', freq: 98, waveType: 'square' }
     ],
     visualTitle: 'Vintage Amber Radio Dial and Glowing Tube Amp',
     sceneTitle: 'The Gospel Highway Neon Glow'
@@ -284,10 +284,10 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
       { tag: 'v17a', styleName: 'BMV3 Gold Master (FLAC)', notes: 'Full orchestral strings, delicate grand piano intro rising into massive climactic vocal belt.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Real Isolated Vocals Stem (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Vocals.flac', stemType: 'vocal', color: '#6366f1', freq: 233.08, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Real Isolated Drums Stem (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Drums.flac', stemType: 'drums', color: '#10b981', freq: 466.16, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Real Isolated Bass Stem (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Bass.flac', stemType: 'bass', color: '#f59e0b', freq: 349.23, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Real Isolated Instrumental Bed (FLAC)', stemFilename: '1776980538_1_The_Anchor_v4b_FIXED_-Instrumental.flac', stemType: 'master', color: '#ec4899', freq: 58.27, waveType: 'square' }
+      { id: 1, name: 'Track 1: Real Isolated Vocals Stem (FLAC)', stemFilename: 'Rock-Ballad/1776980538_1_The_Anchor_v4b_FIXED_-Vocals.flac', stemType: 'vocal', color: '#6366f1', freq: 233.08, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Real Isolated Drums Stem (FLAC)', stemFilename: 'Rock-Ballad/1776980538_1_The_Anchor_v4b_FIXED_-Drums.flac', stemType: 'drums', color: '#10b981', freq: 466.16, waveType: 'sine' },
+      { id: 3, name: 'Track 3: Real Isolated Bass Stem (FLAC)', stemFilename: 'Rock-Ballad/1776980538_1_The_Anchor_v4b_FIXED_-Bass.flac', stemType: 'bass', color: '#f59e0b', freq: 349.23, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Real Isolated Instrumental Bed (FLAC)', stemFilename: 'Rock-Ballad/1776980538_1_The_Anchor_v4b_FIXED_-Instrumental.flac', stemType: 'master', color: '#ec4899', freq: 58.27, waveType: 'square' }
     ],
     visualTitle: 'Heavy Iron Anchor Sunk Deep in Bedrock Under Crashing Waves',
     sceneTitle: 'Unshakable in the Storm'
@@ -326,10 +326,10 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
       { tag: 'v2.6a', styleName: 'Identity Anthem Gold Master', notes: 'Rapid-fire vocal runs, razor synths, high-intensity rhythm, explosive bass drop.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Venom Into Victory Gold Master (FLAC)', stemFilename: 'Venom_Into_Victory.flac', stemType: 'master', color: '#6366f1', freq: 174.61, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Identity Anthem v2.6a Remastered (MP3)', stemFilename: 'Venom-Into-Victory-V2.6a-BMV-3.1-Identity-Anthem-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 349.23, waveType: 'square' },
-      { id: 3, name: 'Track 3: Boba His Work Master (MP3)', stemFilename: 'BOBA_HIS_WORK_MASTER.mp3', stemType: 'bass', color: '#f59e0b', freq: 87.31, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Venom Into Victory Radio MP3', stemFilename: 'Venom_Into_Victory.mp3', stemType: 'drums', color: '#ec4899', freq: 87.31, waveType: 'square' }
+      { id: 1, name: 'Track 1: Venom Into Victory Gold Master (FLAC)', stemFilename: 'Identity-Anthem/Venom_Into_Victory.flac', stemType: 'master', color: '#6366f1', freq: 174.61, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Identity Anthem v2.6a Remastered (MP3)', stemFilename: 'Identity-Anthem/Venom-Into-Victory-V2.6a-BMV-3.1-Identity-Anthem-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 349.23, waveType: 'square' },
+      { id: 3, name: 'Track 3: Boba His Work Master (MP3)', stemFilename: 'BOBA-Takes/BOBA_HIS_WORK_MASTER.mp3', stemType: 'bass', color: '#f59e0b', freq: 87.31, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Venom Into Victory Radio MP3', stemFilename: 'Identity-Anthem/Venom_Into_Victory.mp3', stemType: 'drums', color: '#ec4899', freq: 87.31, waveType: 'square' }
     ],
     visualTitle: 'Shattered Serpent Skull Turned to Pure Gold',
     sceneTitle: 'Triumphant Step Over the Adversary'
@@ -494,10 +494,10 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
       { tag: 'v3.6r', styleName: 'Breath & Bone Male Remastered (FLAC)', notes: 'Ezekiel 37 vision, wind foley, swelling cellos, explosive resurrection chorus.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Breath & Bone v3.6r Master (FLAC)', stemFilename: 'v3.6r-Breath-&-Bone-Male-Remastered.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Breath & Bone v3.6r Remastered (MP3)', stemFilename: 'v3.6r-Breath-&-Bone-Male-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 293.66, waveType: 'sine' },
-      { id: 3, name: 'Track 3: Breath and Bone Gospel Anthem Remix v11.5', stemFilename: 'V11.5-Breath-and-Bone-Gospel-Anthem-Remix.mp3', stemType: 'guitar', color: '#f59e0b', freq: 220, waveType: 'triangle' },
-      { id: 4, name: 'Track 4: Breath & Bone Intimate Acoustic v3.6', stemFilename: 'V3.6-Breath-&-Bone-Remastered-_04-52-6s.mp3', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
+      { id: 1, name: 'Track 1: Breath & Bone v3.6r Master (FLAC)', stemFilename: 'Worship-Ballad/v3.6r-Breath-&-Bone-Male-Remastered.flac', stemType: 'master', color: '#6366f1', freq: 146.83, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Breath & Bone v3.6r Remastered (MP3)', stemFilename: 'Worship-Ballad/v3.6r-Breath-&-Bone-Male-Remastered.mp3', stemType: 'organ', color: '#10b981', freq: 293.66, waveType: 'sine' },
+      { id: 3, name: 'Track 3: Breath and Bone Gospel Anthem Remix v11.5', stemFilename: 'Hip-Hop-Remix/V11.5-Breath-and-Bone-Gospel-Anthem-Remix.mp3', stemType: 'guitar', color: '#f59e0b', freq: 220, waveType: 'triangle' },
+      { id: 4, name: 'Track 4: Breath & Bone Intimate Acoustic v3.6', stemFilename: 'Worship-Ballad/V3.6-Breath-&-Bone-Remastered-_04-52-6s.mp3', stemType: 'drums', color: '#ec4899', freq: 73.42, waveType: 'square' }
     ],
     visualTitle: 'Dry Bones Clothed in Tendons and Golden Sunlight',
     sceneTitle: 'Breathe on the Slayed that They May Live'
@@ -515,10 +515,10 @@ export const CATALOG_TRACK_DEFINITIONS: TrackNextcloudDefinition[] = [
       { tag: 'v2.0', styleName: 'CEDM Punch Master', notes: 'Banjo and fiddle meets 128 BPM supersaws, dance drop, triumphant vocal hook.' }
     ],
     stems: [
-      { id: 1, name: 'Track 1: Blindfold Blessing CEDM Punch Master', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
-      { id: 2, name: 'Track 2: Progressive CEDM Drop Accent', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'triangle' },
-      { id: 3, name: 'Track 3: Lead Synth & Duet Vocal', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'organ', color: '#f59e0b', freq: 330, waveType: 'sine' },
-      { id: 4, name: 'Track 4: High-Energy Dance Floor Groove', stemFilename: 'Blindfold_Blessing_CEDM-PUNCH.mp3', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
+      { id: 1, name: 'Track 1: Blindfold Blessing Ultimate Remastered (MP3)', stemFilename: 'Blindfold-Blessing-v3.5-Ultimate-Remastered.mp3', stemType: 'master', color: '#6366f1', freq: 220, waveType: 'sawtooth' },
+      { id: 2, name: 'Track 2: Blindfold Blessing Country Mix (WAV)', stemFilename: 'Blindfold_Blessing__Country.wav', stemType: 'guitar', color: '#10b981', freq: 440, waveType: 'triangle' },
+      { id: 3, name: 'Track 3: Blindfold Blessing EDM Christian Techno (WAV)', stemFilename: 'Blindfold_Blessing_EDM_Christian_Techno.wav', stemType: 'organ', color: '#f59e0b', freq: 330, waveType: 'sine' },
+      { id: 4, name: 'Track 4: Blindfold Blessing Wherever We Go v1.0', stemFilename: 'Blindfold-Blessing-WhereverWeGo-v1.0.mp3', stemType: 'drums', color: '#ec4899', freq: 110, waveType: 'square' }
     ],
     visualTitle: 'Silk Blindfold Falling Away Revealing Golden Horizon',
     sceneTitle: 'Trusting What the Eye Cannot See'

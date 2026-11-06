@@ -949,6 +949,21 @@ export default function BrickOSMusicStudioWorkspace() {
 
   // Listen for audio loading/buffering states from the audio engine
   useEffect(() => {
+    const unlockAudio = () => {
+      const ctx = audioMiniDaw.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume();
+      }
+    };
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
+
+  useEffect(() => {
     return audioMiniDaw.addLoadingListener(setIsLoadingAudio);
   }, []);
 
@@ -958,6 +973,7 @@ export default function BrickOSMusicStudioWorkspace() {
     if (isPlaying) {
       // Re-synchronize playback with the newly selected track's stems immediately
       audioMiniDaw.startPlayback(stems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+      audioMiniDaw.updateBusRouting('daw', stems);
     }
   }, [selectedTrack.id, selectedTrack.title]);
 
@@ -975,8 +991,13 @@ export default function BrickOSMusicStudioWorkspace() {
       showToast('Audio preview paused [Space]', 'info');
     } else {
       audioMiniDaw.init();
+      const ctx = audioMiniDaw.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume();
+      }
       const currentStems = getTrackStems(selectedTrack);
       audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+      audioMiniDaw.updateBusRouting('daw', currentStems);
       setIsPlaying(true);
       showToast(`Playing stem preview: "${selectedTrack.title}" (${selectedTrack.bpm} BPM) [Space]`, 'success');
     }
@@ -1005,6 +1026,12 @@ export default function BrickOSMusicStudioWorkspace() {
     const nextIndex = (currentIndex + 1) % tracks.length;
     const nextTrack = tracks[nextIndex];
     setSelectedTrack(nextTrack);
+    const nextStems = getTrackStems(nextTrack);
+    setTrackStates(nextStems);
+    if (isPlaying) {
+      audioMiniDaw.startPlayback(nextStems, nextTrack.bpm, nextTrack.key, nextTrack.id, nextTrack.title);
+      audioMiniDaw.updateBusRouting('daw', nextStems);
+    }
     showToast(`Switched to: ${nextTrack.id} - ${nextTrack.title} [ ] ]`, 'info');
   };
 
@@ -1013,6 +1040,12 @@ export default function BrickOSMusicStudioWorkspace() {
     const prevIndex = (currentIndex - 1 + tracks.length) % tracks.length;
     const prevTrack = tracks[prevIndex];
     setSelectedTrack(prevTrack);
+    const prevStems = getTrackStems(prevTrack);
+    setTrackStates(prevStems);
+    if (isPlaying) {
+      audioMiniDaw.startPlayback(prevStems, prevTrack.bpm, prevTrack.key, prevTrack.id, prevTrack.title);
+      audioMiniDaw.updateBusRouting('daw', prevStems);
+    }
     showToast(`Switched to: ${prevTrack.id} - ${prevTrack.title} [ [ ]`, 'info');
   };
 
