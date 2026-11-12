@@ -1193,6 +1193,24 @@ class MiniDawEngine {
           audioEl.addEventListener('error', (err) => {
             console.warn(`[AudioEngine] Stream loading notice for track ${t.id} (${t.name}):`, err);
             handleReady();
+            // Completely silence synthetic sine wave bed if real audio failed, and notify UI
+            if (synthGain && this.ctx) {
+              try {
+                synthGain.gain.setValueAtTime(0, this.ctx.currentTime);
+              } catch (_) {}
+            }
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('brickos:audio-diagnostic', {
+                detail: {
+                  type: 'error',
+                  trackId: String(t.id),
+                  trackTitle: t.name,
+                  originalPath: t.webdavPath,
+                  message: `Audio stream failed from Nextcloud WebDAV for '${t.name}'. Click Auto-Relink to locate.`,
+                  canRelink: true
+                }
+              }));
+            }
           }, { once: true });
 
           try {

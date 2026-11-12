@@ -639,7 +639,7 @@ export const NextcloudFileExplorer: React.FC<NextcloudFileExplorerProps> = ({
                         key={file.path}
                         draggable={file.isAudio}
                         onDragStart={(e) => handleDragStart(e, file)}
-                        className={`p-2 rounded-xl border flex items-center justify-between gap-3 transition group select-none ${
+                        className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition group select-none ${
                           file.isAudio
                             ? 'cursor-grab active:cursor-grabbing hover:border-indigo-500/60'
                             : ''
@@ -650,15 +650,15 @@ export const NextcloudFileExplorer: React.FC<NextcloudFileExplorerProps> = ({
                         }`}
                       >
                         {/* Drag Handle & Icon */}
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           {file.isAudio && (
-                            <div className="text-slate-600 group-hover:text-amber-400 cursor-grab shrink-0">
+                            <div className="hidden sm:block text-slate-600 group-hover:text-amber-400 cursor-grab shrink-0">
                               <GripVertical className="w-3.5 h-3.5" />
                             </div>
                           )}
 
                           {/* Category Badge Icon */}
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          <div className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${
                             file.isAudio
                               ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                               : file.isImage
@@ -668,36 +668,35 @@ export const NextcloudFileExplorer: React.FC<NextcloudFileExplorerProps> = ({
                               : 'bg-slate-800 text-slate-400'
                           }`}>
                             {file.isAudio ? (
-                              <Music className="w-3.5 h-3.5" />
+                              <Music className="w-4 h-4" />
                             ) : file.isImage ? (
-                              <ImageIcon className="w-3.5 h-3.5" />
+                              <ImageIcon className="w-4 h-4" />
                             ) : file.isVideo ? (
-                              <Video className="w-3.5 h-3.5" />
+                              <Video className="w-4 h-4" />
                             ) : (
-                              <FileText className="w-3.5 h-3.5" />
+                              <FileText className="w-4 h-4" />
                             )}
                           </div>
 
                           {/* File Details */}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold font-mono truncate text-white" title={file.name}>
+                              <span className="text-xs sm:text-sm font-bold font-mono truncate text-white" title={file.name}>
                                 {file.name}
-                              </span>
-                              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 uppercase">
-                                {file.extension}
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400 mt-0.5">
+                            <div className="flex items-center gap-2 text-[11px] font-mono tabular-nums text-slate-400 mt-0.5">
+                              <span>{file.extension.toUpperCase()}</span>
+                              <span>·</span>
                               <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-                              <span>•</span>
+                              <span>·</span>
                               <span className="truncate">{file.category}</span>
                             </div>
 
                             {/* Live Audio Progress Bar */}
                             {isPreviewing && (
-                              <div className="w-full bg-slate-800 h-1 rounded-full mt-1.5 overflow-hidden">
+                              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
                                 <div
                                   className="bg-indigo-400 h-full transition-all duration-100"
                                   style={{ width: `${previewProgress}%` }}
@@ -707,45 +706,45 @@ export const NextcloudFileExplorer: React.FC<NextcloudFileExplorerProps> = ({
                           </div>
                         </div>
 
-                        {/* Actions: Audition Play + Quick Assign to Channels */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Touch-First Actions: Audition Play + 1-Tap Route to Channel 1–4 */}
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
                           {/* Audition Preview Button */}
                           {file.isAudio && (
                             <button
                               onClick={(e) => handleToggleAudioPreview(file, e)}
-                              className={`p-1.5 rounded-lg border text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
+                              className={`min-h-[44px] sm:min-h-[36px] px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
                                 isPreviewing
                                   ? 'bg-amber-500 text-slate-950 border-amber-400 ring-2 ring-amber-400/50'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                               }`}
                               title={isPreviewing ? 'Stop Preview' : 'Audition Audio Stream'}
                             >
                               {isPreviewing ? (
                                 <>
-                                  <Square className="w-3 h-3 fill-current" />
-                                  <span className="hidden sm:inline text-[10px]">Auditioning</span>
+                                  <Square className="w-3.5 h-3.5 fill-current" />
+                                  <span className="text-xs">Stop</span>
                                 </>
                               ) : (
                                 <>
-                                  <Play className="w-3 h-3 fill-current ml-0.5" />
-                                  <span className="hidden sm:inline text-[10px]">Audition</span>
+                                  <Play className="w-3.5 h-3.5 fill-current" />
+                                  <span className="text-xs">Play</span>
                                 </>
                               )}
                             </button>
                           )}
 
-                          {/* Quick Assign Dropdown / Buttons */}
+                          {/* Touch-Sized Tap-to-Assign Channel Route Buttons */}
                           {file.isAudio && (
-                            <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
-                              <span className="text-[9px] font-mono text-slate-500 px-1 hidden md:inline">ROUTE:</span>
+                            <div className="flex-1 sm:flex-initial grid grid-cols-4 sm:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                              <span className="text-[10px] font-mono text-slate-500 px-1.5 hidden md:inline">ROUTE:</span>
                               {[1, 2, 3, 4].map((ch) => (
                                 <button
                                   key={ch}
                                   onClick={() => handleQuickAssign(ch, file)}
-                                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white transition cursor-pointer"
-                                  title={`Route this file directly to Channel ${ch}`}
+                                  className="min-h-[40px] sm:min-h-[32px] px-2.5 rounded-lg text-xs font-mono font-bold bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white active:scale-95 transition cursor-pointer"
+                                  title={`Tap to route "${file.name}" directly to Channel ${ch}`}
                                 >
-                                  CH{ch}
+                                  Ch{ch}
                                 </button>
                               ))}
                             </div>

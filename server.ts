@@ -13,6 +13,10 @@ import { getFirestore as getFirebaseFirestore, doc as firestoreDoc, setDoc as fi
 import firebaseConfig from './firebase-applet-config.json';
 import { mapTrackFolderAssets, RawAssetItem } from './src/services/metadataMapperService';
 import { CANONICAL_TRACKS } from './src/data/canonicalCatalog';
+import { RELATIONAL_SUNO_CATALOG } from './src/data/relationalSunoCatalog';
+import { SUNO_MASTER_TRACKS } from './src/data/sunoMasterCatalog';
+import { getStudioDb, getStudioDbStats, queryFullRelationalCatalog, getCatalogEtag } from './src/services/sqliteCatalogService';
+import { getDatabaseStats } from './src/server/brickDatabase';
 
 dotenv.config();
 
@@ -3808,6 +3812,63 @@ const CANONICAL_TRACK_REAL_AUDIO: Record<string, string> = {
   'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav',
 };
 
+// Sovereign Audio Fallback: Maps missing or unlinked WebDAV tracks to authentic Suno CloudFront studio takes
+function findSunoFallbackStream(cleanPath: string): { streamUrl: string; title: string; trackId?: string } | null {
+  const lower = cleanPath.toLowerCase();
+
+  // 1. Try matching track ID like TRK-01
+  const trkMatch = cleanPath.match(/TRK-(\d+)/i);
+  if (trkMatch) {
+    const trkId = `TRK-${trkMatch[1].padStart(2, '0')}`;
+    const song = RELATIONAL_SUNO_CATALOG.find((s) => s.id.toUpperCase() === trkId.toUpperCase());
+    if (song && song.revisions && song.revisions.length > 0) {
+      const rev = song.revisions.find((r) => r.streamUrl) || song.revisions[0];
+      if (rev && rev.streamUrl) {
+        return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
+      }
+    }
+  }
+
+  // 2. Try matching folder name or title against canonical catalog
+  for (const song of RELATIONAL_SUNO_CATALOG) {
+    const slug = song.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const folderSlug = (song.nextcloud_directory || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (
+      (slug.length > 4 && lower.includes(slug)) ||
+      (folderSlug.length > 4 && lower.includes(folderSlug))
+    ) {
+      if (song.revisions && song.revisions.length > 0) {
+        const rev = song.revisions.find((r) => r.streamUrl) || song.revisions[0];
+        if (rev && rev.streamUrl) {
+          return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
+        }
+      }
+    }
+  }
+
+  // 3. Try matching title in SUNO_MASTER_TRACKS
+  const filename = cleanPath.split('/').pop()?.toLowerCase() || '';
+  for (const master of SUNO_MASTER_TRACKS) {
+    const mTitle = master.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (mTitle.length > 5 && filename.includes(mTitle)) {
+      if (master.streamUrl) {
+        return { streamUrl: master.streamUrl, title: master.title, trackId: master.id };
+      }
+    }
+  }
+
+  // 4. Default to first song revision if nothing else matched but an audio file was requested
+  const fallbackSong = RELATIONAL_SUNO_CATALOG[0];
+  if (fallbackSong && fallbackSong.revisions && fallbackSong.revisions.length > 0) {
+    const rev = fallbackSong.revisions.find((r) => r.streamUrl);
+    if (rev && rev.streamUrl) {
+      return { streamUrl: rev.streamUrl, title: fallbackSong.title, trackId: fallbackSong.id };
+    }
+  }
+
+  return null;
+}
+
 const handleNextcloudStream = async (req: any, res: any) => {
   // Set CORS headers immediately so even error responses or preflights are compliant
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -4038,20 +4099,55 @@ const handleNextcloudStream = async (req: any, res: any) => {
       });
     }
 
-    // Only if upstream is completely unavailable after all failover & auto-resolve attempts, serve fallback wav
-    const lower = cleanPath.toLowerCase();
-    if (contentType.startsWith('audio/') || lower.endsWith('.wav') || lower.endsWith('.mp3') || lower.endsWith('.flac')) {
-      const fallbackWav = generateMusicalWavBuffer(cleanPath);
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', 'audio/wav');
-      res.setHeader('Content-Length', fallbackWav.length.toString());
-      res.setHeader('Accept-Ranges', 'bytes');
-      return res.status(200).send(fallbackWav);
+    // Decoupled from synthetic sine wave generator: If WebDAV is unavailable, stream authentic Suno CloudFront audio
+    const fallbackSuno = findSunoFallbackStream(cleanPath);
+    if (fallbackSuno && fallbackSuno.streamUrl) {
+      addNextcloudLog({
+        stage: 'STREAM_MEDIA',
+        action: 'CLOUDFRONT_FALLBACK',
+        level: 'warn',
+        message: `WebDAV 404 for ${cleanPath.split('/').pop()} - Streaming authentic Suno CloudFront revision for ${fallbackSuno.title}`,
+        details: { path: cleanPath, cloudfrontUrl: fallbackSuno.streamUrl, trackId: fallbackSuno.trackId }
+      });
+
+      try {
+        const cfRes = await undiciFetch(fallbackSuno.streamUrl, {
+          headers: req.headers.range ? { Range: req.headers.range } : undefined
+        });
+
+        res.status(cfRes.status);
+        res.setHeader('Content-Type', cfRes.headers.get('content-type') || 'audio/mp4');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Expose-Headers', 'X-brickOS-Audio-Source, X-brickOS-Original-Status, X-brickOS-Original-Path, X-brickOS-Track-Id, Content-Range, Content-Length, Accept-Ranges');
+        res.setHeader('X-brickOS-Audio-Source', 'suno-cloudfront');
+        res.setHeader('X-brickOS-Original-Status', '404');
+        res.setHeader('X-brickOS-Original-Path', cleanPath);
+        res.setHeader('X-brickOS-Track-Id', fallbackSuno.trackId || '');
+        if (cfRes.headers.get('content-range')) res.setHeader('Content-Range', cfRes.headers.get('content-range')!);
+        if (cfRes.headers.get('content-length')) res.setHeader('Content-Length', cfRes.headers.get('content-length')!);
+        if (cfRes.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', cfRes.headers.get('accept-ranges')!);
+
+        if (cfRes.body) {
+          const nodeStream = Readable.fromWeb(cfRes.body as any);
+          nodeStream.pipe(res);
+          return;
+        }
+        const ab = await cfRes.arrayBuffer();
+        return res.send(Buffer.from(ab));
+      } catch (cfErr: any) {
+        console.warn('CloudFront stream fallback error:', cfErr.message);
+      }
     }
 
+    // Never send synthetic sine waves on track playback failure. Return clear 404 JSON.
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', contentType);
-    return res.status(200).send(Buffer.from(''));
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(404).json({
+      error: 'ASSET_NOT_FOUND',
+      message: `Audio asset could not be streamed from WebDAV or Suno CloudFront for ${cleanPath.split('/').pop()}`,
+      path: cleanPath,
+      suggestedAction: 'AUTO_RELINK'
+    });
   } catch (err: any) {
     console.error('Stream proxy error:', err);
     res.status(500).send('Stream error');
@@ -4060,6 +4156,109 @@ const handleNextcloudStream = async (req: any, res: any) => {
 
 app.get('/api/nextcloud/stream', handleNextcloudStream);
 app.get('/api/nextcloud/stream-media', handleNextcloudStream);
+
+// Automated Background Asset Relinker
+app.post('/api/nextcloud/auto-relink', async (req, res) => {
+  const { trackId, filename, trackTitle } = req.body;
+  const start = Date.now();
+  try {
+    const db = getStudioDb();
+
+    // 1. Check if SQLite nextcloud_assets has a matching entry
+    if (trackId) {
+      const assetRow = db.prepare('SELECT webdav_path, filename FROM nextcloud_assets WHERE track_id = ? LIMIT 1').get(trackId) as any;
+      if (assetRow && assetRow.webdav_path) {
+        CANONICAL_TRACK_REAL_AUDIO[trackId] = assetRow.webdav_path;
+        return res.json({
+          success: true,
+          matchedPath: assetRow.webdav_path,
+          filename: assetRow.filename,
+          trackId,
+          source: 'sqlite_index',
+          latencyMs: Date.now() - start
+        });
+      }
+    }
+
+    // 2. Search known folder mappings or fuzzy match
+    const searchTarget = (trackTitle || filename || trackId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [id, audioPath] of Object.entries(CANONICAL_TRACK_REAL_AUDIO)) {
+      const pathClean = audioPath.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (id === trackId || (searchTarget.length > 4 && pathClean.includes(searchTarget))) {
+        if (trackId) CANONICAL_TRACK_REAL_AUDIO[trackId] = audioPath;
+        return res.json({
+          success: true,
+          matchedPath: audioPath,
+          trackId: id,
+          source: 'canonical_mapping',
+          latencyMs: Date.now() - start
+        });
+      }
+    }
+
+    // 3. Fallback to scanning SQLite canonical_songs directory
+    if (trackId) {
+      const song = db.prepare('SELECT nextcloud_directory, title FROM canonical_songs WHERE id = ?').get(trackId) as any;
+      if (song && song.nextcloud_directory) {
+        const candidate = `/remote.php/dav/files/ncted/Music-Production/${song.nextcloud_directory}`;
+        return res.json({
+          success: true,
+          matchedPath: candidate,
+          trackId,
+          source: 'song_directory',
+          latencyMs: Date.now() - start
+        });
+      }
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: `No matching asset discovered for '${trackTitle || trackId || filename}'.`,
+      latencyMs: Date.now() - start
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// SQLite Catalog & Suno 372-Revision API
+app.get('/api/catalog/songs', (_req, res) => {
+  try {
+    const songs = queryFullRelationalCatalog();
+    res.json({ success: true, count: songs.length, songs, etag: getCatalogEtag() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/catalog/revisions/:songId', (req, res) => {
+  try {
+    const { songId } = req.params;
+    const db = getStudioDb();
+    const rows = db.prepare('SELECT * FROM suno_revisions WHERE song_id = ? ORDER BY created_at DESC').all(songId);
+    res.json({ success: true, songId, revisions: rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/database/stats', (_req, res) => {
+  try {
+    const studioStats = getStudioDbStats();
+    let sovereignStats = null;
+    try {
+      sovereignStats = getDatabaseStats();
+    } catch {}
+    res.json({
+      success: true,
+      studioDb: studioStats,
+      sovereignDb: sovereignStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Vite middleware integration
 async function startServer() {

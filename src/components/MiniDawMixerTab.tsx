@@ -66,6 +66,7 @@ import { D3ChannelWaveformVisualizer } from './D3ChannelWaveformVisualizer';
 import { RotaryPanKnob } from './RotaryPanKnob';
 import { MidiStepSequencer } from './MidiStepSequencer';
 import { NextcloudFileExplorer } from './NextcloudFileExplorer';
+import { TouchFader } from './TouchFader';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -2297,10 +2298,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   <div className="flex items-center gap-1.5 relative">
                     <button
                       onClick={(e) => handleTrackMuteClick(trk.id, e)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono cursor-pointer ${
+                      className={`min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition font-mono active:scale-95 cursor-pointer ${
                         trk.muted
                           ? 'bg-rose-600 text-white ring-1 ring-rose-400 shadow-sm'
-                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                       }`}
                       title={
                         trk.groupId
@@ -2312,10 +2313,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     </button>
                     <button
                       onClick={(e) => handleTrackSoloClick(trk.id, e)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono cursor-pointer ${
+                      className={`min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition font-mono active:scale-95 cursor-pointer ${
                         trk.solo
                           ? 'bg-amber-500 text-slate-950 font-black ring-1 ring-amber-300 shadow-sm'
-                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                       }`}
                       title={
                         trk.groupId
@@ -2430,20 +2431,17 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     isDarkMode={isDarkMode}
                   />
 
-                  {/* Volume Slider */}
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={trk.vol}
-                      onChange={(e) => handleUpdateTrack(trk.id, 'vol', parseInt(e.target.value))}
-                      className="w-24 accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  {/* Large Pointer-Capture Touch Fader */}
+                  <div className="flex items-center gap-2 min-w-[180px] sm:min-w-[200px] flex-1 max-w-[260px]">
+                    <Volume2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <TouchFader
+                      value={(!autoState.volumeBypass && dynamicVol !== undefined) ? dynamicVol : trk.vol}
+                      onChange={(newVol) => handleUpdateTrack(trk.id, 'vol', Math.round(newVol))}
+                      color={trkGroup ? trkGroup.color : trk.color}
+                      defaultValue={85}
+                      isDarkMode={isDarkMode}
+                      className="flex-1"
                     />
-                    <span className="text-xs font-mono text-slate-300 w-9 text-right font-bold">
-                      {(!autoState.volumeBypass && dynamicVol !== undefined) ? dynamicVol : trk.vol}%
-                    </span>
                   </div>
 
                   {/* Live Stem Stereo LED Peak Meter */}

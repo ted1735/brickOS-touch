@@ -3,10 +3,57 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  html,
+  body {
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     transition-property: color, background-color, border-color;
     transition-duration: 200ms;
     -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  a,
+  select,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+}
+
+/* ========================================================================= */
+/* FOLDABLE & TOUCH ERGONOMICS (GALAXY FOLD COVER + UNFOLDED + SAFE AREAS)   */
+/* ========================================================================= */
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Hinge-aware dual-pane layout variables for Foldable Viewport Segments API */
+:root {
+  --fold-left-pane-width: 310px;
+  --fold-hinge-gap: 0px;
+}
+
+@media (horizontal-viewport-segments: 2) {
+  :root {
+    --fold-left-pane-width: env(viewport-segment-width 0 0, 50%);
+    --fold-hinge-gap: calc(env(viewport-segment-left 1 0, 50%) - env(viewport-segment-right 0 0, 50%));
+  }
+
+  .fold-hinge-gutter {
+    margin-left: max(var(--fold-hinge-gap, 0px), 12px);
   }
 }
 

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { RELATIONAL_SUNO_CATALOG, CanonicalSongRelationalItem, SunoRevisionItem } from '../data/relationalSunoCatalog';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -36,9 +37,6 @@ export function getStudioDb(): any {
   if (sqliteDb) return sqliteDb;
 
   try {
-    // Dynamically require built-in node:sqlite (Node 22.5+)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DatabaseSync } = require('node:sqlite');
     const dbPath = resolveSqliteDbPath();
     const db = new DatabaseSync(dbPath);
 

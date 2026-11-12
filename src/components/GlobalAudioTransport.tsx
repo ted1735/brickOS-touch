@@ -64,7 +64,7 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
   if (isMinimized) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-40 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        className="hidden lg:block fixed bottom-4 right-4 z-40 animate-in fade-in slide-in-from-bottom-2 duration-200"
       >
         <div
           className={`flex items-center gap-2 p-1.5 px-3 rounded-full border shadow-2xl backdrop-blur-md transition cursor-pointer select-none ${
@@ -116,10 +116,10 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
     );
   }
 
-  // EXPANDED FLOATING TRANSPORT CONSOLE
+  // EXPANDED FLOATING TRANSPORT CONSOLE (Desktop only; mobile/foldable uses FoldableMobileDock)
   return (
     <div
-      className="fixed bottom-4 right-4 sm:right-6 z-40 animate-in fade-in slide-in-from-bottom-3 duration-200"
+      className="hidden lg:block fixed bottom-4 right-4 sm:right-6 z-40 animate-in fade-in slide-in-from-bottom-3 duration-200"
     >
       <div
         className={`w-[320px] sm:w-[380px] p-3.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all ${

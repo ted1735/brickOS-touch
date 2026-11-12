@@ -81,6 +81,7 @@ import { CatalogSidebar } from './components/CatalogSidebar';
 import { ProjectSessionsSidebar } from './components/ProjectSessionsSidebar';
 import { SideNavigationPanel } from './components/SideNavigationPanel';
 import { GlobalAudioTransport } from './components/GlobalAudioTransport';
+import { FoldableMobileDock } from './components/FoldableMobileDock';
 import { KeyboardShortcutsOverlay } from './components/KeyboardShortcutsOverlay';
 import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts';
 import { SectionInstructionModal, StudioSectionId } from './components/SectionInstructionModal';
@@ -374,8 +375,10 @@ export default function BrickOSMusicStudioWorkspace() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>('SES-01');
   const [sidebarMode, setSidebarMode] = useState<'sessions' | 'catalog'>('sessions');
 
-  // Side Navigation Panel State (Projects, Sessions & Studio Assets)
-  const [isSideNavOpen, setIsSideNavOpen] = useState<boolean>(true);
+  // Side Navigation Panel State (Projects, Sessions & Studio Assets) — closed by default on <1024px mobile/foldable screens
+  const [isSideNavOpen, setIsSideNavOpen] = useState<boolean>(() =>
+    typeof window === 'undefined' ? true : window.innerWidth >= 1024
+  );
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState<boolean>(false);
   const [sideNavTab, setSideNavTab] = useState<'projects' | 'sessions' | 'assets'>('projects');
   const sideNavWasOpenBeforeFocus = useRef(false);
@@ -1983,10 +1986,85 @@ export default function BrickOSMusicStudioWorkspace() {
         </div>
       )}
 
-      {/* TOP NAVIGATION HEADER */}
+      {/* COMPACT MOBILE & FOLDABLE TOP APP BAR (< 1024px) */}
       {!focusMode && (
         <header
-          className={`px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
+          className={`lg:hidden px-3 py-2 pt-safe flex items-center justify-between gap-2 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 border-b transition-colors duration-200 ${
+            isDarkMode
+              ? 'bg-slate-950/92 border-slate-800/90 text-white'
+              : 'bg-white/95 border-slate-200 text-slate-900 shadow-xs'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab('home')}
+            className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-xl bg-slate-950 border border-indigo-500/40 p-1 flex items-center justify-center shrink-0 active:scale-95 transition cursor-pointer"
+            title="Return to Studio Home"
+            aria-label="brickOS Studio Home"
+          >
+            <img
+              src="/brick-logo.webp"
+              alt="brickOS"
+              className="w-full h-full object-contain"
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className={`min-h-[44px] flex-1 min-w-0 px-2.5 py-1 rounded-xl border text-left flex flex-col justify-center transition active:scale-[0.99] cursor-pointer ${
+              isDarkMode
+                ? 'bg-slate-900/90 border-slate-800 hover:border-indigo-500/50'
+                : 'bg-slate-100 border-slate-300 hover:border-indigo-400'
+            }`}
+            title="Tap to search tracks, stages, or stems"
+          >
+            <span className="text-xs font-bold truncate">
+              {selectedTrack.id} · {selectedTrack.title}
+            </span>
+            <span className={`text-[10px] font-mono truncate ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              {activeTab.replace('_', ' ').toUpperCase()} · {selectedTrack.bpm} BPM · {selectedTrack.key}
+            </span>
+          </button>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className={`min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center transition active:scale-95 cursor-pointer ${
+                isDarkMode
+                  ? 'bg-slate-900 border-slate-800 text-indigo-300'
+                  : 'bg-slate-100 border-slate-300 text-indigo-700'
+              }`}
+              title="Quick Search (Cmd+K)"
+              aria-label="Search Catalog"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSideNavOpen((prev) => !prev)}
+              className={`min-w-[44px] min-h-[44px] rounded-xl border flex items-center justify-center transition active:scale-95 cursor-pointer ${
+                isSideNavOpen
+                  ? 'bg-indigo-600 border-indigo-400 text-white'
+                  : isDarkMode
+                  ? 'bg-slate-900 border-slate-800 text-slate-200'
+                  : 'bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Toggle Catalog & Sessions Drawer"
+              aria-label="Toggle Catalog Drawer"
+            >
+              <FolderKanban className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* DESKTOP TOP NAVIGATION HEADER (>= 1024px) */}
+      {!focusMode && (
+        <header
+          className={`hidden lg:flex px-4 sm:px-6 py-2.5 items-center justify-between gap-4 sticky top-0 z-40 backdrop-blur-md flex-shrink-0 transition-colors duration-200 ${
             isDarkMode
               ? 'bg-slate-900/95 border-b border-slate-800 text-white'
               : 'bg-white/95 border-b border-slate-200 text-slate-900 shadow-sm'
@@ -2289,34 +2367,36 @@ export default function BrickOSMusicStudioWorkspace() {
       </header>
       )}
 
-      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Adaptive 1-click stage shortcuts) */}
+      {/* SMART ADAPTIVE CONTEXT ACTION BAR (Hidden on narrow Cover screens to preserve <=15% sticky chrome) */}
       {!focusMode && (
-        <SmartContextActionBar
-          activeTab={activeTab}
-          selectedTrack={selectedTrack}
-          onNavigateToTab={(tab) => {
-            setActiveTab(tab as any);
-            showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
-          }}
-          onQuickAction={(actionId) => {
-            if (actionId === 'copy_suno') {
-              copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
-            } else if (actionId === 'load_stems') {
-              audioMiniDaw.init();
-              const currentStems = getTrackStems(selectedTrack);
-              audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
-              setIsPlaying(true);
-              showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
-            } else if (actionId === 'measure_lufs') {
-              setActiveTab('mastering');
-              showToast('Loudness Metering Active: Target -12 LUFS', 'info');
-            } else if (actionId === 'sync_folder') {
-              setActiveTab('nextcloud_sync');
-              showToast('Refreshed Folder 207332 WebDAV assets', 'info');
-            }
-          }}
-          isDarkMode={isDarkMode}
-        />
+        <div className="hidden md:block">
+          <SmartContextActionBar
+            activeTab={activeTab}
+            selectedTrack={selectedTrack}
+            onNavigateToTab={(tab) => {
+              setActiveTab(tab as any);
+              showToast(`Navigated to ${tab.replace('_', ' ').toUpperCase()}`, 'info');
+            }}
+            onQuickAction={(actionId) => {
+              if (actionId === 'copy_suno') {
+                copyToClipboard(`[Suno v5.5 4-Block Prompt for ${selectedTrack.title}]\nGenre: ${selectedTrack.genre}\nBPM: ${selectedTrack.bpm}\nKey: ${selectedTrack.key}`, 'Suno Prompt');
+              } else if (actionId === 'load_stems') {
+                audioMiniDaw.init();
+                const currentStems = getTrackStems(selectedTrack);
+                audioMiniDaw.startPlayback(currentStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+                setIsPlaying(true);
+                showToast(`Loaded and playing 4 stems for "${selectedTrack.title}"`, 'success');
+              } else if (actionId === 'measure_lufs') {
+                setActiveTab('mastering');
+                showToast('Loudness Metering Active: Target -12 LUFS', 'info');
+              } else if (actionId === 'sync_folder') {
+                setActiveTab('nextcloud_sync');
+                showToast('Refreshed Folder 207332 WebDAV assets', 'info');
+              }
+            }}
+            isDarkMode={isDarkMode}
+          />
+        </div>
       )}
 
       {/* MAIN LAYOUT */}
@@ -2374,8 +2454,81 @@ export default function BrickOSMusicStudioWorkspace() {
           </>
         )}
 
+        {/* UNFOLDED FOLDABLE DUAL-PANE SPLIT RAIL (640px–1023px, hinge-aware) */}
+        {!focusMode && !isSideNavOpen && (
+          <aside
+            aria-label="Unfolded Catalog Split Pane"
+            style={{ width: 'clamp(240px, var(--fold-left-pane-width, 268px), 330px)' }}
+            className={`hidden md:flex lg:hidden flex-col flex-shrink-0 border-r overflow-hidden ${
+              isDarkMode
+                ? 'bg-slate-900/75 border-slate-800 text-slate-100'
+                : 'bg-white border-slate-200 text-slate-900'
+            }`}
+          >
+            <div className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+              <div className="min-w-0">
+                <div className="text-xs font-bold tracking-tight truncate">Catalog Split</div>
+                <div className={`text-[10px] font-mono tabular-nums ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {tracks.length} Master Tracks
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="min-w-[40px] min-h-[40px] rounded-xl bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition cursor-pointer"
+                  title="New Project"
+                  aria-label="Create New Project"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSideNavOpen(true)}
+                  className={`min-w-[40px] min-h-[40px] rounded-xl border flex items-center justify-center active:scale-95 transition cursor-pointer ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'
+                  }`}
+                  title="Expand Full Sessions & Assets Drawer"
+                  aria-label="Expand Full Drawer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 pb-36">
+              {tracks.map((trk) => {
+                const isSelected = trk.id === selectedTrack.id;
+                return (
+                  <button
+                    key={trk.id}
+                    type="button"
+                    onClick={() => setSelectedTrack(trk)}
+                    className={`w-full min-h-[52px] px-2.5 py-2 rounded-xl border text-left transition active:scale-[0.99] cursor-pointer flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? isDarkMode
+                          ? 'bg-indigo-600/20 border-indigo-500 text-white'
+                          : 'bg-indigo-50 border-indigo-400 text-indigo-950'
+                        : isDarkMode
+                        ? 'bg-slate-950/40 border-slate-800/70 text-slate-300 hover:bg-slate-800/70'
+                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">{trk.title}</div>
+                      <div className={`text-[10px] font-mono tabular-nums truncate mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {trk.id} · {trk.bpm} BPM · {trk.key}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        )}
+
         {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
-        <main className={`flex-1 flex flex-col min-w-0 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen p-0 m-0 overflow-hidden' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 space-y-3 overflow-y-auto' : 'p-4 sm:p-6 space-y-6 overflow-y-auto')}`}>
+        <main className={`flex-1 flex flex-col min-w-0 fold-hinge-gutter transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen p-0 m-0 overflow-hidden' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100dvh-180px)] lg:h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 pb-40 lg:pb-6 space-y-3 overflow-y-auto' : 'p-3 sm:p-5 lg:p-6 pb-40 lg:pb-8 space-y-4 lg:space-y-6 overflow-y-auto')}`}>
           
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
           {!focusMode && activeTab !== 'home' && activeTab !== 'lyrics' && activeTab !== 'brainstorming' && workspaceMode !== 'write' && (
@@ -3376,25 +3529,54 @@ export default function BrickOSMusicStudioWorkspace() {
         activeTab={activeTab}
       />
 
-      {/* PERSISTENT FLOATING AUDIO TRANSPORT */}
-      <GlobalAudioTransport
-        isPlaying={isPlaying}
-        isLoadingAudio={isLoadingAudio}
-        onTogglePlayPause={handleTogglePlayPauseAudio}
-        isMuted={isMutedAudio}
-        onToggleMute={handleToggleMuteAudio}
-        masterVolume={masterVolume}
-        onVolumeChange={(vol) => {
-          setMasterVolume(vol);
-          audioMiniDaw.setMasterVolume(vol);
-        }}
-        selectedTrack={selectedTrack}
-        onPreviousTrack={handlePreviousTrack}
-        onNextTrack={handleNextTrack}
-        onOpenMiniDaw={() => setActiveTab('mixer')}
-        onResetAudio={handleResetAudioEngine}
-        isDarkMode={isDarkMode}
-      />
+      {/* PERSISTENT FLOATING AUDIO TRANSPORT (Desktop >=1024px) */}
+      {!focusMode && (
+        <GlobalAudioTransport
+          isPlaying={isPlaying}
+          isLoadingAudio={isLoadingAudio}
+          onTogglePlayPause={handleTogglePlayPauseAudio}
+          isMuted={isMutedAudio}
+          onToggleMute={handleToggleMuteAudio}
+          masterVolume={masterVolume}
+          onVolumeChange={(vol) => {
+            setMasterVolume(vol);
+            audioMiniDaw.setMasterVolume(vol);
+          }}
+          selectedTrack={selectedTrack}
+          onPreviousTrack={handlePreviousTrack}
+          onNextTrack={handleNextTrack}
+          onOpenMiniDaw={() => setActiveTab('mixer')}
+          onResetAudio={handleResetAudioEngine}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* FOLDABLE & MOBILE BOTTOM THUMB DOCK + SLIDE-UP STUDIO DRAWER (< 1024px) */}
+      {!focusMode && (
+        <FoldableMobileDock
+          activeTab={activeTab}
+          setActiveTab={(tab) => setActiveTab(tab as any)}
+          selectedTrack={selectedTrack}
+          tracks={tracks}
+          onSelectTrack={(track) => {
+            setSelectedTrack(track);
+            showToast(`Switched track to: ${track.id} - ${track.title}`, 'info');
+          }}
+          isPlaying={isPlaying}
+          isLoadingAudio={isLoadingAudio}
+          onTogglePlayPause={handleTogglePlayPauseAudio}
+          auditionBus={auditionBus}
+          onToggleAuditionBus={handleToggleAuditionBus}
+          onOpenCreateProject={() => setIsCreateModalOpen(true)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onToggleFocusMode={handleToggleFocusMode}
+          onSyncDatabase={handleManualSyncDatabase}
+          isDbSyncing={isDbSyncing}
+          studioTheme={studioTheme}
+          onSelectTheme={handleSelectTheme}
+          isDarkMode={isDarkMode}
+        />
+      )}
 
       {/* WORKSPACE UNIVERSAL ASSET EDITOR MODAL: ADD, EDIT, ASK GEMINI, REASSIGN, LINK, DELETE */}
       <UniversalAssetEditorModal

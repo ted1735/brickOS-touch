@@ -463,7 +463,7 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
     const isCurrent = currentStep === stepIndex;
     const isBeatStart = stepIndex % 4 === 0;
 
-    let base = 'relative h-9 w-full rounded-md font-mono text-[10px] font-bold transition-all flex flex-col items-center justify-center cursor-pointer select-none border ';
+    let base = 'relative min-h-[44px] sm:min-h-[38px] w-full rounded-lg font-mono text-[11px] font-bold transition-all flex flex-col items-center justify-center cursor-pointer select-none border active:scale-95 ';
 
     // Cursor playhead glow
     if (isCurrent) {
@@ -636,17 +636,17 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
         </div>
       </div>
 
-      {/* 16-Step Grid Beat Header */}
-      <div className="overflow-x-auto pb-2">
-        <div className="min-w-[760px]">
-          {/* Step Number Bar */}
-          <div className="grid grid-cols-[180px_1fr] gap-2 items-center mb-2 px-1">
+      {/* Responsive 16-Step Grid (Wraps cleanly to 8x2 on Cover Screens, expands to 16 columns on Unfolded/Desktop) */}
+      <div className="pb-2">
+        <div className="w-full">
+          {/* Step Number Bar (Hidden on narrow cover screen; shown on unfolded/tablet+) */}
+          <div className="hidden md:grid grid-cols-[190px_1fr] gap-2 items-center mb-2 px-1">
             <div className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
               VOICE / CONTROLS
             </div>
 
             {/* 16 Step Indicators Grouped in 4 Beats */}
-            <div className="grid grid-cols-16 gap-1 text-center font-mono text-[10px]">
+            <div className="grid grid-cols-16 gap-1 text-center font-mono text-[10px] tabular-nums">
               {Array.from({ length: 16 }).map((_, idx) => {
                 const beatNum = Math.floor(idx / 4) + 1;
                 const isBeatStart = idx % 4 === 0;
@@ -670,35 +670,35 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
           </div>
 
           {/* Drum Rows */}
-          <div className="space-y-1.5">
+          <div className="space-y-2.5 md:space-y-1.5">
             {drumTracks.map((track) => {
               const hasActiveSteps = track.steps.some(s => s > 0);
               return (
                 <div
                   key={track.id}
-                  className={`grid grid-cols-[180px_1fr] gap-2 items-center p-1.5 rounded-xl border transition ${
+                  className={`grid grid-cols-1 md:grid-cols-[190px_1fr] gap-2.5 md:gap-2 items-center p-2.5 md:p-1.5 rounded-xl border transition ${
                     isDarkMode
                       ? 'bg-slate-900/70 border-slate-800/80 hover:border-slate-700'
                       : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   {/* Voice Strip: Test Trigger, Name, Mute/Solo, Volume */}
-                  <div className="flex items-center gap-1.5 pr-2 border-r border-slate-800/60 select-none">
-                    {/* Test Trigger Button */}
+                  <div className="flex items-center gap-2 md:pr-2 md:border-r border-slate-800/60 select-none">
+                    {/* Test Trigger Button (44px on touch) */}
                     <button
                       onClick={() => handleTestHit(track.id)}
-                      className="w-6 h-6 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
+                      className="min-w-[40px] min-h-[40px] sm:min-w-[32px] sm:min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0"
                       title={`Preview ${track.name}`}
                     >
-                      <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                      <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                     </button>
 
                     {/* Name */}
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold tracking-tight truncate flex items-center gap-1">
+                      <div className="text-xs font-bold tracking-tight truncate flex items-center gap-1.5">
                         <span className="truncate">{track.shortName}</span>
                         {hasActiveSteps && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                         )}
                       </div>
                     </div>
@@ -706,10 +706,10 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
                     {/* Mute button */}
                     <button
                       onClick={() => handleToggleMute(track.id)}
-                      className={`w-5 h-5 rounded text-[9px] font-mono font-bold transition flex items-center justify-center cursor-pointer ${
+                      className={`min-w-[40px] min-h-[40px] sm:min-w-[28px] sm:min-h-[28px] rounded-lg text-[10px] font-mono font-bold transition flex items-center justify-center active:scale-95 cursor-pointer ${
                         track.isMuted
                           ? 'bg-rose-600 text-white shadow-xs'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                          : 'bg-slate-800 text-slate-300 hover:text-white'
                       }`}
                       title={track.isMuted ? 'Unmute voice' : 'Mute voice'}
                     >
@@ -719,10 +719,10 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
                     {/* Solo button */}
                     <button
                       onClick={() => handleToggleSolo(track.id)}
-                      className={`w-5 h-5 rounded text-[9px] font-mono font-bold transition flex items-center justify-center cursor-pointer ${
+                      className={`min-w-[40px] min-h-[40px] sm:min-w-[28px] sm:min-h-[28px] rounded-lg text-[10px] font-mono font-bold transition flex items-center justify-center active:scale-95 cursor-pointer ${
                         track.isSolo
                           ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                          : 'bg-slate-800 text-slate-300 hover:text-white'
                       }`}
                       title={track.isSolo ? 'Unsolo voice' : 'Solo voice'}
                     >
@@ -737,13 +737,13 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
                       step="0.05"
                       value={track.volume}
                       onChange={(e) => handleVolumeChange(track.id, parseFloat(e.target.value))}
-                      className="w-10 accent-amber-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                      className="w-14 sm:w-12 accent-amber-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
                       title={`Volume: ${Math.round(track.volume * 100)}%`}
                     />
                   </div>
 
-                  {/* 16 Step Buttons */}
-                  <div className="grid grid-cols-16 gap-1">
+                  {/* 16 Step Buttons: 8x2 Grid on Cover Screens -> 16 Columns on Unfolded/Desktop */}
+                  <div className="grid grid-cols-8 md:grid-cols-16 gap-1.5 sm:gap-1">
                     {track.steps.map((stepVal, stepIdx) => (
                       <button
                         key={stepIdx}
@@ -751,9 +751,10 @@ export const MidiStepSequencer: React.FC<MidiStepSequencerProps> = ({
                         className={getStepButtonClass(track, stepVal, stepIdx)}
                         title={`${track.name} - Step ${stepIdx + 1}: ${
                           stepVal === 0 ? 'Off' : stepVal === 1 ? 'Normal' : stepVal === 2 ? 'Accent (+4dB)' : 'Ghost (-6dB)'
-                        } (Click to cycle)`}
+                        } (Tap to cycle)`}
                       >
-                        {stepVal === 2 ? '▲' : stepVal === 3 ? '•' : ''}
+                        <span className="text-[9px] opacity-40 md:hidden leading-none mb-0.5 tabular-nums">{stepIdx + 1}</span>
+                        <span>{stepVal === 2 ? '▲' : stepVal === 3 ? '•' : ''}</span>
                       </button>
                     ))}
                   </div>

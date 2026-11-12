@@ -52,6 +52,7 @@ import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
 import { TailscaleVpnModal } from './TailscaleVpnModal';
+import { emitAudioDiagnostic } from './AudioDiagnosticToast';
 
 interface NextcloudWebDavFileExplorerProps {
   tracks?: Track[];
@@ -195,6 +196,13 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     }
   };
 
+  // Live PROPFIND folder refresh: explicitly forces a cache bypass and re-indexes current directory
+  const handleRefreshFolder = async () => {
+    showToast('🔄 Bypassing RAM cache: Querying Nextcloud WebDAV via live PROPFIND...');
+    await fetchDirectory(currentPath, false, true);
+    showToast(`⚡ PROPFIND Complete: Live folder re-indexed (${folders.length + files.length} items synced)`);
+  };
+
   // Manually purge RAM PROPFIND Cache
   const handlePurgeCache = async () => {
     try {
@@ -295,6 +303,16 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = streamUrl;
+      audioRef.current.onerror = () => {
+        setAudioLoading(false);
+        emitAudioDiagnostic({
+          type: 'error',
+          trackTitle: file.name,
+          originalPath: file.path,
+          message: `WebDAV audio unavailable for '${file.name}'.`,
+          canRelink: true
+        });
+      };
       audioRef.current.load();
       audioRef.current.play()
         .then(() => {
@@ -304,7 +322,13 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         .catch(err => {
           console.warn('Playback trigger error:', err);
           setAudioLoading(false);
-          showToast(`Audition started for ${file.name}`);
+          emitAudioDiagnostic({
+            type: 'error',
+            trackTitle: file.name,
+            originalPath: file.path,
+            message: `Playback interrupted for '${file.name}': ${err.message}`,
+            canRelink: true
+          });
         });
     }
   };
@@ -716,17 +740,17 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => fetchDirectory(currentPath)}
+            onClick={() => handleRefreshFolder()}
             disabled={isLoading}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer ${
               isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-slate-700 hover:border-cyan-500/50'
+                : 'bg-slate-100 hover:bg-slate-200 text-cyan-700 border-slate-300'
             }`}
-            title="Refresh Directory (PROPFIND)"
+            title="Bypasses RAM cache and queries live Nextcloud WebDAV via PROPFIND to detect newly added or edited files"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-cyan-400' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">Refresh Folder</span>
           </button>
 
           <button
@@ -1313,25 +1337,29 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                         <div className={`pt-2 border-t flex items-center justify-between gap-1 text-[11px] ${
                           isDarkMode ? 'border-slate-800/80' : 'border-slate-100'
                         }`}>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             {file.isAudio && onSendToMixer && (
-                              <button
-                                onClick={() => onSendToMixer(file, 0)}
-                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 transition cursor-pointer flex items-center gap-1"
-                                title="Send audio to Mini-DAW multi-track mixer channel"
-                              >
-                                <Sliders className="w-3 h-3" />
-                                <span>DAW</span>
-                              </button>
+                              <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800">
+                                {[0, 1, 2, 3].map((chIdx) => (
+                                  <button
+                                    key={chIdx}
+                                    onClick={() => onSendToMixer(file, chIdx)}
+                                    className="min-h-[34px] sm:min-h-[26px] px-2 rounded-md text-[10px] font-mono font-bold bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 active:scale-95 transition cursor-pointer"
+                                    title={`Tap to assign audio to Mini-DAW Channel ${chIdx + 1}`}
+                                  >
+                                    Ch{chIdx + 1}
+                                  </button>
+                                ))}
+                              </div>
                             )}
 
                             <a
                               href={file.streamUrl}
                               download={file.name}
-                              className="p-1 rounded text-slate-400 hover:text-white transition"
+                              className="min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition"
                               title="Download file"
                             >
-                              <Download className="w-3 h-3" />
+                              <Download className="w-3.5 h-3.5" />
                             </a>
                           </div>
 
@@ -1456,13 +1484,18 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                             <td className="py-2 px-4 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {file.isAudio && onSendToMixer && (
-                                  <button
-                                    onClick={() => onSendToMixer(file, 0)}
-                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20"
-                                    title="Send to Mini-DAW"
-                                  >
-                                    DAW
-                                  </button>
+                                  <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 mr-1">
+                                    {[0, 1, 2, 3].map((chIdx) => (
+                                      <button
+                                        key={chIdx}
+                                        onClick={() => onSendToMixer(file, chIdx)}
+                                        className="min-h-[36px] sm:min-h-[28px] px-2 rounded text-[10px] font-mono font-bold bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 active:scale-95 cursor-pointer"
+                                        title={`Route to Mini-DAW Channel ${chIdx + 1}`}
+                                      >
+                                        Ch{chIdx + 1}
+                                      </button>
+                                    ))}
+                                  </div>
                                 )}
                                 <a
                                   href={file.streamUrl}
@@ -1584,14 +1617,19 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
             </div>
 
             {onSendToMixer && (
-              <button
-                onClick={() => onSendToMixer(activeAudio, 0)}
-                className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-cyan-950/40"
-                title="Send current stem to Mini-DAW"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Load in DAW</span>
-              </button>
+              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <span className="text-[10px] font-mono text-slate-400 px-1.5 hidden sm:inline">Assign:</span>
+                {[0, 1, 2, 3].map((chIdx) => (
+                  <button
+                    key={chIdx}
+                    onClick={() => onSendToMixer(activeAudio, chIdx)}
+                    className="min-h-[40px] px-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-bold active:scale-95 transition cursor-pointer"
+                    title={`Route current stem to Mini-DAW Channel ${chIdx + 1}`}
+                  >
+                    Ch{chIdx + 1}
+                  </button>
+                ))}
+              </div>
             )}
 
             <button

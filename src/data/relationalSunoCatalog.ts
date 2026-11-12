@@ -27,6 +27,13 @@ export interface CanonicalSongRelationalItem {
   thesis: string;
   revisionCount: number;
   revisions: SunoRevisionItem[];
+  nextcloudDirectory?: string;
+  nextcloud_directory?: string;
+  sunoTakesDirectory?: string;
+  suno_takes_directory?: string;
+  lyrics?: string;
+  suno_prompt?: string;
+  [key: string]: any;
 }
 
 export const RELATIONAL_SUNO_CATALOG: CanonicalSongRelationalItem[] = [
