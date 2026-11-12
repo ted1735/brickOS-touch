@@ -9,22 +9,97 @@ import { fetch as undiciFetch, ProxyAgent, Agent } from 'undici';
 import { exec, execSync, spawn } from 'child_process';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, CATALOG_TRACK_DEFINITIONS } from './src/data/nextcloudAssetIndex';
 import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
-import { getFirestore as getFirebaseFirestore, doc as firestoreDoc, setDoc as firestoreSetDoc } from 'firebase/firestore';
+import {
+  getFirestore as getFirebaseFirestore,
+  doc as firestoreDoc,
+  setDoc as firestoreSetDoc,
+  disableNetwork as firestoreDisableNetwork,
+  terminate as firestoreTerminate
+} from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 import { mapTrackFolderAssets, RawAssetItem } from './src/services/metadataMapperService';
 import { CANONICAL_TRACKS } from './src/data/canonicalCatalog';
 import { RELATIONAL_SUNO_CATALOG } from './src/data/relationalSunoCatalog';
 import { SUNO_MASTER_TRACKS } from './src/data/sunoMasterCatalog';
-import { getStudioDb, getStudioDbStats, queryFullRelationalCatalog, getCatalogEtag } from './src/services/sqliteCatalogService';
+import {
+  getStudioDb,
+  getStudioDbStats,
+  queryFullRelationalCatalog,
+  getCatalogEtag,
+  upsertRelinkedAssetInSqlite,
+  querySunoRevisionsForTrack,
+  getServerKvState,
+  setServerKvState
+} from './src/services/sqliteCatalogService';
 import { getDatabaseStats } from './src/server/brickDatabase';
 
 dotenv.config();
 
 let serverFirestoreDb: any = null;
 let serverFirestoreQuotaExhausted = false;
+const SERVER_QUOTA_KV_KEY = 'firestore_quota_exhausted';
+
+function isServerQuotaExhaustedError(err: any): boolean {
+  if (!err) return false;
+  const code = String(err?.code || err?.errorInfo?.code || '').toLowerCase();
+  const msg = `${err?.message || ''} ${err?.cause?.message || ''} ${String(err)}`.toLowerCase();
+  return (
+    code === 'resource-exhausted' ||
+    code === '8' ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('quota limit exceeded') ||
+    msg.includes('free daily write units') ||
+    msg.includes('free daily read units')
+  );
+}
+
+function isServerFirestoreQuotaActive(): boolean {
+  if (serverFirestoreQuotaExhausted) return true;
+  try {
+    const raw = getServerKvState(SERVER_QUOTA_KV_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.timestamp) {
+        const ageMs = Date.now() - parsed.timestamp;
+        const sameDay = new Date(parsed.timestamp).toDateString() === new Date().toDateString();
+        if (ageMs < 12 * 60 * 60 * 1000 && sameDay) {
+          serverFirestoreQuotaExhausted = true;
+          return true;
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
+function tripServerFirestoreCircuitBreaker(reason?: string) {
+  const wasActive = serverFirestoreQuotaExhausted;
+  serverFirestoreQuotaExhausted = true;
+  try {
+    setServerKvState(
+      SERVER_QUOTA_KV_KEY,
+      JSON.stringify({ timestamp: Date.now(), reason: reason || 'RESOURCE_EXHAUSTED' })
+    );
+  } catch {}
+  const activeDb = serverFirestoreDb;
+  serverFirestoreDb = null;
+  if (activeDb) {
+    firestoreDisableNetwork(activeDb)
+      .catch(() => {})
+      .finally(() => {
+        firestoreTerminate(activeDb).catch(() => {});
+      });
+  }
+  if (!wasActive) {
+    console.warn(
+      '[Server Firestore Circuit Breaker Active]: Daily free write quota reached (RESOURCE_EXHAUSTED). Terminated gRPC Write stream; persisting locally in SQLite + Nextcloud.'
+    );
+  }
+}
 
 function getServerFirestore() {
-  if (serverFirestoreQuotaExhausted) return null;
+  if (isServerFirestoreQuotaActive()) return null;
   if (!serverFirestoreDb && firebaseConfig && firebaseConfig.projectId) {
     try {
       const fbApp = getFirebaseApps().length === 0 ? initFirebaseApp(firebaseConfig) : getFirebaseApp();
@@ -36,6 +111,38 @@ function getServerFirestore() {
     }
   }
   return serverFirestoreDb;
+}
+
+async function safeServerFirestoreSetDoc(collectionName: string, docId: string, payload: Record<string, any>, timeoutMs = 2500): Promise<boolean> {
+  if (isServerFirestoreQuotaActive()) return false;
+  const db = getServerFirestore();
+  if (!db) return false;
+  const docRef = firestoreDoc(db, collectionName, docId);
+  let timedOut = false;
+  const writePromise = firestoreSetDoc(docRef, JSON.parse(JSON.stringify(payload)), { merge: true }).catch((err: any) => {
+    if (isServerQuotaExhaustedError(err)) {
+      tripServerFirestoreCircuitBreaker(err?.message);
+    }
+    if (!timedOut) throw err;
+    return undefined;
+  });
+  try {
+    await Promise.race([
+      writePromise.then(() => true),
+      new Promise<boolean>((_, reject) =>
+        setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`Firestore write timeout (${timeoutMs}ms)`));
+        }, timeoutMs)
+      )
+    ]);
+    return true;
+  } catch (err) {
+    if (timedOut) {
+      firestoreDisableNetwork(db).catch(() => {});
+    }
+    throw err;
+  }
 }
 
 // Protect server process from unhandled WebSocket, network, or async promise crashes
@@ -3104,8 +3211,11 @@ app.post('/api/nextcloud/index-all-catalog', async (req, res) => {
 });
 
 // 14c. Automated Metadata Mapper & Musical Characteristics Tagger
-export async function executeCatalogMetadataMapping(initialFiles?: any[]): Promise<any[]> {
-  const db = getServerFirestore();
+export async function executeCatalogMetadataMapping(
+  initialFiles?: any[],
+  syncToFirestore = false
+): Promise<any[]> {
+  const db = syncToFirestore && !isServerFirestoreQuotaActive() ? getServerFirestore() : null;
   const results: any[] = [];
   const startTime = Date.now();
 
@@ -3202,8 +3312,8 @@ export async function executeCatalogMetadataMapping(initialFiles?: any[]): Promi
         const mapped = mapTrackFolderAssets(track, folderAssets, def.folderName);
         results.push(mapped);
 
-        // Persist enriched musical specs to Firestore
-        if (db) {
+        // Persist enriched musical specs to Firestore ONLY when explicitly requested and quota is available
+        if (db && syncToFirestore && !isServerFirestoreQuotaActive()) {
           try {
             const trackDocRef = firestoreDoc(db, 'tracks', mapped.trackId);
             const rawPayload = {
@@ -3219,8 +3329,12 @@ export async function executeCatalogMetadataMapping(initialFiles?: any[]): Promi
             };
             const sanitizedPayload = JSON.parse(JSON.stringify(rawPayload));
             await firestoreSetDoc(trackDocRef, sanitizedPayload, { merge: true });
-          } catch (writeErr) {
-            console.warn(`[AutoMapper] Firestore write note for ${mapped.trackId}:`, writeErr);
+          } catch (writeErr: any) {
+            if (isServerQuotaExhaustedError(writeErr)) {
+              tripServerFirestoreCircuitBreaker(writeErr?.message);
+            } else {
+              console.warn(`[AutoMapper] Firestore write note for ${mapped.trackId}:`, writeErr?.message || writeErr);
+            }
           }
         }
       }
@@ -3230,7 +3344,7 @@ export async function executeCatalogMetadataMapping(initialFiles?: any[]): Promi
       stage: 'METADATA_MAPPER',
       action: 'BATCH_COMPLETED',
       level: 'success',
-      message: `Automated metadata mapper processed ${results.length} tracks with enriched musical specs & Firestore persistence (${Date.now() - startTime}ms)`,
+      message: `Automated metadata mapper processed ${results.length} tracks (${Date.now() - startTime}ms)`,
       details: {
         mappedCount: results.length,
         tracks: results.map(r => ({ id: r.trackId, status: r.status, takes: r.identifiedTakesCount, snippets: r.identifiedSnippetsCount }))
@@ -3254,13 +3368,14 @@ export async function executeCatalogMetadataMapping(initialFiles?: any[]): Promi
 app.post('/api/nextcloud/auto-map-metadata', async (req, res) => {
   const startTime = Date.now();
   try {
-    const results = await executeCatalogMetadataMapping();
+    const syncFirestore = Boolean(req.body?.syncFirestore);
+    const results = await executeCatalogMetadataMapping(undefined, syncFirestore);
     res.json({
       success: true,
       count: results.length,
       results,
       latencyMs: Date.now() - startTime,
-      message: `Automated metadata mapper processed and persisted ${results.length} tracks in Firestore.`
+      message: `Automated metadata mapper processed ${results.length} tracks.`
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Auto-map metadata failed' });
@@ -3394,24 +3509,22 @@ app.post('/api/audio/separate-stems', async (req, res) => {
       })();
     }
 
-    // Persist to Firestore
-    const db = getServerFirestore();
-    if (db) {
+    // Persist to Firestore only if quota is not exhausted
+    if (!isServerFirestoreQuotaActive()) {
       try {
-        const trackDocRef = firestoreDoc(db, 'tracks', trackId);
-        const updatePayload = {
+        await safeServerFirestoreSetDoc('tracks', trackId, {
           status: 'UVR5 Stem Prep',
           stems: separatedStems,
           lastStemSeparationAt: new Date().toISOString(),
           stemSeparationModel: `${model} + MelBand-Roformer-Kim-Inst-V2`,
           updatedAt: new Date().toISOString()
-        };
-        await Promise.race([
-          firestoreSetDoc(trackDocRef, JSON.parse(JSON.stringify(updatePayload)), { merge: true }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout (2500ms)')), 2500))
-        ]);
+        });
       } catch (fbErr: any) {
-        console.warn(`[UVR5 Separator] Firestore update note for ${trackId}:`, fbErr?.message || fbErr);
+        if (isServerQuotaExhaustedError(fbErr)) {
+          tripServerFirestoreCircuitBreaker(fbErr?.message);
+        } else {
+          console.warn(`[UVR5 Separator] Firestore update note for ${trackId}:`, fbErr?.message || fbErr);
+        }
       }
     }
 
@@ -3546,33 +3659,23 @@ app.post('/api/project/archive', async (req, res) => {
 
     // 3. Update Firestore track record ONLY as secondary milestone (if database configured and quota not exhausted)
     let firestoreWritten = false;
-    if (!serverFirestoreQuotaExhausted) {
-      const db = getServerFirestore();
-      if (db) {
-        try {
-          const trackDocRef = firestoreDoc(db, 'tracks', trackId);
-          const updatePayload = {
-            lastProjectArchiveAt: manifest.generatedAt,
-            archiveChecksum: manifest.checksum,
-            projectArchiveId: manifest.archiveId,
-            archiveManifestPath: manifestPath,
-            nextcloudVerified: writeVerification.verified,
-            nextcloudEtag: writeVerification.etag,
-            _schemaVersion: 2,
-            updatedAt: new Date().toISOString()
-          };
-          await Promise.race([
-            firestoreSetDoc(trackDocRef, JSON.parse(JSON.stringify(updatePayload)), { merge: true }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore timeout')), 2500))
-          ]);
-          firestoreWritten = true;
-        } catch (fbErr: any) {
-          if (fbErr?.message?.includes('RESOURCE_EXHAUSTED') || fbErr?.code === 'resource-exhausted' || fbErr?.code === 8) {
-            serverFirestoreQuotaExhausted = true;
-            console.warn(`[Server Firestore Circuit Breaker Active]: Quota limit reached; secondary Firestore writes bypassed.`);
-          } else {
-            console.warn(`[Project Archive] Firestore write notice:`, fbErr?.message || fbErr);
-          }
+    if (!isServerFirestoreQuotaActive()) {
+      try {
+        firestoreWritten = await safeServerFirestoreSetDoc('tracks', trackId, {
+          lastProjectArchiveAt: manifest.generatedAt,
+          archiveChecksum: manifest.checksum,
+          projectArchiveId: manifest.archiveId,
+          archiveManifestPath: manifestPath,
+          nextcloudVerified: writeVerification.verified,
+          nextcloudEtag: writeVerification.etag,
+          _schemaVersion: 2,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (fbErr: any) {
+        if (isServerQuotaExhaustedError(fbErr)) {
+          tripServerFirestoreCircuitBreaker(fbErr?.message);
+        } else {
+          console.warn(`[Project Archive] Firestore write notice:`, fbErr?.message || fbErr);
         }
       }
     }
@@ -3779,21 +3882,68 @@ const handleStreamOptions = (req: any, res: any) => {
 
 app.options('/api/nextcloud/stream', handleStreamOptions);
 app.options('/api/nextcloud/stream-media', handleStreamOptions);
+app.options('/api/audio/proxy', handleStreamOptions);
 
+// CORS-safe Audio Proxy for external Suno CloudFront streams (prevents WebAudio zero-output CORS taint)
+app.get('/api/audio/proxy', async (req: any, res: any) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified, X-brickOS-Audio-Source');
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  try {
+    const rawUrl = (req.query.url as string) || '';
+    if (!rawUrl || !rawUrl.startsWith('https://')) {
+      return res.status(400).json({ error: 'Valid https audio URL is required' });
+    }
+    const parsed = new URL(rawUrl);
+    const allowedHosts = ['suno.ai', 'suno.com', 'cloudfront.net', 'mermaid-symmetric.ts.net', 'moyercloud.com'];
+    const isAllowed = allowedHosts.some((suffix) => parsed.hostname === suffix || parsed.hostname.endsWith(`.${suffix}`));
+    if (!isAllowed) {
+      return res.status(403).json({ error: 'Host not permitted for audio proxy' });
+    }
+
+    const upstreamRes = await undiciFetch(rawUrl, {
+      headers: req.headers.range ? { Range: req.headers.range } : undefined,
+      signal: AbortSignal.timeout(12000)
+    });
+
+    res.status(upstreamRes.status);
+    res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'audio/mp4');
+    res.setHeader('X-brickOS-Audio-Source', 'suno-cloudfront');
+    if (upstreamRes.headers.get('content-range')) res.setHeader('Content-Range', upstreamRes.headers.get('content-range')!);
+    if (upstreamRes.headers.get('content-length')) res.setHeader('Content-Length', upstreamRes.headers.get('content-length')!);
+    if (upstreamRes.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', upstreamRes.headers.get('accept-ranges')!);
+
+    if (upstreamRes.body) {
+      const nodeStream = Readable.fromWeb(upstreamRes.body as any);
+      nodeStream.pipe(res);
+      return;
+    }
+    const ab = await upstreamRes.arrayBuffer();
+    return res.send(Buffer.from(ab));
+  } catch (err: any) {
+    console.warn('External audio proxy notice:', err.message);
+    return res.status(502).json({ error: 'Audio proxy upstream error', message: err.message });
+  }
+});
+
+// Reconciled Canonical Track Audio Paths aligned strictly with CATALOG_TRACK_DEFINITIONS & SQLite canonical_songs
 const CANONICAL_TRACK_REAL_AUDIO: Record<string, string> = {
   'TRK-01': '/remote.php/dav/files/ncted/Music-Production/Brick-by-Brick/Brick-by-Brick-Extended-Remastered-_02-44-v3.5.flac',
   'TRK-02': '/remote.php/dav/files/ncted/Music-Production/The-Masters-Hand/The-Masters-Hand-v3.0a-Remastered.mp3',
   'TRK-03': '/remote.php/dav/files/ncted/Music-Production/Every-Candles-Victory/Every-Candles-Victory-Gospel-v2.1.mp3',
-  'TRK-04': '/remote.php/dav/files/ncted/Music-Production/CheckYourHeartLight/6.5sbR_Check_Your_Heart_Light_Kane_v1.5_(Remastered).wav',
-  'TRK-05': '/remote.php/dav/files/ncted/Music-Production/Hands-Under-the-Table/7sbR_Hands_Under_The_Table_TedMoyer_v1.0_(Remastered).wav',
-  'TRK-06': '/remote.php/dav/files/ncted/Music-Production/Nothing-But-the-Blood/Modern-Worship/NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3',
-  'TRK-07': '/remote.php/dav/files/ncted/Music-Production/Calvary-Grit/Calvary-Grit-V4.55b-Team-Edit-Remastered.flac',
-  'TRK-08': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
-  'TRK-09': '/remote.php/dav/files/ncted/Music-Production/The-Anchor/Rock-Ballad/The-Anchor-v17.0a-Rock-Ballad-Remastered.mp3',
-  'TRK-10': '/remote.php/dav/files/ncted/Music-Production/The-Blueprint-and-The-Blood/v11.5-The-Blueprint-and-the-Blood-Persona-Upbeat-Remastered.flac',
-  'TRK-11': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/7.5sbR_The_Weight_and_The_Wisdom_Brandon_v4.5_(Remastered).wav',
-  'TRK-12': '/remote.php/dav/files/ncted/Music-Production/Leaning-Not-Leaving/Leaning-Not-Leaving-v7.5-Worship-Group.flac',
-  'TRK-13': '/remote.php/dav/files/ncted/Music-Production/Unity-In-The-Friction/Ted_Moyer_Unity_GOLD_MASTER.flac',
+  'TRK-04': '/remote.php/dav/files/ncted/Music-Production/Nothing-But-the-Blood/Modern-Worship/NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3',
+  'TRK-05': '/remote.php/dav/files/ncted/Music-Production/00-Active_Projects/v11.5-The-Blueprint-and-the-Blood-Persona-Upbeat-Remastered.flac',
+  'TRK-06': '/remote.php/dav/files/ncted/Music-Production/Blindfold-Blessing/Blindfold_Blessing_CEDM-PUNCH.mp3',
+  'TRK-07': '/remote.php/dav/files/ncted/Music-Production/Leaning-Not-Leaving/Leaning-Not-Leaving-v7.5-Worship-Group.flac',
+  'TRK-08': '/remote.php/dav/files/ncted/Music-Production/CheckYourHeartLight/6.5sbR_Check_Your_Heart_Light_Kane_v1.5_(Remastered).wav',
+  'TRK-09': '/remote.php/dav/files/ncted/Music-Production/Glitter/Glitter-1.56-Star-Electronic-Pop-Remastered.mp3',
+  'TRK-10': '/remote.php/dav/files/ncted/Music-Production/The-Blueprint-and-The-Blood/6.2sr_The_Blueprint_and_the_Blood_v5.2_-Remastered-_03-48.flac',
+  'TRK-11': '/remote.php/dav/files/ncted/Music-Production/Unity-In-The-Friction/Ted_Moyer_Unity_GOLD_MASTER.flac',
+  'TRK-12': '/remote.php/dav/files/ncted/Music-Production/The-Anchor/Rock-Ballad/The-Anchor-v17.0a-Rock-Ballad-Remastered.mp3',
+  'TRK-13': '/remote.php/dav/files/ncted/Music-Production/Calvary-Grit/Calvary-Grit-V4.55b-Team-Edit-Remastered.flac',
   'TRK-14': '/remote.php/dav/files/ncted/Music-Production/Venom-into-Victory/Identity-Anthem/Venom_Into_Victory.flac',
   'TRK-15': '/remote.php/dav/files/ncted/Music-Production/The-Final-Say/The_Final_Say_v3b_BMV3_MASTER.flac',
   'TRK-16': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.wav',
@@ -3807,66 +3957,132 @@ const CANONICAL_TRACK_REAL_AUDIO: Record<string, string> = {
   'TRK-24': '/remote.php/dav/files/ncted/Music-Production/Trading-In-The-Mask/Trading-In-The-Mask-v5.5b2-Remastered.wav',
   'TRK-25': '/remote.php/dav/files/ncted/Music-Production/Neverending-Whats-Next/NWN-v1.0ab-Spoken-Intro-Edit-Remastered.flac',
   'TRK-26': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.wav',
-  'TRK-27': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
+  'TRK-27': "/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain't Done-TedMoyer- FINAL .mp3",
   'TRK-28': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/7.5sbR_The_Weight_and_The_Wisdom_Brandon_v4.5_(Remastered).wav',
   'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav',
 };
 
-// Sovereign Audio Fallback: Maps missing or unlinked WebDAV tracks to authentic Suno CloudFront studio takes
-function findSunoFallbackStream(cleanPath: string): { streamUrl: string; title: string; trackId?: string } | null {
-  const lower = cleanPath.toLowerCase();
+// Exact-Track Sovereign Audio Fallback: Maps missing/unlinked WebDAV tracks strictly to that song's Suno CloudFront studio takes
+function findSunoFallbackStream(
+  cleanPath: string,
+  trackIdParam?: string,
+  trackTitleParam?: string
+): { streamUrl: string; title: string; trackId?: string } | null {
+  // 1. Exact SQLite suno_revisions match by trackIdParam or trackTitleParam (highest accuracy)
+  if (trackIdParam || trackTitleParam) {
+    const exactRevs = querySunoRevisionsForTrack(trackIdParam, trackTitleParam);
+    if (exactRevs.length > 0) {
+      return {
+        streamUrl: exactRevs[0].streamUrl,
+        title: exactRevs[0].title,
+        trackId: exactRevs[0].songId
+      };
+    }
+  }
 
-  // 1. Try matching track ID like TRK-01
-  const trkMatch = cleanPath.match(/TRK-(\d+)/i);
+  // 2. Match TRK-XX token embedded in path
+  const trkMatch = cleanPath.match(/TRK[-_]?(\d+)/i);
   if (trkMatch) {
     const trkId = `TRK-${trkMatch[1].padStart(2, '0')}`;
+    const sqlRevs = querySunoRevisionsForTrack(trkId);
+    if (sqlRevs.length > 0) {
+      return { streamUrl: sqlRevs[0].streamUrl, title: sqlRevs[0].title, trackId: sqlRevs[0].songId };
+    }
     const song = RELATIONAL_SUNO_CATALOG.find((s) => s.id.toUpperCase() === trkId.toUpperCase());
-    if (song && song.revisions && song.revisions.length > 0) {
-      const rev = song.revisions.find((r) => r.streamUrl) || song.revisions[0];
-      if (rev && rev.streamUrl) {
+    const rev = song?.revisions?.find((r) => r.streamUrl) || song?.revisions?.[0];
+    if (rev?.streamUrl && song) {
+      return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
+    }
+  }
+
+  // 3. Match folder/title tokens against RELATIONAL_SUNO_CATALOG or SUNO_MASTER_TRACKS
+  const lower = cleanPath.toLowerCase();
+  const cleanTitleSlug = (trackTitleParam || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pathSlug = lower.replace(/[^a-z0-9]/g, '');
+
+  for (const song of RELATIONAL_SUNO_CATALOG) {
+    const slug = song.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const folderSlug = ((song as any).nextcloudDirectory || song.nextcloud_directory || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (
+      (cleanTitleSlug.length > 3 && (slug.includes(cleanTitleSlug) || cleanTitleSlug.includes(slug))) ||
+      (slug.length > 4 && pathSlug.includes(slug)) ||
+      (folderSlug.length > 4 && pathSlug.includes(folderSlug))
+    ) {
+      const rev = song.revisions?.find((r) => r.streamUrl) || song.revisions?.[0];
+      if (rev?.streamUrl) {
         return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
       }
     }
   }
 
-  // 2. Try matching folder name or title against canonical catalog
-  for (const song of RELATIONAL_SUNO_CATALOG) {
-    const slug = song.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const folderSlug = (song.nextcloud_directory || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (
-      (slug.length > 4 && lower.includes(slug)) ||
-      (folderSlug.length > 4 && lower.includes(folderSlug))
-    ) {
-      if (song.revisions && song.revisions.length > 0) {
-        const rev = song.revisions.find((r) => r.streamUrl) || song.revisions[0];
-        if (rev && rev.streamUrl) {
-          return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
-        }
-      }
-    }
-  }
-
-  // 3. Try matching title in SUNO_MASTER_TRACKS
-  const filename = cleanPath.split('/').pop()?.toLowerCase() || '';
+  const filenameSlug = (cleanPath.split('/').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   for (const master of SUNO_MASTER_TRACKS) {
     const mTitle = master.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (mTitle.length > 5 && filename.includes(mTitle)) {
+    if (mTitle.length > 4 && (filenameSlug.includes(mTitle) || (cleanTitleSlug.length > 3 && mTitle.includes(cleanTitleSlug)))) {
       if (master.streamUrl) {
         return { streamUrl: master.streamUrl, title: master.title, trackId: master.id };
       }
     }
   }
 
-  // 4. Default to first song revision if nothing else matched but an audio file was requested
-  const fallbackSong = RELATIONAL_SUNO_CATALOG[0];
-  if (fallbackSong && fallbackSong.revisions && fallbackSong.revisions.length > 0) {
-    const rev = fallbackSong.revisions.find((r) => r.streamUrl);
-    if (rev && rev.streamUrl) {
-      return { streamUrl: rev.streamUrl, title: fallbackSong.title, trackId: fallbackSong.id };
-    }
+  return null;
+}
+
+// Helper: Execute live WebDAV PROPFIND Depth 1 scan for audio files in a directory
+async function scanNextcloudAudioDirectory(
+  targetFolderPath: string,
+  username: string,
+  password: string
+): Promise<Array<{ name: string; webdavPath: string; size: number; mimeType: string }>> {
+  if (!targetFolderPath) return [];
+  let normalized = targetFolderPath.trim().replace(/\/+$/, '');
+  if (!normalized.startsWith('/remote.php/dav/files/')) {
+    normalized = `/remote.php/dav/files/${username}/${normalized.replace(/^\/+/, '')}`;
   }
 
-  return null;
+  const headers: Record<string, string> = {
+    'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+    'Depth': '1',
+    'Content-Type': 'application/xml; charset=utf-8'
+  };
+  if (password) {
+    headers['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+  }
+
+  const { response: davRes } = await smartFetchWithFailover(normalized, {
+    method: 'PROPFIND',
+    headers,
+    body: LEAN_PROPFIND_XML,
+    signal: AbortSignal.timeout(8000)
+  });
+
+  if (!davRes.ok && davRes.status !== 207) return [];
+  const xml = await davRes.text();
+  const responseBlocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+  const results: Array<{ name: string; webdavPath: string; size: number; mimeType: string }> = [];
+  const normalizedLower = decodeURIComponent(normalized).toLowerCase();
+
+  for (const block of responseBlocks) {
+    const blockXml = block[1];
+    const hrefMatch = blockXml.match(/<d:href>([^<]+)<\/d:href>/i);
+    if (!hrefMatch) continue;
+    const rawHref = decodeURIComponent(hrefMatch[1]);
+    const cleanHref = rawHref.replace(/\/+$/, '');
+    if (cleanHref.toLowerCase() === normalizedLower) continue;
+    const isCollection = /<d:collection\s*\/?>/i.test(blockXml);
+    if (isCollection) continue;
+
+    const name = cleanHref.split('/').filter(Boolean).pop() || '';
+    const ext = name.toLowerCase().split('.').pop() || '';
+    if (!['wav', 'mp3', 'flac', 'm4a', 'ogg', 'aac'].includes(ext)) continue;
+
+    const sizeMatch = blockXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+    const size = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+    const mimeType = ext === 'wav' ? 'audio/wav' : ext === 'mp3' ? 'audio/mpeg' : ext === 'flac' ? 'audio/flac' : ext === 'm4a' ? 'audio/mp4' : 'audio/ogg';
+    results.push({ name, webdavPath: cleanHref, size, mimeType });
+  }
+
+  return results;
 }
 
 const handleNextcloudStream = async (req: any, res: any) => {
@@ -3874,11 +4090,15 @@ const handleNextcloudStream = async (req: any, res: any) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified, X-brickOS-Audio-Source, X-brickOS-Track-Id');
   res.setHeader('Accept-Ranges', 'bytes');
 
   try {
     const rawPath = req.query.path as string;
+    const trackIdParam = (req.query.trackId as string) || '';
+    const trackTitleParam = (req.query.title as string) || '';
+    const stemTypeParam = (req.query.stemType as string) || '';
+
     if (!rawPath) {
       return res.status(400).send('Missing file path');
     }
@@ -3889,6 +4109,7 @@ const handleNextcloudStream = async (req: any, res: any) => {
     if (password && password.trim().length > 0 && !cachedWebdavCredentials.password) {
       cachedWebdavCredentials.password = password.trim();
       cachedWebdavCredentials.username = username;
+      cachedWebdavCredentials.serverUrl = serverUrl;
       saveNextcloudSessionToDisk();
     }
 
@@ -3945,98 +4166,80 @@ const handleNextcloudStream = async (req: any, res: any) => {
     try {
       let { response: upstream, usedRoute } = await smartFetchWithFailover(cleanPath, {
         headers,
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(8000)
       });
 
-      // Intelligent Auto-Resolution: If requested file is not found (404), resolve actual authentic audio track
+      // Tier 2 Auto-Resolution on 404: Check SQLite relinked assets first, then reconciled canonical track paths
       if (upstream.status === 404) {
-        let fallbackCandidate: string | null = null;
+        const candidatePaths: string[] = [];
 
-        // Check track ID pattern (e.g. TRK-16, TRK-29)
+        // Check trackId from query param or embedded TRK-XX in path
         const trkMatch = cleanPath.match(/TRK[-_](\d{2})/i);
-        if (trkMatch && trkMatch[1]) {
-          const trkKey = `TRK-${trkMatch[1]}`;
-          if (CANONICAL_TRACK_REAL_AUDIO[trkKey]) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO[trkKey];
+        const resolvedTrkKey = (trackIdParam || (trkMatch ? `TRK-${trkMatch[1]}` : '')).toUpperCase();
+
+        if (resolvedTrkKey) {
+          try {
+            const db = getStudioDb();
+            if (db) {
+              const sqlRows = db.prepare('SELECT webdav_path, category FROM nextcloud_assets WHERE UPPER(track_id) = ?').all(resolvedTrkKey) as any[];
+              for (const row of sqlRows) {
+                if (row?.webdav_path && row.webdav_path !== cleanPath && /\.(wav|mp3|flac|m4a|ogg)$/i.test(row.webdav_path)) {
+                  candidatePaths.push(row.webdav_path);
+                }
+              }
+            }
+          } catch {}
+
+          if (CANONICAL_TRACK_REAL_AUDIO[resolvedTrkKey] && CANONICAL_TRACK_REAL_AUDIO[resolvedTrkKey] !== cleanPath) {
+            candidatePaths.push(CANONICAL_TRACK_REAL_AUDIO[resolvedTrkKey]);
           }
         }
 
-        // Check keywords if no TRK match or candidate
-        if (!fallbackCandidate) {
-          const lowerPath = cleanPath.toLowerCase();
-          if (lowerPath.includes('meet_me_here') || lowerPath.includes('meet-me-here')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-16'];
-          } else if (lowerPath.includes('brick-by-brick') || lowerPath.includes('brick_by_brick')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-01'];
-          } else if (lowerPath.includes('masters-hand') || lowerPath.includes('the_masters_hand') || lowerPath.includes('mastershand')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-02'];
-          } else if (lowerPath.includes('every-candles-victory') || lowerPath.includes('candle-gospel') || lowerPath.includes('candle')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-03'];
-          } else if (lowerPath.includes('heartlight') || lowerPath.includes('heart-light') || lowerPath.includes('checkyourheartlight') || lowerPath.includes('check_your_heart_light')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-04'];
-          } else if (lowerPath.includes('hands-under-the-table') || lowerPath.includes('hands_under_the_table')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-05'];
-          } else if (lowerPath.includes('nothing-but-the-blood') || lowerPath.includes('nothing_but_the_blood') || lowerPath.includes('nbtb')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-06'];
-          } else if (lowerPath.includes('calvary-grit') || lowerPath.includes('calvary_grit')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-07'];
-          } else if (lowerPath.includes('the-anchor') || lowerPath.includes('the_anchor') || lowerPath.includes('anchor')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-09'];
-          } else if (lowerPath.includes('blueprint') || lowerPath.includes('the-blueprint-and-the-blood')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-10'];
-          } else if (lowerPath.includes('weight-and-the-wisdom') || lowerPath.includes('the-weight-and-the-wisdom') || lowerPath.includes('weight')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-11'];
-          } else if (lowerPath.includes('leaning-not-leaving') || lowerPath.includes('leaning_not_leaving') || lowerPath.includes('lnl')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-12'];
-          } else if (lowerPath.includes('unity-in-the-friction') || lowerPath.includes('unity_in_the_friction') || lowerPath.includes('unity')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-13'];
-          } else if (lowerPath.includes('venom-into-victory') || lowerPath.includes('venom_into_victory') || lowerPath.includes('venom')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-14'];
-          } else if (lowerPath.includes('the-final-say') || lowerPath.includes('the_final_say') || lowerPath.includes('final_say')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-15'];
-          } else if (lowerPath.includes('in-our-veins') || lowerPath.includes('in_our_veins')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-17'];
-          } else if (lowerPath.includes('we-bow-we-shout') || lowerPath.includes('we_bow_we_shout') || lowerPath.includes('we-bow')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-18'];
-          } else if (lowerPath.includes('through-the-valley') || lowerPath.includes('valley-or-the-flame')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-19'];
-          } else if (lowerPath.includes('ghost-in-the-machine') || lowerPath.includes('ghost_in_the_machine')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-20'];
-          } else if (lowerPath.includes('milestone') || lowerPath.includes('the-milestone')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-21'];
-          } else if (lowerPath.includes('breath-and-bone') || lowerPath.includes('breath-&-bone') || lowerPath.includes('breath_and_bone')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-22'];
-          } else if (lowerPath.includes('blindfold-blessing') || lowerPath.includes('blindfold_blessing')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-23'];
-          } else if (lowerPath.includes('trading-in-the-mask') || lowerPath.includes('trading_in_the_mask')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-24'];
-          } else if (lowerPath.includes('neverending-whats-next') || lowerPath.includes('neverending') || lowerPath.includes('nwn')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-25'];
-          } else if (lowerPath.includes('theworkaintdone') || lowerPath.includes('the-work-aint-done')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-27'];
-          } else if (lowerPath.includes('manic') || lowerPath.includes('mundane') || lowerPath.includes('mitm')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-29'];
+        // Check folder/title keywords if no candidate found yet
+        if (candidatePaths.length === 0) {
+          const lowerCombined = `${cleanPath} ${trackTitleParam}`.toLowerCase();
+          const defMatch = CATALOG_TRACK_DEFINITIONS.find(
+            (d) =>
+              d.trackId === resolvedTrkKey ||
+              lowerCombined.includes(d.folderName.toLowerCase()) ||
+              lowerCombined.includes(d.title.toLowerCase())
+          );
+          if (defMatch && CANONICAL_TRACK_REAL_AUDIO[defMatch.trackId]) {
+            candidatePaths.push(CANONICAL_TRACK_REAL_AUDIO[defMatch.trackId]);
           }
         }
 
-        if (fallbackCandidate && fallbackCandidate !== cleanPath) {
-          addNextcloudLog({
-            stage: 'STREAM_MEDIA',
-            action: 'AUTO_RESOLVE',
-            level: 'info',
-            message: `Auto-resolving ${cleanPath.split('/').pop()} to real authentic music: ${fallbackCandidate.split('/').pop()}`,
-            details: { requestedPath: cleanPath, resolvedPath: fallbackCandidate }
-          });
-          const retryResult = await smartFetchWithFailover(fallbackCandidate, {
-            headers,
-            signal: AbortSignal.timeout(3000)
-          });
-          if (retryResult.response.status === 200 || retryResult.response.status === 206) {
-            upstream = retryResult.response;
-            usedRoute = retryResult.usedRoute;
-            cleanPath = fallbackCandidate;
-            contentType = getMimeType(fallbackCandidate);
-          }
+        // Prefer candidates matching stemType if multiple exist
+        const orderedCandidates = stemTypeParam
+          ? [...candidatePaths].sort((a, b) => {
+              const aMatch = a.toLowerCase().includes(stemTypeParam.toLowerCase()) ? 0 : 1;
+              const bMatch = b.toLowerCase().includes(stemTypeParam.toLowerCase()) ? 0 : 1;
+              return aMatch - bMatch;
+            })
+          : candidatePaths;
+
+        for (const fallbackCandidate of orderedCandidates.slice(0, 3)) {
+          if (!fallbackCandidate || fallbackCandidate === cleanPath) continue;
+          try {
+            const retryResult = await smartFetchWithFailover(fallbackCandidate, {
+              headers,
+              signal: AbortSignal.timeout(8000)
+            });
+            if (retryResult.response.status === 200 || retryResult.response.status === 206) {
+              upstream = retryResult.response;
+              usedRoute = retryResult.usedRoute;
+              cleanPath = fallbackCandidate;
+              contentType = getMimeType(fallbackCandidate);
+              addNextcloudLog({
+                stage: 'STREAM_MEDIA',
+                action: 'AUTO_RESOLVE',
+                level: 'info',
+                message: `Auto-resolved ${rawPath.split('/').pop()} -> ${fallbackCandidate.split('/').pop()}`,
+                details: { requestedPath: rawPath, resolvedPath: fallbackCandidate, trackId: resolvedTrkKey }
+              });
+              break;
+            }
+          } catch {}
         }
       }
 
@@ -4050,7 +4253,8 @@ const handleNextcloudStream = async (req: any, res: any) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified, X-brickOS-Audio-Source');
+        res.setHeader('X-brickOS-Audio-Source', 'nextcloud-webdav');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
 
@@ -4099,41 +4303,44 @@ const handleNextcloudStream = async (req: any, res: any) => {
       });
     }
 
-    // Decoupled from synthetic sine wave generator: If WebDAV is unavailable, stream authentic Suno CloudFront audio
-    const fallbackSuno = findSunoFallbackStream(cleanPath);
+    // Tier 3 Exact-Track Suno CloudFront Fallback (Never falls back to arbitrary wrong song or synthetic sine wave)
+    const fallbackSuno = findSunoFallbackStream(cleanPath, trackIdParam, trackTitleParam);
     if (fallbackSuno && fallbackSuno.streamUrl) {
       addNextcloudLog({
         stage: 'STREAM_MEDIA',
         action: 'CLOUDFRONT_FALLBACK',
         level: 'warn',
-        message: `WebDAV 404 for ${cleanPath.split('/').pop()} - Streaming authentic Suno CloudFront revision for ${fallbackSuno.title}`,
+        message: `WebDAV unavailable for ${cleanPath.split('/').pop()} - Streaming authentic Suno CloudFront take for ${fallbackSuno.title}`,
         details: { path: cleanPath, cloudfrontUrl: fallbackSuno.streamUrl, trackId: fallbackSuno.trackId }
       });
 
       try {
         const cfRes = await undiciFetch(fallbackSuno.streamUrl, {
-          headers: req.headers.range ? { Range: req.headers.range } : undefined
+          headers: req.headers.range ? { Range: req.headers.range } : undefined,
+          signal: AbortSignal.timeout(10000)
         });
 
-        res.status(cfRes.status);
-        res.setHeader('Content-Type', cfRes.headers.get('content-type') || 'audio/mp4');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Expose-Headers', 'X-brickOS-Audio-Source, X-brickOS-Original-Status, X-brickOS-Original-Path, X-brickOS-Track-Id, Content-Range, Content-Length, Accept-Ranges');
-        res.setHeader('X-brickOS-Audio-Source', 'suno-cloudfront');
-        res.setHeader('X-brickOS-Original-Status', '404');
-        res.setHeader('X-brickOS-Original-Path', cleanPath);
-        res.setHeader('X-brickOS-Track-Id', fallbackSuno.trackId || '');
-        if (cfRes.headers.get('content-range')) res.setHeader('Content-Range', cfRes.headers.get('content-range')!);
-        if (cfRes.headers.get('content-length')) res.setHeader('Content-Length', cfRes.headers.get('content-length')!);
-        if (cfRes.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', cfRes.headers.get('accept-ranges')!);
+        if (cfRes.status === 200 || cfRes.status === 206) {
+          res.status(cfRes.status);
+          res.setHeader('Content-Type', cfRes.headers.get('content-type') || 'audio/mp4');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Expose-Headers', 'X-brickOS-Audio-Source, X-brickOS-Original-Status, X-brickOS-Original-Path, X-brickOS-Track-Id, Content-Range, Content-Length, Accept-Ranges');
+          res.setHeader('X-brickOS-Audio-Source', 'suno-cloudfront');
+          res.setHeader('X-brickOS-Original-Status', '404');
+          res.setHeader('X-brickOS-Original-Path', cleanPath);
+          res.setHeader('X-brickOS-Track-Id', fallbackSuno.trackId || trackIdParam || '');
+          if (cfRes.headers.get('content-range')) res.setHeader('Content-Range', cfRes.headers.get('content-range')!);
+          if (cfRes.headers.get('content-length')) res.setHeader('Content-Length', cfRes.headers.get('content-length')!);
+          if (cfRes.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', cfRes.headers.get('accept-ranges')!);
 
-        if (cfRes.body) {
-          const nodeStream = Readable.fromWeb(cfRes.body as any);
-          nodeStream.pipe(res);
-          return;
+          if (cfRes.body) {
+            const nodeStream = Readable.fromWeb(cfRes.body as any);
+            nodeStream.pipe(res);
+            return;
+          }
+          const ab = await cfRes.arrayBuffer();
+          return res.send(Buffer.from(ab));
         }
-        const ab = await cfRes.arrayBuffer();
-        return res.send(Buffer.from(ab));
       } catch (cfErr: any) {
         console.warn('CloudFront stream fallback error:', cfErr.message);
       }
@@ -4146,6 +4353,7 @@ const handleNextcloudStream = async (req: any, res: any) => {
       error: 'ASSET_NOT_FOUND',
       message: `Audio asset could not be streamed from WebDAV or Suno CloudFront for ${cleanPath.split('/').pop()}`,
       path: cleanPath,
+      trackId: trackIdParam || undefined,
       suggestedAction: 'AUTO_RELINK'
     });
   } catch (err: any) {
@@ -4157,63 +4365,186 @@ const handleNextcloudStream = async (req: any, res: any) => {
 app.get('/api/nextcloud/stream', handleNextcloudStream);
 app.get('/api/nextcloud/stream-media', handleNextcloudStream);
 
-// Automated Background Asset Relinker
+// Automated Background & Interactive Live WebDAV PROPFIND Asset Relinker (persists to SQLite)
 app.post('/api/nextcloud/auto-relink', async (req, res) => {
-  const { trackId, filename, trackTitle } = req.body;
+  const {
+    trackId,
+    filename,
+    trackTitle,
+    stemName,
+    stemType,
+    originalPath,
+    serverUrl,
+    username: bodyUser,
+    password: bodyPass
+  } = req.body || {};
   const start = Date.now();
+
   try {
+    const username = bodyUser || cachedWebdavCredentials.username || 'ncted';
+    const password = (bodyPass && String(bodyPass).trim()) || cachedWebdavCredentials.password || process.env.NEXTCLOUD_APP_PASSWORD || process.env.NEXTCLOUD_PASSWORD || '';
+    if (password && !cachedWebdavCredentials.password) {
+      cachedWebdavCredentials.password = password;
+      cachedWebdavCredentials.username = username;
+      if (serverUrl) cachedWebdavCredentials.serverUrl = String(serverUrl).replace(/\/$/, '');
+      saveNextcloudSessionToDisk();
+    }
+
     const db = getStudioDb();
+    const revisions = querySunoRevisionsForTrack(trackId, trackTitle);
 
-    // 1. Check if SQLite nextcloud_assets has a matching entry
-    if (trackId) {
-      const assetRow = db.prepare('SELECT webdav_path, filename FROM nextcloud_assets WHERE track_id = ? LIMIT 1').get(trackId) as any;
-      if (assetRow && assetRow.webdav_path) {
-        CANONICAL_TRACK_REAL_AUDIO[trackId] = assetRow.webdav_path;
+    // Resolve canonical track ID if user/caller passed title only
+    let resolvedTrackId = (trackId || '').toUpperCase();
+    if (!/^TRK-\d+$/i.test(resolvedTrackId) && trackTitle) {
+      const defByTitle = CATALOG_TRACK_DEFINITIONS.find(
+        (d) =>
+          d.title.toLowerCase() === String(trackTitle).toLowerCase() ||
+          d.aliases.some((a) => String(trackTitle).toLowerCase().includes(a.toLowerCase()))
+      );
+      if (defByTitle) resolvedTrackId = defByTitle.trackId;
+    }
+
+    // 1. Live Nextcloud WebDAV PROPFIND Directory Scan (discovers newly moved/renamed stems & persists to SQLite)
+    const candidateFolders = new Set<string>();
+    if (originalPath && originalPath.includes('/')) {
+      candidateFolders.add(originalPath.substring(0, originalPath.lastIndexOf('/')));
+    }
+    const trackDef = CATALOG_TRACK_DEFINITIONS.find((d) => d.trackId === resolvedTrackId);
+    if (trackDef?.folderName) {
+      candidateFolders.add(`/remote.php/dav/files/${username}/Music-Production/${trackDef.folderName}`);
+      candidateFolders.add(`/remote.php/dav/files/${username}/Music-Production/00-Active_Projects/${trackDef.folderName}`);
+    }
+    if (db && resolvedTrackId) {
+      const songRow = db.prepare('SELECT nextcloud_directory FROM canonical_songs WHERE UPPER(id) = ?').get(resolvedTrackId) as any;
+      if (songRow?.nextcloud_directory) {
+        candidateFolders.add(
+          songRow.nextcloud_directory.startsWith('/')
+            ? songRow.nextcloud_directory
+            : `/remote.php/dav/files/${username}/${songRow.nextcloud_directory.replace(/^\/+/, '')}`
+        );
+      }
+    }
+
+    const discoveredFiles: Array<{ name: string; webdavPath: string; size: number; mimeType: string; score: number }> = [];
+    const targetTokens = `${trackTitle || ''} ${stemName || ''} ${stemType || ''} ${filename || ''}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((tok) => tok.length >= 3);
+
+    for (const folder of candidateFolders) {
+      try {
+        const files = await scanNextcloudAudioDirectory(folder, username, password);
+        for (const f of files) {
+          if (originalPath && f.webdavPath === originalPath) continue; // skip the broken path
+          const lowerName = f.name.toLowerCase();
+          let score = 10;
+          if (stemType && lowerName.includes(String(stemType).toLowerCase())) score += 40;
+          if (lowerName.includes('master') || lowerName.includes('remaster') || lowerName.includes('final')) score += 20;
+          if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav') || lowerName.endsWith('.flac')) score += 10;
+          for (const tok of targetTokens) {
+            if (lowerName.includes(tok)) score += 12;
+          }
+          discoveredFiles.push({ ...f, score });
+        }
+        if (discoveredFiles.length > 0) break;
+      } catch {
+        // try next folder
+      }
+    }
+
+    if (discoveredFiles.length > 0) {
+      discoveredFiles.sort((a, b) => b.score - a.score);
+      const best = discoveredFiles[0];
+      const folderDir = best.webdavPath.substring(0, best.webdavPath.lastIndexOf('/'));
+
+      if (resolvedTrackId) {
+        CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] = best.webdavPath;
+        for (const df of discoveredFiles.slice(0, 6)) {
+          upsertRelinkedAssetInSqlite({
+            trackId: resolvedTrackId,
+            webdavPath: df.webdavPath,
+            filename: df.name,
+            mimeType: df.mimeType,
+            fileSizeBytes: df.size,
+            directoryPath: folderDir
+          });
+        }
+      }
+
+      return res.json({
+        success: true,
+        matchedPath: best.webdavPath,
+        filename: best.name,
+        trackId: resolvedTrackId || trackId,
+        source: 'live_propfind',
+        discoveredCount: discoveredFiles.length,
+        discoveredFiles: discoveredFiles.slice(0, 8),
+        revisions,
+        latencyMs: Date.now() - start
+      });
+    }
+
+    // 2. Check existing SQLite nextcloud_assets (excluding the broken originalPath)
+    if (db && resolvedTrackId) {
+      const sqlRows = db.prepare('SELECT webdav_path, filename FROM nextcloud_assets WHERE UPPER(track_id) = ?').all(resolvedTrackId) as any[];
+      const viable = sqlRows.find(
+        (r) =>
+          r?.webdav_path &&
+          r.webdav_path !== originalPath &&
+          /\.(wav|mp3|flac|m4a|ogg)$/i.test(r.webdav_path)
+      );
+      if (viable) {
+        CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] = viable.webdav_path;
         return res.json({
           success: true,
-          matchedPath: assetRow.webdav_path,
-          filename: assetRow.filename,
-          trackId,
+          matchedPath: viable.webdav_path,
+          filename: viable.filename,
+          trackId: resolvedTrackId,
           source: 'sqlite_index',
+          revisions,
           latencyMs: Date.now() - start
         });
       }
     }
 
-    // 2. Search known folder mappings or fuzzy match
-    const searchTarget = (trackTitle || filename || trackId || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    for (const [id, audioPath] of Object.entries(CANONICAL_TRACK_REAL_AUDIO)) {
-      const pathClean = audioPath.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (id === trackId || (searchTarget.length > 4 && pathClean.includes(searchTarget))) {
-        if (trackId) CANONICAL_TRACK_REAL_AUDIO[trackId] = audioPath;
-        return res.json({
-          success: true,
-          matchedPath: audioPath,
-          trackId: id,
-          source: 'canonical_mapping',
-          latencyMs: Date.now() - start
-        });
-      }
+    // 3. Reconciled CANONICAL_TRACK_REAL_AUDIO fallback (excluding broken originalPath)
+    if (resolvedTrackId && CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] && CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] !== originalPath) {
+      const mapped = CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId];
+      upsertRelinkedAssetInSqlite({
+        trackId: resolvedTrackId,
+        webdavPath: mapped,
+        filename: mapped.split('/').pop() || 'master.mp3'
+      });
+      return res.json({
+        success: true,
+        matchedPath: mapped,
+        filename: mapped.split('/').pop(),
+        trackId: resolvedTrackId,
+        source: 'canonical_mapping',
+        revisions,
+        latencyMs: Date.now() - start
+      });
     }
 
-    // 3. Fallback to scanning SQLite canonical_songs directory
-    if (trackId) {
-      const song = db.prepare('SELECT nextcloud_directory, title FROM canonical_songs WHERE id = ?').get(trackId) as any;
-      if (song && song.nextcloud_directory) {
-        const candidate = `/remote.php/dav/files/ncted/Music-Production/${song.nextcloud_directory}`;
-        return res.json({
-          success: true,
-          matchedPath: candidate,
-          trackId,
-          source: 'song_directory',
-          latencyMs: Date.now() - start
-        });
-      }
+    // 4. If WebDAV is unreachable/missing but Suno revisions exist for this exact track, return them cleanly
+    if (revisions.length > 0) {
+      return res.json({
+        success: true,
+        matchedPath: revisions[0].streamUrl,
+        streamUrl: revisions[0].streamUrl,
+        filename: `${revisions[0].title} (Suno CloudFront).m4a`,
+        trackId: resolvedTrackId || revisions[0].songId,
+        source: 'suno_cloudfront',
+        revisions,
+        latencyMs: Date.now() - start
+      });
     }
 
     return res.status(404).json({
       success: false,
-      message: `No matching asset discovered for '${trackTitle || trackId || filename}'.`,
+      trackId: resolvedTrackId || trackId,
+      message: `No live WebDAV file or Suno revision matched '${trackTitle || trackId || filename}'.`,
+      revisions: [],
       latencyMs: Date.now() - start
     });
   } catch (err: any) {
@@ -4234,8 +4565,22 @@ app.get('/api/catalog/songs', (_req, res) => {
 app.get('/api/catalog/revisions/:songId', (req, res) => {
   try {
     const { songId } = req.params;
+    const queryTitle = (req.query.title as string) || '';
     const db = getStudioDb();
-    const rows = db.prepare('SELECT * FROM suno_revisions WHERE song_id = ? ORDER BY created_at DESC').all(songId);
+    let rows = db.prepare('SELECT * FROM suno_revisions WHERE UPPER(song_id) = UPPER(?) ORDER BY created_at DESC').all(songId) as any[];
+
+    if (rows.length === 0) {
+      const canonicalSong = CANONICAL_TRACKS.find((t) => t.id.toUpperCase() === songId.toUpperCase());
+      const defSong = CATALOG_TRACK_DEFINITIONS.find((d) => d.trackId.toUpperCase() === songId.toUpperCase());
+      const lookupTitle = queryTitle || canonicalSong?.title || defSong?.title || '';
+      if (lookupTitle) {
+        const matched = querySunoRevisionsForTrack(undefined, lookupTitle);
+        if (matched.length > 0) {
+          rows = db.prepare('SELECT * FROM suno_revisions WHERE UPPER(song_id) = UPPER(?) ORDER BY created_at DESC').all(matched[0].songId) as any[];
+        }
+      }
+    }
+
     res.json({ success: true, songId, revisions: rows });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

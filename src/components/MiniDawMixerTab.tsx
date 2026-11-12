@@ -230,6 +230,17 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     setChannelProgress(buildDefaultChannelProgress(track.id));
   }, [track.id]);
 
+  useEffect(() => {
+    const handleRelinked = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (detail?.trackId && detail.trackId === track.id) {
+        setTracks(getTrackStems(track));
+      }
+    };
+    window.addEventListener('brickos:track-relinked', handleRelinked);
+    return () => window.removeEventListener('brickos:track-relinked', handleRelinked);
+  }, [track]);
+
   // Execute UVR5 BS-Roformer Stem Separation with live per-channel progress
   const handleExecuteStemSeparation = async (customTrackId?: string) => {
     const trkIdToUse = customTrackId || targetSeparationTrackId || track.id;

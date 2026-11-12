@@ -1104,56 +1104,32 @@ class MiniDawEngine {
       gain.gain.setValueAtTime(initialVol, this.ctx.currentTime);
       panner.pan.setValueAtTime(this.isMono ? 0 : t.pan / 100, this.ctx.currentTime);
 
-      // Connect channel strip audio path
+      // Connect channel strip audio path (Zero synthetic sine/oscillator beds)
       panner.connect(gain);
       gain.connect(analyser);
       analyser.connect(this.masterGain);
 
-      // 1. INSTANT ZERO-LATENCY SYNTHESIS BED (Plays immediately in tempo & key)
-      const stemType = (t.stemType || '').toLowerCase();
-      const nameLower = (t.name || '').toLowerCase();
-      let synthBuffer: AudioBuffer | null = null;
+      const canonicalTrackId = this.activeTrackId || undefined;
+      const canonicalTrackTitle = this.activeTrackTitle || undefined;
+      const streamMeta = {
+        trackId: canonicalTrackId,
+        trackTitle: canonicalTrackTitle,
+        stemType: t.stemType
+      };
 
-      if (stemType === 'drums' || nameLower.includes('drum') || nameLower.includes('perc') || t.id === 2) {
-        synthBuffer = this.createRhythmicDrumBuffer(bpm);
-      } else if (stemType === 'bass' || nameLower.includes('bass') || nameLower.includes('sub') || t.id === 3) {
-        synthBuffer = this.createBasslineBuffer(bpm, rootNotes[0], keyInfo.isMinor);
-      } else if (stemType === 'guitar' || stemType === 'piano' || stemType === 'organ' || nameLower.includes('guitar') || nameLower.includes('bed') || t.id === 4) {
-        synthBuffer = this.createAcousticChordBuffer(bpm, rootNotes[0], keyInfo.isMinor, 'guitar');
-      } else if (stemType === 'choir' || nameLower.includes('choir') || nameLower.includes('harmony') || nameLower.includes('harmonies')) {
-        synthBuffer = this.createChoirBuffer(bpm, rootNotes[0], keyInfo.isMinor);
-      } else {
-        // Lead vocal or Master track print
-        synthBuffer = this.createVocalMelodyBuffer(bpm, rootNotes[0], keyInfo.isMinor);
-      }
-
-      let synthSource: AudioBufferSourceNode | undefined;
-      let synthGain: GainNode | undefined;
-
-      if (synthBuffer) {
-        try {
-          synthSource = this.ctx.createBufferSource();
-          synthSource.buffer = synthBuffer;
-          synthSource.loop = true;
-          synthGain = this.ctx.createGain();
-          synthGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
-          synthSource.connect(synthGain);
-          synthGain.connect(panner);
-          synthSource.start(0);
-        } catch (synthErr) {
-          console.warn('[AudioEngine] Synth source init notice:', synthErr);
-        }
-      }
-
-      // 2. PARALLEL AUTHENTIC NEXTCLOUD STREAM ENHANCEMENT
+      // Resolve authentic stream URL (Nextcloud WebDAV proxy or Suno CloudFront revision)
       let streamUrl = '';
-      if (t.webdavPath) {
-        streamUrl = buildNextcloudStreamUrl(t.webdavPath);
+      if (t.audioUrl && (t.audioUrl.startsWith('http://') || t.audioUrl.startsWith('https://'))) {
+        // Proxy external CloudFront/Suno URLs through our CORS-safe backend stream bridge
+        // so MediaElementAudioSourceNode never outputs zeroes due to cross-origin restrictions
+        streamUrl = `/api/audio/proxy?url=${encodeURIComponent(t.audioUrl)}`;
+      } else if (t.webdavPath) {
+        streamUrl = buildNextcloudStreamUrl(t.webdavPath, streamMeta);
       } else if (t.audioUrl) {
         if (t.audioUrl.includes('path=')) {
           try {
             const rawPath = decodeURIComponent(t.audioUrl.split('path=')[1].split('&')[0]);
-            streamUrl = buildNextcloudStreamUrl(rawPath);
+            streamUrl = buildNextcloudStreamUrl(rawPath, streamMeta);
           } catch {
             streamUrl = t.audioUrl;
           }
@@ -1180,33 +1156,22 @@ class MiniDawEngine {
           };
 
           audioEl.addEventListener('canplay', handleReady, { once: true });
-          audioEl.addEventListener('playing', () => {
-            handleReady();
-            // When real stream audio is verified playing, smoothly crossfade synth bed down
-            if (synthGain && this.ctx) {
-              try {
-                synthGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
-              } catch (_) {}
-            }
-          }, { once: true });
+          audioEl.addEventListener('playing', handleReady, { once: true });
 
           audioEl.addEventListener('error', (err) => {
-            console.warn(`[AudioEngine] Stream loading notice for track ${t.id} (${t.name}):`, err);
+            console.warn(`[AudioEngine] Stream loading failed for ${canonicalTrackId || 'track'} channel ${t.id} (${t.name}):`, err);
             handleReady();
-            // Completely silence synthetic sine wave bed if real audio failed, and notify UI
-            if (synthGain && this.ctx) {
-              try {
-                synthGain.gain.setValueAtTime(0, this.ctx.currentTime);
-              } catch (_) {}
-            }
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('brickos:audio-diagnostic', {
                 detail: {
                   type: 'error',
-                  trackId: String(t.id),
-                  trackTitle: t.name,
-                  originalPath: t.webdavPath,
-                  message: `Audio stream failed from Nextcloud WebDAV for '${t.name}'. Click Auto-Relink to locate.`,
+                  trackId: canonicalTrackId || String(t.id),
+                  trackTitle: canonicalTrackTitle || t.name,
+                  channelId: t.id,
+                  stemName: t.name,
+                  stemType: t.stemType,
+                  originalPath: t.webdavPath || streamUrl,
+                  message: `Could not stream '${t.name}' for ${canonicalTrackTitle || canonicalTrackId || 'this track'}.`,
                   canRelink: true
                 }
               }));
@@ -1237,19 +1202,31 @@ class MiniDawEngine {
             });
           }
 
-          this.trackNodes.set(t.id, { audioEl, gain, panner, analyser, synthSource, synthGain });
+          this.trackNodes.set(t.id, { audioEl, gain, panner, analyser });
           return;
         } catch (streamErr) {
           console.warn('[AudioEngine] Stream connection note:', streamErr);
         }
+      } else if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('brickos:audio-diagnostic', {
+          detail: {
+            type: 'error',
+            trackId: canonicalTrackId || String(t.id),
+            trackTitle: canonicalTrackTitle || t.name,
+            channelId: t.id,
+            stemName: t.name,
+            stemType: t.stemType,
+            originalPath: t.webdavPath,
+            message: `No audio link configured for '${t.name}'. Run Auto-Relink or pick a Suno revision.`,
+            canRelink: true
+          }
+        }));
       }
 
       this.trackNodes.set(t.id, {
         gain,
         panner,
-        analyser,
-        synthSource,
-        synthGain
+        analyser
       });
     });
 

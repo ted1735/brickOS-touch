@@ -1,5 +1,5 @@
 import { NextcloudFolderAsset, NextcloudAssetCategory, MixerTrack, Track } from '../types';
-import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
+import { buildNextcloudStreamUrl, getRelinkedStemOverride } from '../utils/nextcloudStream';
 
 export const NEXTCLOUD_BASE_WEBDAV = 'https://nextcloud.mermaid-symmetric.ts.net/remote.php/dav/files/ncted/Music-Production';
 export const NEXTCLOUD_SHARE_ROOT = 'https://nextcloud.mermaid-symmetric.ts.net/index.php/apps/files/files/207332?dir=/Music-Production';
@@ -1011,8 +1011,16 @@ export function getTrackStems(track: Track): MixerTrack[] {
   const folderPath = `/remote.php/dav/files/ncted/Music-Production/${def.folderName}`;
 
   return def.stems.map((s, index) => {
-    const webdavPath = s.stemFilename.startsWith('/') ? s.stemFilename : `${folderPath}/${s.stemFilename}`;
-    const audioUrl = buildNextcloudStreamUrl(webdavPath);
+    const override = getRelinkedStemOverride(track.id, s.id, s.stemType);
+    const defaultWebdavPath = s.stemFilename.startsWith('/') ? s.stemFilename : `${folderPath}/${s.stemFilename}`;
+    const webdavPath = override?.webdavPath || defaultWebdavPath;
+    const audioUrl = override?.directUrl
+      ? override.directUrl
+      : buildNextcloudStreamUrl(webdavPath, {
+          trackId: track.id,
+          trackTitle: track.title,
+          stemType: s.stemType
+        });
 
     return {
       id: s.id,

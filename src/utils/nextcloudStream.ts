@@ -44,16 +44,91 @@ export function saveNextcloudConfig(cfg: NextcloudSyncConfig): void {
   }
 }
 
+export interface StreamUrlMeta {
+  trackId?: string;
+  trackTitle?: string;
+  stemType?: string;
+}
+
+const RELINKED_STEMS_STORAGE_KEY = 'brickos_relinked_stems_v1';
+
+export interface RelinkedStemEntry {
+  trackId: string;
+  channelId?: number;
+  stemType?: string;
+  webdavPath?: string;
+  directUrl?: string;
+  updatedAt: string;
+}
+
+export function getRelinkedStemOverride(
+  trackId?: string,
+  channelId?: number,
+  stemType?: string
+): RelinkedStemEntry | null {
+  if (typeof window === 'undefined' || !trackId) return null;
+  try {
+    const raw = localStorage.getItem(RELINKED_STEMS_STORAGE_KEY);
+    if (!raw) return null;
+    const map: Record<string, RelinkedStemEntry> = JSON.parse(raw);
+    if (channelId !== undefined && map[`${trackId}::ch:${channelId}`]) {
+      return map[`${trackId}::ch:${channelId}`];
+    }
+    if (stemType && map[`${trackId}::stem:${stemType.toLowerCase()}`]) {
+      return map[`${trackId}::stem:${stemType.toLowerCase()}`];
+    }
+    if (map[`${trackId}::master`]) {
+      return map[`${trackId}::master`];
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+export function saveRelinkedStemOverride(entry: Omit<RelinkedStemEntry, 'updatedAt'>): void {
+  if (typeof window === 'undefined' || !entry.trackId) return;
+  try {
+    const raw = localStorage.getItem(RELINKED_STEMS_STORAGE_KEY);
+    const map: Record<string, RelinkedStemEntry> = raw ? JSON.parse(raw) : {};
+    const stamped: RelinkedStemEntry = { ...entry, updatedAt: new Date().toISOString() };
+    if (entry.channelId !== undefined) {
+      map[`${entry.trackId}::ch:${entry.channelId}`] = stamped;
+    }
+    if (entry.stemType) {
+      map[`${entry.trackId}::stem:${entry.stemType.toLowerCase()}`] = stamped;
+    }
+    if (entry.channelId === undefined && !entry.stemType) {
+      map[`${entry.trackId}::master`] = stamped;
+    }
+    localStorage.setItem(RELINKED_STEMS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 /**
  * Universal Nextcloud WebDAV Stream URL builder
- * Automatically injects active server credentials from localStorage config
- * so streaming authenticated media from Nextcloud succeeds seamlessly.
+ * Automatically injects active server credentials & canonical track metadata
+ * so streaming authenticated media or exact-track fallback from Nextcloud succeeds seamlessly.
  */
-export function buildNextcloudStreamUrl(webdavPath: string): string {
+export function buildNextcloudStreamUrl(webdavPath: string, meta?: StreamUrlMeta): string {
   if (!webdavPath) return '';
+  if (webdavPath.startsWith('http://') || webdavPath.startsWith('https://')) {
+    return webdavPath;
+  }
   const cleanPath = webdavPath.startsWith('/') ? webdavPath : '/' + webdavPath;
   const cfg = getSavedNextcloudConfig();
   let url = `/api/nextcloud/stream?path=${encodeURIComponent(cleanPath)}`;
+  if (meta?.trackId) {
+    url += `&trackId=${encodeURIComponent(meta.trackId)}`;
+  }
+  if (meta?.trackTitle) {
+    url += `&title=${encodeURIComponent(meta.trackTitle)}`;
+  }
+  if (meta?.stemType) {
+    url += `&stemType=${encodeURIComponent(meta.stemType)}`;
+  }
   if (cfg.appPassword && cfg.appPassword.trim().length > 0) {
     url += `&password=${encodeURIComponent(cfg.appPassword.trim())}`;
   }

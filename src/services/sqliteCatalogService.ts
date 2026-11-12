@@ -118,6 +118,12 @@ export function getStudioDb(): any {
         etag TEXT NOT NULL,
         last_checked_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS server_kv_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
 
     sqliteDb = db;
@@ -513,3 +519,139 @@ export function getStudioDbStats() {
     return { active: false, dbPath, fileSizeBytes };
   }
 }
+
+export function upsertRelinkedAssetInSqlite(params: {
+  trackId: string;
+  webdavPath: string;
+  filename: string;
+  category?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
+  directoryPath?: string;
+}) {
+  const db = getStudioDb();
+  if (!db || !params.trackId || !params.webdavPath) return false;
+  try {
+    const now = new Date().toISOString();
+    const assetId = `RELINK-${params.trackId}-${crypto.createHash('md5').update(params.webdavPath).digest('hex').slice(0, 8)}`;
+    db.prepare(`
+      INSERT OR REPLACE INTO nextcloud_assets (
+        id, track_id, filename, webdav_path, category, mime_type,
+        file_size_bytes, stream_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      assetId,
+      params.trackId,
+      params.filename,
+      params.webdavPath,
+      params.category || 'Relinked Audio',
+      params.mimeType || 'audio/mpeg',
+      params.fileSizeBytes || 0,
+      `/api/nextcloud/stream?path=${encodeURIComponent(params.webdavPath)}&trackId=${encodeURIComponent(params.trackId)}`,
+      now
+    );
+
+    if (params.directoryPath) {
+      db.prepare(`
+        UPDATE canonical_songs
+        SET nextcloud_directory = ?, updated_at = ?
+        WHERE id = ?
+      `).run(params.directoryPath, now, params.trackId);
+    }
+
+    refreshCatalogEtag();
+    return true;
+  } catch (err) {
+    console.warn('[SQLite Studio DB] Relink upsert warning:', err);
+    return false;
+  }
+}
+
+export function querySunoRevisionsForTrack(trackId?: string, title?: string): Array<{
+  sunoClipId: string;
+  songId: string;
+  title: string;
+  streamUrl: string;
+  createdAt?: string;
+  model?: string;
+  durationSeconds?: number;
+}> {
+  const db = getStudioDb();
+  if (!db) return [];
+  try {
+    if (trackId) {
+      const rows = db.prepare(`
+        SELECT suno_clip_id, song_id, title, stream_url, created_at, model, duration_seconds
+        FROM suno_revisions
+        WHERE UPPER(song_id) = UPPER(?) AND stream_url IS NOT NULL AND stream_url != ''
+        ORDER BY created_at DESC
+      `).all(trackId) as any[];
+      if (rows.length > 0) {
+        return rows.map((r) => ({
+          sunoClipId: r.suno_clip_id,
+          songId: r.song_id,
+          title: r.title,
+          streamUrl: r.stream_url,
+          createdAt: r.created_at,
+          model: r.model,
+          durationSeconds: r.duration_seconds
+        }));
+      }
+    }
+
+    if (title && title.trim().length > 2) {
+      const cleanTitle = title.trim().toLowerCase();
+      const songs = db.prepare('SELECT id, title FROM canonical_songs').all() as any[];
+      const matched = songs.find(
+        (s) =>
+          s.title.toLowerCase() === cleanTitle ||
+          s.title.toLowerCase().includes(cleanTitle) ||
+          cleanTitle.includes(s.title.toLowerCase())
+      );
+      if (matched) {
+        const rows = db.prepare(`
+          SELECT suno_clip_id, song_id, title, stream_url, created_at, model, duration_seconds
+          FROM suno_revisions
+          WHERE song_id = ? AND stream_url IS NOT NULL AND stream_url != ''
+          ORDER BY created_at DESC
+        `).all(matched.id) as any[];
+        return rows.map((r) => ({
+          sunoClipId: r.suno_clip_id,
+          songId: r.song_id,
+          title: r.title,
+          streamUrl: r.stream_url,
+          createdAt: r.created_at,
+          model: r.model,
+          durationSeconds: r.duration_seconds
+        }));
+      }
+    }
+  } catch {}
+  return [];
+}
+
+export function getServerKvState(key: string): string | null {
+  const db = getStudioDb();
+  if (!db) return null;
+  try {
+    const row = db.prepare('SELECT value FROM server_kv_state WHERE key = ?').get(key) as { value?: string } | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setServerKvState(key: string, value: string): void {
+  const db = getStudioDb();
+  if (!db) return;
+  try {
+    db.prepare(`
+      INSERT INTO server_kv_state (key, value, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = excluded.updated_at
+    `).run(key, value, new Date().toISOString());
+  } catch {}
+}
+

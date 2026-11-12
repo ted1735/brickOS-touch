@@ -73,6 +73,7 @@ import { CANONICAL_TRACKS, NIGHTCAFE_DEFAULT_PROMPTS, VOCAL_ROSTER, EP_COLLECTIO
 import { INITIAL_COMPOSITION_SESSIONS } from './data/canonicalSessions';
 import { audioMiniDaw } from './utils/audioEngine';
 import { getTrackStems } from './data/nextcloudAssetIndex';
+import { buildNextcloudStreamUrl } from './utils/nextcloudStream';
 import { KanbanDashboardTab } from './components/KanbanDashboardTab';
 import { LyricsAndSunoTab } from './components/LyricsAndSunoTab';
 import { MiniDawMixerTab } from './components/MiniDawMixerTab';
@@ -836,7 +837,7 @@ export default function BrickOSMusicStudioWorkspace() {
       setIsDbSyncing(true);
       setCloudSyncError('');
       if (isFirestoreQuotaExhausted()) {
-        showToast('Firestore daily quota reached. Running safely in Local + Nextcloud Primary mode.', 'info');
+        showToast('Firestore daily free quota exceeded (resets next day). Running safely in Local + SQLite + Nextcloud Primary mode.', 'info');
         return;
       }
       await seedInitialCatalog(tracks);
@@ -979,6 +980,88 @@ export default function BrickOSMusicStudioWorkspace() {
       audioMiniDaw.updateBusRouting('daw', stems);
     }
   }, [selectedTrack.id, selectedTrack.title]);
+
+  // Listen for live WebDAV relink events, Suno revision selection, and Locate folder navigation
+  useEffect(() => {
+    const handleTrackRelinked = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (!detail || detail.trackId !== selectedTrack.id) return;
+      const updatedStems = getTrackStems(selectedTrack).map((st) => {
+        if (
+          detail.channelId === st.id ||
+          (detail.stemType && st.stemType === detail.stemType) ||
+          detail.channelId === undefined
+        ) {
+          const isExternal = detail.streamUrl && String(detail.streamUrl).startsWith('http');
+          const resolvedUrl = isExternal
+            ? detail.streamUrl
+            : buildNextcloudStreamUrl(detail.newPath, {
+                trackId: selectedTrack.id,
+                trackTitle: selectedTrack.title,
+                stemType: st.stemType
+              });
+          return {
+            ...st,
+            webdavPath: isExternal ? st.webdavPath : detail.newPath,
+            audioUrl: resolvedUrl,
+            isRealAudio: true
+          };
+        }
+        return st;
+      });
+      setTrackStates(updatedStems);
+      if (isPlaying) {
+        audioMiniDaw.startPlayback(updatedStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+        audioMiniDaw.updateBusRouting('daw', updatedStems);
+      }
+    };
+
+    const handlePlaySunoRevision = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (!detail || !detail.streamUrl) return;
+      const revisionChannel: MixerTrack[] = [
+        {
+          id: 1,
+          name: `Suno Take: ${detail.revisionTitle || selectedTrack.title}`,
+          vol: 95,
+          pan: 0,
+          muted: false,
+          solo: false,
+          trimIn: 0,
+          trimOut: 100,
+          freq: 220,
+          waveType: 'sine',
+          color: '#f59e0b',
+          audioUrl: detail.streamUrl,
+          stemType: 'master',
+          isRealAudio: true
+        }
+      ];
+      setTrackStates(revisionChannel);
+      audioMiniDaw.init();
+      const ctx = audioMiniDaw.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      audioMiniDaw.startPlayback(revisionChannel, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+      audioMiniDaw.updateBusRouting('daw', revisionChannel);
+      setIsPlaying(true);
+      showToast(`Playing Suno CloudFront revision: ${detail.revisionTitle || selectedTrack.title}`, 'info');
+    };
+
+    const handleOpenWebDav = () => {
+      setActiveTab('nextcloud_sync');
+    };
+
+    window.addEventListener('brickos:track-relinked', handleTrackRelinked);
+    window.addEventListener('brickos:play-suno-revision', handlePlaySunoRevision);
+    window.addEventListener('brickos:open-webdav-explorer', handleOpenWebDav);
+    return () => {
+      window.removeEventListener('brickos:track-relinked', handleTrackRelinked);
+      window.removeEventListener('brickos:play-suno-revision', handlePlaySunoRevision);
+      window.removeEventListener('brickos:open-webdav-explorer', handleOpenWebDav);
+    };
+  }, [selectedTrack, isPlaying]);
 
   // A/B Master Switcher State
   const [activeBus, setActiveBus] = useState<'master' | 'suno' | 'vocal' | 'instrumental' | 'ref'>('master');

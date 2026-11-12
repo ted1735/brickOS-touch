@@ -47,17 +47,9 @@ export async function loadSOPRulesFromCloud(): Promise<SOPRulesPackage> {
         setLocalCachedSOPRules(cloudData);
         return cloudData;
       }
-    } else if (!isFirestoreQuotaExhausted()) {
-      // Seed initial rules to Firestore if quota is available
-      try {
-        await setDoc(docRef, { ...INITIAL_SOP_RULES, _schemaVersion: 2 });
-      } catch (err: any) {
-        if (isQuotaExhaustedError(err)) {
-          tripFirestoreQuotaCircuitBreaker(err.message);
-        }
-      }
-      setLocalCachedSOPRules(INITIAL_SOP_RULES);
-      return INITIAL_SOP_RULES;
+    } else {
+      setLocalCachedSOPRules(localCached);
+      return localCached;
     }
   } catch (e: any) {
     if (isQuotaExhaustedError(e)) {

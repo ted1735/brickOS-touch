@@ -13,7 +13,9 @@ import {
   query,
   where,
   limit,
-  startAfter
+  startAfter,
+  disableNetwork,
+  enableNetwork
 } from 'firebase/firestore';
 import { Track, CompositionSession, SoundPreset, WhiteboardCanvasDoc } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -41,10 +43,14 @@ export function isFirestoreQuotaExhausted(): boolean {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(QUOTA_EXHAUSTED_KEY) : null;
     if (raw) {
       const data = JSON.parse(raw);
-      // Quota reset is daily; reset circuit breaker after 4 hours or date boundary
-      if (data && data.timestamp && Date.now() - data.timestamp < 4 * 60 * 60 * 1000) {
-        isCircuitBreakerTripped = true;
-        return true;
+      // Free daily write quota resets daily; keep safe-mode active for 12h or same calendar day
+      if (data && data.timestamp) {
+        const ageMs = Date.now() - data.timestamp;
+        const sameDay = new Date(data.timestamp).toDateString() === new Date().toDateString();
+        if (ageMs < 12 * 60 * 60 * 1000 && sameDay) {
+          isCircuitBreakerTripped = true;
+          return true;
+        }
       }
     }
   } catch (_) {}
@@ -56,21 +62,24 @@ export function isFirestoreQuotaExhausted(): boolean {
  */
 export function isQuotaExhaustedError(err: any): boolean {
   if (!err) return false;
-  const code = err.code || err?.errorInfo?.code;
-  const msg = (err.message || '').toString();
+  const code = String(err.code || err?.errorInfo?.code || '').toLowerCase();
+  const msg = `${err.message || ''} ${err?.cause?.message || ''} ${String(err)}`.toLowerCase();
   return (
     code === 'resource-exhausted' ||
-    code === 8 ||
-    msg.includes('RESOURCE_EXHAUSTED') ||
-    msg.includes('Quota limit exceeded') ||
-    msg.includes('Free daily write units')
+    code === '8' ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('quota limit exceeded') ||
+    msg.includes('free daily write units') ||
+    msg.includes('free daily read units')
   );
 }
 
 /**
- * Engages the quota circuit breaker, stopping further cloud write streams
+ * Engages the quota circuit breaker, immediately halting Firestore network streams & write retries
  */
 export function tripFirestoreQuotaCircuitBreaker(errorMessage?: string) {
+  const alreadyTripped = isCircuitBreakerTripped;
   isCircuitBreakerTripped = true;
   try {
     if (typeof window !== 'undefined') {
@@ -83,9 +92,14 @@ export function tripFirestoreQuotaCircuitBreaker(errorMessage?: string) {
       );
     }
   } catch (_) {}
-  console.warn(
-    '[Firestore Circuit Breaker Active]: Daily free write quota reached (RESOURCE_EXHAUSTED). Cloud write attempts paused; running in local storage safe-mode. All track edits, sessions, and presets remain 100% saved in browser storage.'
-  );
+  if (db) {
+    disableNetwork(db).catch(() => {});
+  }
+  if (!alreadyTripped) {
+    console.warn(
+      '[Firestore Circuit Breaker Active]: Daily free write quota reached (RESOURCE_EXHAUSTED). Firestore network paused cleanly; running in local storage + SQLite + Nextcloud safe-mode.'
+    );
+  }
 }
 
 /**
@@ -98,6 +112,9 @@ export function clearFirestoreQuotaCircuitBreaker() {
       localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
     }
   } catch (_) {}
+  if (db) {
+    enableNetwork(db).catch(() => {});
+  }
 }
 
 try {
@@ -107,6 +124,9 @@ try {
       db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
     } else {
       db = getFirestore(app);
+    }
+    if (db && isFirestoreQuotaExhausted()) {
+      disableNetwork(db).catch(() => {});
     }
   }
 } catch (err) {
@@ -159,13 +179,11 @@ export async function loadTracksFromFirestore(canonicalTracks: Track[] = []): Pr
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
-      if (canonicalTracks.length > 0 && !isFirestoreQuotaExhausted()) {
-        console.log('Firestore tracks collection is empty, seeding canonical tracks...');
-        await seedInitialCatalog(canonicalTracks);
-        setLocalCachedTracks(canonicalTracks);
-        return canonicalTracks;
+      const fallbackTracks = cached && cached.length > 0 ? cached : canonicalTracks;
+      if (fallbackTracks.length > 0) {
+        setLocalCachedTracks(fallbackTracks);
       }
-      return cached && cached.length > 0 ? cached : canonicalTracks;
+      return fallbackTracks;
     }
 
     const fetchedTracks: Track[] = [];
@@ -373,13 +391,11 @@ export async function loadSessionsFromFirestore(canonicalSessions: CompositionSe
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
-      if (canonicalSessions.length > 0 && !isFirestoreQuotaExhausted()) {
-        console.log('Firestore sessions collection is empty, seeding canonical sessions...');
-        await seedInitialSessions(canonicalSessions);
-        setLocalCachedSessions(canonicalSessions);
-        return canonicalSessions;
+      const fallbackSessions = cached && cached.length > 0 ? cached : canonicalSessions;
+      if (fallbackSessions.length > 0) {
+        setLocalCachedSessions(fallbackSessions);
       }
-      return cached && cached.length > 0 ? cached : canonicalSessions;
+      return fallbackSessions;
     }
 
     const fetchedSessions: CompositionSession[] = [];
@@ -564,12 +580,8 @@ export async function loadPresetsFromFirestore(): Promise<SoundPreset[]> {
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
-      if (!isFirestoreQuotaExhausted()) {
-        console.log('No presets found in Firestore. Seeding default factory presets...');
-        await seedInitialPresets(CANONICAL_SOUND_PRESETS);
-        setLocalCachedPresets(CANONICAL_SOUND_PRESETS);
-      }
-      return CANONICAL_SOUND_PRESETS;
+      setLocalCachedPresets(cached.length > 0 ? cached : CANONICAL_SOUND_PRESETS);
+      return cached.length > 0 ? cached : CANONICAL_SOUND_PRESETS;
     }
 
     const cloudPresets: SoundPreset[] = [];
