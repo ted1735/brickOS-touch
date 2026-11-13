@@ -52,6 +52,7 @@ import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
 import { TailscaleVpnModal } from './TailscaleVpnModal';
+import { NextcloudConnectionDebugModal } from './NextcloudConnectionDebugModal';
 import { emitAudioDiagnostic } from './AudioDiagnosticToast';
 
 interface NextcloudWebDavFileExplorerProps {
@@ -125,6 +126,7 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
   const [previewContent, setPreviewContent] = useState<string>('');
   const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
   const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState<boolean>(false);
+  const [isDebugModalOpen, setIsDebugModalOpen] = useState<boolean>(false);
 
   // Multi-Route Redundancy & Ultra-Highspeed State
   const [activeRoute, setActiveRoute] = useState<'primary' | 'fallback'>('primary');
@@ -789,6 +791,20 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
             <span className="hidden sm:inline">Tailscale VPN</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => setIsDebugModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer ${
+              isDarkMode
+                ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50 shadow-xs'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+            }`}
+            title="Inspect live DNS, TCP, Tailscale, and WebDAV /Music-Production visibility"
+          >
+            <Activity className="w-3.5 h-3.5 text-amber-400" />
+            <span>Debug Connection</span>
+          </button>
+
           {onClose && (
             <button
               onClick={onClose}
@@ -1088,17 +1104,26 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 space-y-6">
           {/* Error / Auth Required Banner */}
           {errorMessage && (
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
-              <button
-                onClick={() => fetchDirectory(currentPath)}
-                className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold"
-              >
-                Retry
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDebugModalOpen(true)}
+                  className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold cursor-pointer"
+                >
+                  Inspect What Server Sees
+                </button>
+                <button
+                  onClick={() => fetchDirectory(currentPath)}
+                  className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
             </div>
           )}
 
@@ -2022,6 +2047,20 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         isOpen={isTailscaleModalOpen}
         onClose={() => setIsTailscaleModalOpen(false)}
         isDarkMode={isDarkMode}
+        onOpenVisibilityDebugger={() => {
+          setIsTailscaleModalOpen(false);
+          setIsDebugModalOpen(true);
+        }}
+      />
+
+      <NextcloudConnectionDebugModal
+        isOpen={isDebugModalOpen}
+        onClose={() => setIsDebugModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={() => {
+          fetchRouteStatus();
+          fetchDirectory(currentPath, false, true);
+        }}
       />
     </div>
   );

@@ -54,6 +54,7 @@ import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studioNavigationData';
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
+import { NextcloudConnectionDebugModal } from './NextcloudConnectionDebugModal';
 import { getTrackStems, getTrackNextcloudAssets, NEXTCLOUD_SHARE_ROOT } from '../data/nextcloudAssetIndex';
 import { getSavedNextcloudConfig, saveNextcloudConfig, saveNextcloudAssets, autoMatchAssetToCatalog, buildNextcloudStreamUrl } from '../data/nextcloudFolderAssets';
 import type { StudioWorkspace } from './StudioHome';
@@ -169,6 +170,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   const [ncCopySuccess, setNcCopySuccess] = useState(false);
   const [isSyncingNcAssets, setIsSyncingNcAssets] = useState(false);
   const [ncSyncSuccessMsg, setNcSyncSuccessMsg] = useState<string | null>(null);
+  const [isNcDebugOpen, setIsNcDebugOpen] = useState(false);
 
   // Canonical Nextcloud assets for current track
   const [ncAssets, setNcAssets] = useState<NextcloudFolderAsset[]>(() =>
@@ -2082,6 +2084,20 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                     </button>
                   </div>
 
+                  <button
+                    type="button"
+                    onClick={() => setIsNcDebugOpen(true)}
+                    className={`w-full py-1.5 px-3 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      isDarkMode
+                        ? 'bg-amber-950/50 hover:bg-amber-900/60 text-amber-200 border-amber-700/50'
+                        : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                    }`}
+                    title="Inspect Tailscale status, DNS, TCP, HTTPS, and exactly what folders/files the Nextcloud server can and cannot see"
+                  >
+                    <Eye className="w-3 h-3 text-amber-400" />
+                    <span>Debug Visibility (Can / Cannot See)</span>
+                  </button>
+
                   {/* Sync success toast notification */}
                   {ncSyncSuccessMsg && (
                     <div className="p-2 rounded-lg bg-emerald-950/70 border border-emerald-500/50 text-emerald-200 text-[10px] font-bold flex items-center justify-between animate-fadeIn">
@@ -3087,6 +3103,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
           </div>
         </div>
       )}
+      <NextcloudConnectionDebugModal
+        isOpen={isNcDebugOpen}
+        onClose={() => setIsNcDebugOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={(newUrl) => {
+          setNcConfig(prev => ({ ...prev, serverUrl: newUrl, lastConnectionStatus: 'connected' }));
+          setNcConnectionStatus('connected');
+          handleTestNcConnection();
+        }}
+      />
     </aside>
   );
 };

@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import net from 'net';
+import dns from 'dns/promises';
 import { Readable } from 'stream';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
@@ -1007,8 +1009,10 @@ app.get('/api/nextcloud/credentials-status', (req, res) => {
 
 app.post('/api/nextcloud/save-credentials', (req, res) => {
   const { serverUrl, username, password } = req.body;
-  if (serverUrl) cachedWebdavCredentials.serverUrl = serverUrl.replace(/\/$/, '');
-  if (username) cachedWebdavCredentials.username = username;
+  if (serverUrl && typeof serverUrl === 'string' && serverUrl.trim().length > 0) {
+    cachedWebdavCredentials.serverUrl = normalizeServerUrlInput(serverUrl);
+  }
+  if (username) cachedWebdavCredentials.username = username.trim();
   if (password && typeof password === 'string' && password.trim().length > 0) {
     cachedWebdavCredentials.password = password.trim();
   }
@@ -1017,11 +1021,12 @@ app.post('/api/nextcloud/save-credentials', (req, res) => {
     stage: 'AUTH_PREP',
     action: 'CREDENTIALS_STORED',
     level: 'info',
-    message: `Stored WebDAV credentials for user "${cachedWebdavCredentials.username}" (password length: ${cachedWebdavCredentials.password?.length || 0})`,
-    details: { username: cachedWebdavCredentials.username, hasPassword: Boolean(cachedWebdavCredentials.password) }
+    message: `Stored WebDAV credentials for user "${cachedWebdavCredentials.username}" at ${cachedWebdavCredentials.serverUrl} (password length: ${cachedWebdavCredentials.password?.length || 0})`,
+    details: { serverUrl: cachedWebdavCredentials.serverUrl, username: cachedWebdavCredentials.username, hasPassword: Boolean(cachedWebdavCredentials.password) }
   });
   res.json({
     success: true,
+    serverUrl: cachedWebdavCredentials.serverUrl,
     hasPassword: Boolean(cachedWebdavCredentials.password && cachedWebdavCredentials.password.length > 0),
     username: cachedWebdavCredentials.username,
     message: 'Credentials updated in server WebDAV session.'
@@ -1236,6 +1241,42 @@ function isTailscaleAddress(hostOrUrl: string): boolean {
   }
 }
 
+function normalizeServerUrlInput(raw: string): string {
+  const trimmed = (raw || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  // Bare private LAN/Tailscale IPs default to https:// (with fallback probing in diagnose), hostnames to https://
+  return `https://${trimmed}`;
+}
+
+function isTailscaleBinaryInstalled(): boolean {
+  if (fs.existsSync('/usr/local/bin/tailscale')) return true;
+  try {
+    execSync('which tailscale', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function probeTcpPort(host: string, port: number, timeoutMs = 3000): Promise<{ ok: boolean; latencyMs: number; error?: string; errorCode?: string }> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+    const finish = (res: { ok: boolean; latencyMs: number; error?: string; errorCode?: string }) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch {}
+      resolve(res);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => finish({ ok: true, latencyMs: Date.now() - start }));
+    socket.on('timeout', () => finish({ ok: false, latencyMs: Date.now() - start, error: `TCP connect timeout after ${timeoutMs}ms`, errorCode: 'ETIMEDOUT' }));
+    socket.on('error', (err: any) => finish({ ok: false, latencyMs: Date.now() - start, error: err?.message || 'TCP error', errorCode: err?.code || 'TCP_ERROR' }));
+  });
+}
+
 function ensureTailscaledRunning(): boolean {
   try {
     try {
@@ -1278,20 +1319,51 @@ async function smartFetchWithFailover(
   options: any = {},
   preferredRoute?: 'primary' | 'fallback'
 ): Promise<{ response: any; usedRoute: 'primary' | 'fallback'; latencyMs: number }> {
-  ensureTailscaledRunning();
+  const tsRunning = ensureTailscaledRunning();
+
+  // Respect explicit custom IP/host URL passed in urlOrPath or saved in cachedWebdavCredentials.serverUrl
+  const candidateOrigins: Array<{ route: 'primary' | 'fallback'; baseUrl: string; isCustom?: boolean }> = [];
+  let explicitCustomOrigin = '';
+  if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+    try {
+      const u = new URL(urlOrPath);
+      const origin = `${u.protocol}//${u.host}`;
+      if (origin !== PRIMARY_NEXTCLOUD_URL && origin !== FALLBACK_NEXTCLOUD_URL) {
+        explicitCustomOrigin = origin;
+      }
+    } catch {}
+  } else if (
+    cachedWebdavCredentials.serverUrl &&
+    cachedWebdavCredentials.serverUrl !== PRIMARY_NEXTCLOUD_URL &&
+    cachedWebdavCredentials.serverUrl !== FALLBACK_NEXTCLOUD_URL
+  ) {
+    explicitCustomOrigin = normalizeServerUrlInput(cachedWebdavCredentials.serverUrl);
+  }
 
   const active = preferredRoute || nextcloudRouteState.forceRoute || nextcloudRouteState.activeRoute;
   const isPrimaryPreferred = active !== 'fallback';
 
-  const routePlan: Array<'primary' | 'fallback'> = isPrimaryPreferred
-    ? ['primary', 'fallback']
-    : ['fallback', 'primary'];
+  if (explicitCustomOrigin) {
+    candidateOrigins.push({ route: 'primary', baseUrl: explicitCustomOrigin, isCustom: true });
+  }
+  if (isPrimaryPreferred) {
+    candidateOrigins.push({ route: 'primary', baseUrl: PRIMARY_NEXTCLOUD_URL });
+    candidateOrigins.push({ route: 'fallback', baseUrl: FALLBACK_NEXTCLOUD_URL });
+  } else {
+    candidateOrigins.push({ route: 'fallback', baseUrl: FALLBACK_NEXTCLOUD_URL });
+    candidateOrigins.push({ route: 'primary', baseUrl: PRIMARY_NEXTCLOUD_URL });
+  }
 
   let lastError: any = null;
 
-  for (const route of routePlan) {
-    const baseUrl = route === 'primary' ? PRIMARY_NEXTCLOUD_URL : FALLBACK_NEXTCLOUD_URL;
-    const dispatcher = route === 'primary' ? primaryUndiciAgent : fallbackUndiciAgent;
+  for (const candidate of candidateOrigins) {
+    const { route, baseUrl, isCustom } = candidate;
+    const dispatcher =
+      isCustom && isTailscaleAddress(baseUrl) && tsRunning
+        ? tailscaleProxyAgent
+        : route === 'primary'
+        ? primaryUndiciAgent
+        : fallbackUndiciAgent;
 
     let targetUrl: string;
     if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
@@ -1311,7 +1383,7 @@ async function smartFetchWithFailover(
 
     const startT = Date.now();
     try {
-      const fetchSignal = options.signal || AbortSignal.timeout(route === 'primary' ? 4000 : 8000);
+      const fetchSignal = options.signal || AbortSignal.timeout(isCustom ? 3500 : route === 'primary' ? 4000 : 8000);
       const response = await undiciFetch(targetUrl, {
         ...options,
         signal: fetchSignal,
@@ -1320,19 +1392,21 @@ async function smartFetchWithFailover(
 
       const latencyMs = Date.now() - startT;
 
-      if (route === 'primary') {
-        nextcloudRouteState.primary.online = true;
-        nextcloudRouteState.primary.latencyMs = latencyMs;
-        nextcloudRouteState.primary.lastChecked = new Date().toISOString();
-        nextcloudRouteState.primary.consecutiveFailures = 0;
-      } else {
-        nextcloudRouteState.fallback.online = true;
-        nextcloudRouteState.fallback.latencyMs = latencyMs;
-        nextcloudRouteState.fallback.lastChecked = new Date().toISOString();
-        nextcloudRouteState.fallback.consecutiveFailures = 0;
+      if (!isCustom) {
+        if (route === 'primary') {
+          nextcloudRouteState.primary.online = true;
+          nextcloudRouteState.primary.latencyMs = latencyMs;
+          nextcloudRouteState.primary.lastChecked = new Date().toISOString();
+          nextcloudRouteState.primary.consecutiveFailures = 0;
+        } else {
+          nextcloudRouteState.fallback.online = true;
+          nextcloudRouteState.fallback.latencyMs = latencyMs;
+          nextcloudRouteState.fallback.lastChecked = new Date().toISOString();
+          nextcloudRouteState.fallback.consecutiveFailures = 0;
+        }
       }
 
-      if (route === 'primary' && nextcloudRouteState.activeRoute !== 'primary') {
+      if (!isCustom && route === 'primary' && nextcloudRouteState.activeRoute !== 'primary') {
         nextcloudRouteState.activeRoute = 'primary';
         addNextcloudLog({
           stage: 'ROUTING',
@@ -1345,8 +1419,18 @@ async function smartFetchWithFailover(
 
       return { response, usedRoute: route, latencyMs };
     } catch (err: any) {
-      const latencyMs = Date.now() - startT;
       lastError = err;
+
+      if (isCustom) {
+        addNextcloudLog({
+          stage: 'ROUTING',
+          action: 'CUSTOM_HOST_UNREACHABLE',
+          level: 'warn',
+          message: `Configured Nextcloud target ${targetUrl} failed (${err.message}); failing over to verified public routes`,
+          details: { error: err.message, targetUrl }
+        });
+        continue;
+      }
 
       if (route === 'primary') {
         nextcloudRouteState.primary.consecutiveFailures++;
@@ -1517,7 +1601,7 @@ app.post('/api/tailscale/logout', async (req, res) => {
   }
 });
 
-// Tailscale Ping / WebDAV Host Probe
+// Tailscale Ping / Direct Host Probe (NEVER spoofs or redirects to another host!)
 app.post('/api/tailscale/ping', async (req, res) => {
   const { targetHost = '' } = req.body;
   if (!targetHost) {
@@ -1525,36 +1609,372 @@ app.post('/api/tailscale/ping', async (req, res) => {
   }
 
   const startTime = Date.now();
+  const tsInstalled = isTailscaleBinaryInstalled();
+  const tsDaemon = ensureTailscaledRunning();
+  const raw = String(targetHost).trim();
+  const testUrls = raw.startsWith('http://') || raw.startsWith('https://')
+    ? [raw]
+    : [`https://${raw}`, `http://${raw}`];
+
+  let lastErr: any = null;
+  for (const testUrl of testUrls) {
+    try {
+      const parsed = new URL(testUrl);
+      const port = parsed.port ? parseInt(parsed.port, 10) : parsed.protocol === 'https:' ? 443 : 80;
+      const tcpCheck = await probeTcpPort(parsed.hostname, port, 3000);
+      if (!tcpCheck.ok) {
+        lastErr = new Error(`${tcpCheck.error} (${tcpCheck.errorCode}) on ${parsed.hostname}:${port}`);
+        continue;
+      }
+
+      const dispatcher = isTailscaleAddress(testUrl) && tsDaemon ? tailscaleProxyAgent : primaryUndiciAgent;
+      const response = await undiciFetch(testUrl, {
+        method: 'HEAD',
+        headers: { 'User-Agent': 'brickOS-Studio-Host-Probe/1.0' },
+        signal: AbortSignal.timeout(5000),
+        dispatcher
+      });
+
+      const latencyMs = Date.now() - startTime;
+      return res.json({
+        success: response.status < 500,
+        status: response.status,
+        latencyMs,
+        targetHost: testUrl,
+        tailscaleInstalled: tsInstalled,
+        tailscaleDaemonRunning: tsDaemon,
+        message: `Reached exact target ${testUrl} in ${latencyMs}ms (HTTP ${response.status})`
+      });
+    } catch (err: any) {
+      lastErr = err;
+    }
+  }
+
+  const latencyMs = Date.now() - startTime;
+  const isPrivateTs = isTailscaleAddress(raw) && !raw.includes('.ts.net');
+  const hint = !tsDaemon && isPrivateTs
+    ? ' Local tailscaled VPN daemon is not installed/running in this container, so private 100.x.y.z IPs cannot be reached directly. Use the public Tailscale Funnel (*.ts.net) or Cloudflare domain instead.'
+    : '';
+  res.json({
+    success: false,
+    latencyMs,
+    targetHost: raw,
+    tailscaleInstalled: tsInstalled,
+    tailscaleDaemonRunning: tsDaemon,
+    error: (lastErr?.message || 'Cannot reach host') + hint,
+    message: `Cannot reach ${raw}: ${lastErr?.message || 'Connection failed'}.${hint}`
+  });
+});
+
+// Deep Visibility & Reachability Inspector: What the server CAN and CANNOT see
+async function probeSingleNextcloudTarget(
+  label: string,
+  rawBaseUrl: string,
+  username: string,
+  password: string,
+  webdavRelPath: string
+) {
+  const baseUrl = normalizeServerUrlInput(rawBaseUrl);
+  const startTotal = Date.now();
+  const result: any = {
+    label,
+    baseUrl,
+    hostname: '',
+    port: 443,
+    isIpAddress: false,
+    isPrivateTailscaleIp: false,
+    dns: { ok: false, resolvedIp: null as string | null, family: null as number | null, error: null as string | null },
+    tcp: { ok: false, latencyMs: 0, error: null as string | null, errorCode: null as string | null },
+    httpHead: { ok: false, status: 0, statusText: '', serverHeader: '', location: '', latencyMs: 0, error: null as string | null },
+    webdavPropfind: {
+      ok: false,
+      status: 0,
+      statusText: '',
+      latencyMs: 0,
+      sabreException: '',
+      sabreMessage: '',
+      itemCount: 0,
+      visibleFolders: [] as string[],
+      visibleFiles: [] as string[],
+      error: null as string | null
+    },
+    overallStatus: 'unreachable' as 'connected' | 'auth_required' | 'http_error' | 'unreachable',
+    verdict: '',
+    totalLatencyMs: 0
+  };
+
   try {
-    let testUrl = targetHost;
-    if (!testUrl.startsWith('http://') && !testUrl.startsWith('https://')) {
-      testUrl = `http://${targetHost}`;
+    const parsed = new URL(baseUrl);
+    result.hostname = parsed.hostname;
+    result.port = parsed.port ? parseInt(parsed.port, 10) : parsed.protocol === 'https:' ? 443 : 80;
+    result.isIpAddress = net.isIP(parsed.hostname) !== 0;
+    result.isPrivateTailscaleIp = /^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./.test(parsed.hostname);
+
+    // 1. DNS Check
+    if (result.isIpAddress) {
+      result.dns = { ok: true, resolvedIp: parsed.hostname, family: net.isIP(parsed.hostname), error: null };
+    } else {
+      try {
+        const lookup = await dns.lookup(parsed.hostname);
+        result.dns = { ok: true, resolvedIp: lookup.address, family: lookup.family, error: null };
+      } catch (dnsErr: any) {
+        result.dns = { ok: false, resolvedIp: null, family: null, error: dnsErr?.message || 'DNS lookup failed' };
+        result.verdict = `DNS failed for ${parsed.hostname}: ${result.dns.error}`;
+        result.totalLatencyMs = Date.now() - startTotal;
+        return result;
+      }
     }
 
-    const response = await smartFetch(testUrl, {
-      method: 'GET',
-      headers: { 'User-Agent': 'brickOS-Studio-Tailscale-Probe/1.0' },
-      signal: AbortSignal.timeout(8000)
-    }, true);
+    // 2. TCP Connect Check
+    const tcp = await probeTcpPort(parsed.hostname, result.port, 3500);
+    result.tcp = { ok: tcp.ok, latencyMs: tcp.latencyMs, error: tcp.error || null, errorCode: tcp.errorCode || null };
+    if (!tcp.ok) {
+      result.verdict = result.isPrivateTailscaleIp && !isTailscaleBinaryInstalled()
+        ? `Private Tailscale IP ${parsed.hostname}:${result.port} unreachable (${tcp.errorCode || 'TIMEOUT'}) — local tailscaled daemon is not installed in this cloud runtime.`
+        : `TCP connection to ${parsed.hostname}:${result.port} failed (${tcp.errorCode || tcp.error}).`;
+      result.totalLatencyMs = Date.now() - startTotal;
+      return result;
+    }
 
-    const latencyMs = Date.now() - startTime;
-    res.json({
-      success: response.status < 500,
-      status: response.status,
-      latencyMs,
-      targetHost,
-      message: `Pinged ${targetHost} over Tailscale proxy in ${latencyMs}ms (HTTP ${response.status})`
-    });
+    // 3. HTTP HEAD Probe
+    const headStart = Date.now();
+    try {
+      const headRes = await undiciFetch(baseUrl, {
+        method: 'HEAD',
+        headers: { 'User-Agent': 'brickOS-Studio-Visibility-Inspector/1.0' },
+        signal: AbortSignal.timeout(5000),
+        dispatcher: primaryUndiciAgent
+      });
+      result.httpHead = {
+        ok: headRes.status > 0 && headRes.status < 500,
+        status: headRes.status,
+        statusText: headRes.statusText || '',
+        serverHeader: headRes.headers.get('server') || '',
+        location: headRes.headers.get('location') || '',
+        latencyMs: Date.now() - headStart,
+        error: null
+      };
+    } catch (headErr: any) {
+      result.httpHead = {
+        ok: false,
+        status: 0,
+        statusText: '',
+        serverHeader: '',
+        location: '',
+        latencyMs: Date.now() - headStart,
+        error: headErr?.message || 'HTTP HEAD failed'
+      };
+    }
+
+    // 4. Live WebDAV PROPFIND (Depth: 1) to see exact folders & files
+    const cleanRel = webdavRelPath.startsWith('/') ? webdavRelPath : `/${webdavRelPath}`;
+    const davUrl = `${baseUrl}${cleanRel}`;
+    const davStart = Date.now();
+    const davHeaders: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Visibility-Inspector/1.0',
+      'Depth': '1',
+      'Content-Type': 'application/xml; charset=utf-8'
+    };
+    if (password) {
+      davHeaders['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+    }
+
+    try {
+      const davRes = await undiciFetch(davUrl, {
+        method: 'PROPFIND',
+        headers: davHeaders,
+        body: LEAN_PROPFIND_XML,
+        signal: AbortSignal.timeout(7000),
+        dispatcher: primaryUndiciAgent
+      });
+      const rawXml = await davRes.text();
+      const excMatch = rawXml.match(/<s:exception>([^<]+)<\/s:exception>/i);
+      const msgMatch = rawXml.match(/<s:message>([^<]+)<\/s:message>/i);
+
+      const visibleFolders: string[] = [];
+      const visibleFiles: string[] = [];
+      if (davRes.status >= 200 && davRes.status < 300) {
+        const blocks = [...rawXml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+        for (let i = 0; i < blocks.length; i++) {
+          const bXml = blocks[i][1];
+          const hrefMatch = bXml.match(/<d:href>([^<]+)<\/d:href>/i);
+          if (!hrefMatch) continue;
+          const decodedHref = decodeURIComponent(hrefMatch[1]).replace(/\/+$/, '');
+          const name = decodedHref.split('/').pop() || '';
+          if (!name || decodedHref.toLowerCase().endsWith('/music-production')) continue;
+          const isCollection = /<d:collection\s*\/?>/i.test(bXml);
+          if (isCollection) visibleFolders.push(name);
+          else visibleFiles.push(name);
+        }
+      }
+
+      result.webdavPropfind = {
+        ok: davRes.status >= 200 && davRes.status < 300,
+        status: davRes.status,
+        statusText: davRes.statusText || '',
+        latencyMs: Date.now() - davStart,
+        sabreException: excMatch ? excMatch[1] : '',
+        sabreMessage: msgMatch ? msgMatch[1] : '',
+        itemCount: visibleFolders.length + visibleFiles.length,
+        visibleFolders: visibleFolders.slice(0, 40),
+        visibleFiles: visibleFiles.slice(0, 40),
+        error: davRes.status >= 200 && davRes.status < 300 ? null : `HTTP ${davRes.status} ${davRes.statusText}`
+      };
+
+      if (result.webdavPropfind.ok) {
+        result.overallStatus = 'connected';
+        result.verdict = `Connected! WebDAV HTTP ${davRes.status} in ${result.webdavPropfind.latencyMs}ms — sees ${visibleFolders.length} folders & ${visibleFiles.length} files in /Music-Production.`;
+      } else if (davRes.status === 401) {
+        result.overallStatus = 'auth_required';
+        result.verdict = password
+          ? `Server reachable, but App Password rejected (HTTP 401: ${result.webdavPropfind.sabreException || 'Invalid App Password'}).`
+          : 'Server reachable, but no App Password was provided (HTTP 401).';
+      } else {
+        result.overallStatus = 'http_error';
+        result.verdict = `HTTP reachable, but WebDAV PROPFIND returned HTTP ${davRes.status} ${davRes.statusText}.`;
+      }
+    } catch (davErr: any) {
+      result.webdavPropfind.latencyMs = Date.now() - davStart;
+      result.webdavPropfind.error = davErr?.message || 'WebDAV PROPFIND error';
+      result.overallStatus = 'http_error';
+      result.verdict = `TCP/HTTP reached, but WebDAV PROPFIND failed: ${result.webdavPropfind.error}`;
+    }
   } catch (err: any) {
-    const latencyMs = Date.now() - startTime;
-    res.json({
-      success: false,
-      latencyMs,
-      targetHost,
-      error: err.message || 'Cannot reach host over Tailscale'
-    });
+    result.verdict = err?.message || 'Invalid URL or probe error';
   }
-});
+
+  result.totalLatencyMs = Date.now() - startTotal;
+  return result;
+}
+
+async function handleNextcloudDiagnose(req: express.Request, res: express.Response) {
+  const startTime = Date.now();
+  const body = (req.body || {}) as Record<string, any>;
+  const requestedServerUrl = normalizeServerUrlInput(
+    String(body.serverUrl || req.query.serverUrl || cachedWebdavCredentials.serverUrl || '')
+  );
+  const username = String(body.username || req.query.username || cachedWebdavCredentials.username || 'ncted').trim();
+  const rawPassword = String(body.password || req.query.password || '');
+  const password = rawPassword.trim() || cachedWebdavCredentials.password || '';
+  const webdavRelPath = `/remote.php/dav/files/${encodeURIComponent(username)}/Music-Production`;
+
+  const tsInstalled = isTailscaleBinaryInstalled();
+  const tsDaemonRunning = ensureTailscaledRunning();
+  const proxyProbe = await probeTcpPort('127.0.0.1', TAILSCALE_PROXY_PORT, 800);
+
+  let tailscaleBackendState = tsInstalled ? 'Stopped' : 'NotInstalledInContainer';
+  let tailscaleNote = '';
+  if (!tsInstalled) {
+    tailscaleNote =
+      'This server container does not have the local Tailscale VPN binary (/usr/local/bin/tailscale) installed. Because of that, private Tailnet 100.x.y.z IPs and LAN IPs cannot be dialed over a WireGuard interface — use the public Tailscale Funnel (*.ts.net) or Cloudflare Tunnel (*.moyercloud.com) URL over HTTPS.';
+  } else if (tsDaemonRunning && proxyProbe.ok) {
+    tailscaleBackendState = 'DaemonRunning';
+    tailscaleNote = 'tailscaled userspace daemon and SOCKS5/HTTP proxy (127.0.0.1:1055) are active.';
+  } else {
+    tailscaleNote = 'tailscale binary is installed, but the daemon/proxy is not connected.';
+  }
+
+  const targetsToProbe: Array<{ label: string; url: string }> = [];
+  const seen = new Set<string>();
+  const addTarget = (label: string, u: string) => {
+    const norm = normalizeServerUrlInput(u);
+    if (!norm || seen.has(norm.toLowerCase())) return;
+    seen.add(norm.toLowerCase());
+    targetsToProbe.push({ label, url: norm });
+  };
+
+  if (requestedServerUrl) {
+    const isBuiltIn =
+      requestedServerUrl.toLowerCase() === PRIMARY_NEXTCLOUD_URL.toLowerCase() ||
+      requestedServerUrl.toLowerCase() === FALLBACK_NEXTCLOUD_URL.toLowerCase();
+    addTarget(isBuiltIn ? 'Configured Active Endpoint' : 'Custom / User-Entered IP or URL', requestedServerUrl);
+    // If user entered a bare IP, also probe http:// on port 80/custom port in case TLS isn't on the IP
+    try {
+      const parsedCustom = new URL(requestedServerUrl);
+      if (net.isIP(parsedCustom.hostname) !== 0 && parsedCustom.protocol === 'https:') {
+        addTarget('Custom IP (HTTP Fallback)', `http://${parsedCustom.host}`);
+      }
+    } catch {}
+  }
+  addTarget('Tailscale Funnel (Public HTTPS)', PRIMARY_NEXTCLOUD_URL);
+  addTarget('Cloudflare Tunnel (Public HTTPS)', FALLBACK_NEXTCLOUD_URL);
+
+  const endpoints = await Promise.all(
+    targetsToProbe.map((t) => probeSingleNextcloudTarget(t.label, t.url, username, password, webdavRelPath))
+  );
+
+  const workingEndpoint = endpoints.find((e) => e.overallStatus === 'connected') || null;
+  const reachableEndpoints = endpoints.filter((e) => e.tcp.ok).map((e) => ({
+    label: e.label,
+    baseUrl: e.baseUrl,
+    status: e.webdavPropfind.status || e.httpHead.status,
+    latencyMs: e.totalLatencyMs,
+    overallStatus: e.overallStatus
+  }));
+
+  const cannotSee = endpoints
+    .filter((e) => e.overallStatus !== 'connected')
+    .map((e) => {
+      const stageFailed = !e.dns.ok
+        ? 'DNS Lookup'
+        : !e.tcp.ok
+        ? 'TCP Network Connect'
+        : !e.webdavPropfind.ok
+        ? `WebDAV Auth / PROPFIND (HTTP ${e.webdavPropfind.status || 0})`
+        : 'HTTP Probe';
+      let fixHint = 'Verify server URL and App Password.';
+      if (!e.tcp.ok && e.isPrivateTailscaleIp && !tsInstalled) {
+        fixHint = `Switch server URL to ${PRIMARY_NEXTCLOUD_URL} (Tailscale Funnel) or ${FALLBACK_NEXTCLOUD_URL} (Cloudflare) because private 100.x.y.z IPs require a local Tailscale daemon.`;
+      } else if (!e.tcp.ok) {
+        fixHint = `Port ${e.port} on ${e.hostname} is not reachable from this cloud server (${e.tcp.errorCode || 'timeout'}).`;
+      } else if (e.webdavPropfind.status === 401) {
+        fixHint = 'Generate a fresh Nextcloud App Password under Settings -> Security -> Devices & client credentials.';
+      }
+      return {
+        label: e.label,
+        baseUrl: e.baseUrl,
+        stageFailed,
+        reason: e.verdict,
+        fixHint
+      };
+    });
+
+  res.json({
+    success: Boolean(workingEndpoint),
+    scannedAt: new Date().toISOString(),
+    latencyMs: Date.now() - startTime,
+    runtime: {
+      tailscaleBinaryInstalled: tsInstalled,
+      tailscaleDaemonRunning: tsDaemonRunning,
+      tailscaleProxyListening: proxyProbe.ok,
+      tailscaleBackendState,
+      tailscaleNote,
+      notifyPushConnected: nextcloudRouteState.pushWebSocket.connected,
+      activeRoute: nextcloudRouteState.activeRoute,
+      configuredServerUrl: requestedServerUrl || cachedWebdavCredentials.serverUrl,
+      configuredUsername: username,
+      hasStoredPassword: Boolean(password),
+      passwordLength: password.length
+    },
+    endpoints,
+    canSee: {
+      workingEndpoint: workingEndpoint ? workingEndpoint.baseUrl : null,
+      workingLabel: workingEndpoint ? workingEndpoint.label : null,
+      reachableCount: reachableEndpoints.length,
+      reachableEndpoints,
+      visiblePath: webdavRelPath,
+      visibleFoldersCount: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFolders.length : 0,
+      visibleFilesCount: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFiles.length : 0,
+      visibleFolders: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFolders : [],
+      visibleFiles: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFiles : []
+    },
+    cannotSee,
+    logs: nextcloudLogs.slice(0, 35)
+  });
+}
+
+app.get('/api/nextcloud/diagnose', handleNextcloudDiagnose);
+app.post('/api/nextcloud/diagnose', handleNextcloudDiagnose);
 
 // ============================================================================
 // NEXTCLOUD DUAL-PATH MULTI-ROUTE & REAL-TIME PUSH SYNC ENDPOINTS
@@ -1664,7 +2084,7 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
     } = req.body;
 
     const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
-    const cleanServerUrl = serverUrl.replace(/\/$/, '');
+    const cleanServerUrl = normalizeServerUrlInput(serverUrl || PRIMARY_NEXTCLOUD_URL);
     const cleanWebdavPath = webdavPath.startsWith('/') ? webdavPath : '/' + webdavPath;
     const targetUrl = `${cleanServerUrl}${cleanWebdavPath}`;
     const hasPassword = Boolean(effectivePassword && effectivePassword.length > 0);

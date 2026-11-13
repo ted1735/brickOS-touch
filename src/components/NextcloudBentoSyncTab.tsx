@@ -56,9 +56,10 @@ import {
 } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { getTrackStems } from '../data/nextcloudAssetIndex';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Activity } from 'lucide-react';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { NextcloudWebDavFileExplorer } from './NextcloudWebDavFileExplorer';
+import { NextcloudConnectionDebugModal } from './NextcloudConnectionDebugModal';
 
 interface NextcloudBentoSyncTabProps {
   tracks: Track[];
@@ -88,6 +89,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   // Sync & Connection Test State
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isSyncingFolder, setIsSyncingFolder] = useState(false);
+  const [isDebugModalOpen, setIsDebugModalOpen] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{
     success: boolean;
     status?: number;
@@ -900,7 +902,27 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         {isSettingsOpen && (
           <div className={`mt-3 pt-3 border-t space-y-3 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex-1">
+              <div className="flex-1 space-y-2">
+                <div>
+                  <div className="text-[11px] font-mono uppercase font-bold text-slate-400 mb-1">
+                    Nextcloud Server URL or IP Address
+                  </div>
+                  <input
+                    type="text"
+                    value={config.serverUrl || ''}
+                    onChange={e => {
+                      const nextCfg = { ...config, serverUrl: e.target.value };
+                      setConfig(nextCfg);
+                      saveNextcloudConfig(nextCfg);
+                    }}
+                    placeholder="https://nextcloud.mermaid-symmetric.ts.net or 100.x.y.z"
+                    className={`w-full p-2 rounded-xl border font-mono text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 ${
+                      isDarkMode
+                        ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                    }`}
+                  />
+                </div>
                 <div className="flex items-center justify-between text-[11px] font-mono uppercase font-bold text-slate-400 mb-1">
                   <span className="flex items-center gap-1">
                     <Key className="w-3 h-3 text-amber-500" />
@@ -914,13 +936,13 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={appPasswordInput}
                     onChange={e => setAppPasswordInput(e.target.value)}
                     placeholder="Enter Nextcloud App Password (e.g. xxxx-xxxx-xxxx)..."
-                    className={`flex-1 p-2 rounded-xl border font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                    className={`flex-1 min-w-[180px] p-2 rounded-xl border font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
                       isDarkMode
                         ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
                         : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
@@ -937,6 +959,14 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                   >
                     {isTestingConnection ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />}
                     <span>Test Ping</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDebugModalOpen(true)}
+                    className="px-3 py-2 rounded-xl text-xs font-bold border bg-amber-950/60 hover:bg-amber-900/70 text-amber-300 border-amber-700/60 transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Debug Visibility</span>
                   </button>
                 </div>
               </div>
@@ -1884,6 +1914,16 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
           </div>
         </div>
       )}
+      <NextcloudConnectionDebugModal
+        isOpen={isDebugModalOpen}
+        onClose={() => setIsDebugModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={(newUrl) => {
+          const nextCfg = { ...config, serverUrl: newUrl };
+          setConfig(nextCfg);
+          saveNextcloudConfig(nextCfg);
+        }}
+      />
     </div>
   );
 };

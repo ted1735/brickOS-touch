@@ -122,6 +122,7 @@ import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
 import type { StudioWorkspace } from './components/StudioHome';
 import { TailscaleVpnModal } from './components/TailscaleVpnModal';
+import { NextcloudConnectionDebugModal } from './components/NextcloudConnectionDebugModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SongTitleRenameModal } from './components/SongTitleRenameModal';
 import { syncTrackTitleAcrossAllAssets } from './utils/trackTitleSync';
@@ -248,6 +249,7 @@ export default function BrickOSMusicStudioWorkspace() {
 
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState(false);
+  const [isNextcloudDebugModalOpen, setIsNextcloudDebugModalOpen] = useState(false);
   const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
 
   const [studioTheme, setStudioTheme] = useState<StudioTheme>(() => {
@@ -3330,16 +3332,28 @@ export default function BrickOSMusicStudioWorkspace() {
                   Full Bento-style hub to match stems, lyrics, and art from Folder 207332 directly to catalog tracks.
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsStorageModalOpen(false);
-                  setActiveTab('nextcloud_sync');
-                }}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/40 flex-shrink-0 cursor-pointer"
-              >
-                <span>Launch Matcher (207332) →</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsStorageModalOpen(false);
+                    setIsNextcloudDebugModalOpen(true);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer"
+                >
+                  <span>Debug Visibility</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsStorageModalOpen(false);
+                    setActiveTab('nextcloud_sync');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/40 cursor-pointer"
+                >
+                  <span>Launch Matcher (207332) →</span>
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 text-xs text-slate-300">
@@ -3783,6 +3797,20 @@ export default function BrickOSMusicStudioWorkspace() {
         isOpen={isTailscaleModalOpen}
         onClose={() => setIsTailscaleModalOpen(false)}
         isDarkMode={isDarkMode}
+        onOpenVisibilityDebugger={() => {
+          setIsTailscaleModalOpen(false);
+          setIsNextcloudDebugModalOpen(true);
+        }}
+      />
+
+      {/* NEXTCLOUD & TAILSCALE VISIBILITY DEBUGGER MODAL */}
+      <NextcloudConnectionDebugModal
+        isOpen={isNextcloudDebugModalOpen}
+        onClose={() => setIsNextcloudDebugModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={(newUrl) => {
+          showToast(`Nextcloud endpoint switched to ${newUrl}`, 'success');
+        }}
       />
 
       {/* SONG TITLE RENAME & LINKED ASSETS SYNCHRONIZATION MODAL */}
