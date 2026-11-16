@@ -10,9 +10,19 @@
   }
 
   body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     transition-property: color, background-color, border-color;
     transition-duration: 200ms;
     -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Plus Jakarta Sans', 'DM Sans', system-ui, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
   }
 
   button,

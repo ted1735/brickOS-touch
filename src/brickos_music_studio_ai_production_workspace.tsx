@@ -119,8 +119,9 @@ import { StudioQuickToolsDrawer } from './components/StudioQuickToolsDrawer';
 import { SmartContextActionBar } from './components/SmartContextActionBar';
 import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
 import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
-import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
+import { getSuggestedTrackStep } from './components/StudioHome';
 import type { StudioWorkspace } from './components/StudioHome';
+import { StatusBentoDashboard } from './components/StatusBentoDashboard';
 import { TailscaleVpnModal } from './components/TailscaleVpnModal';
 import { NextcloudConnectionDebugModal } from './components/NextcloudConnectionDebugModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -2231,7 +2232,7 @@ export default function BrickOSMusicStudioWorkspace() {
               <span className="text-indigo-400 font-medium">BRICK Records</span>
               <span>•</span>
               {activeTab === 'home' ? (
-                <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">Studio Home</span>
+                <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">Status Bento & MCP Hub</span>
               ) : activeTab === 'kanban' ? (
                 <span className="text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                   {selectedEpFilter === 'ALL' ? 'All 4 EPs (26 Master Tracks)' : selectedEpFilter}
@@ -2350,10 +2351,10 @@ export default function BrickOSMusicStudioWorkspace() {
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
-              title="Studio Home Hub"
+              title="brickOS Status Bento & Project Coordination"
             >
               <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Home</span>
+              <span>Status</span>
             </button>
 
             <button
@@ -2971,11 +2972,11 @@ export default function BrickOSMusicStudioWorkspace() {
           </>}
 
           {activeTab === 'home' && (
-            <StudioHome
-              track={selectedTrack}
+            <StatusBentoDashboard
+              tracks={tracks}
+              selectedTrack={selectedTrack}
               sessions={sessions}
               isDarkMode={isDarkMode}
-              allTracks={tracks}
               onSelectTrack={(t) => {
                 setSelectedTrack(t);
                 try {
@@ -2983,7 +2984,7 @@ export default function BrickOSMusicStudioWorkspace() {
                 } catch (_) {}
                 showToast(`Switched active track to: ${t.id} - ${t.title}`, 'info');
               }}
-              onContinue={() => {
+              onContinueTrack={() => {
                 const step = getSuggestedTrackStep(selectedTrack);
                 handleSetWorkspaceMode(step.workspace);
                 setActiveTab(step.tab as any);
@@ -2992,7 +2993,9 @@ export default function BrickOSMusicStudioWorkspace() {
                 handleSetWorkspaceMode(workspace);
                 setActiveTab(tab as any);
               }}
-              onOpenSession={handleSelectSession}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as any)}
+              onCopyText={copyToClipboard}
+              onNotify={(msg, type) => showToast(msg, type || 'info')}
             />
           )}
 

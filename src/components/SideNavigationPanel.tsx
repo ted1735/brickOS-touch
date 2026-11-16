@@ -987,7 +987,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   // Helper mapping single small word for collapsed sidebar
   const getSingleWordForTab = (id: string, defaultName: string): string => {
     switch (id) {
-      case 'home': return 'HOME';
+      case 'home': return 'STATUS';
       case 'kanban': return 'PIPELINE';
       case 'lyrics': return 'LYRICS';
       case 'version-matrix': return 'MATRIX';
@@ -1194,9 +1194,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               const rect = e.currentTarget.getBoundingClientRect();
               setSidebarHoverItem({
                 id: 'home',
-                word: 'HOME',
-                fullName: 'Studio Command Home',
-                description: 'Overview dashboard, pick up where you left off, fast track switcher, and mission SOP compliance.',
+                word: 'STATUS',
+                fullName: 'brickOS Status Bento & MCP Hub',
+                description: 'All productions, Ready Shorts, YouTube & Meta Muse stats, 6-outlet alignment matrix, and multi-server MCP telemetry.',
                 icon: Home,
                 accentColor: 'text-amber-400',
                 activeBg: 'bg-amber-600',
@@ -1213,13 +1213,13 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 ? 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
                 : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 shadow-2xs'
             }`}
-            aria-label="Studio Command Home"
+            aria-label="brickOS Status Bento"
           >
             <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
               <Home className={`w-4 h-4 ${activeTab === 'home' ? 'text-white' : 'text-amber-400'}`} />
             </div>
             <span className="text-[9px] font-black tracking-wider uppercase leading-none truncate max-w-[54px] mt-1">
-              HOME
+              STATUS
             </span>
             {activeTab === 'home' && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-slate-950 animate-pulse" />

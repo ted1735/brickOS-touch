@@ -34,6 +34,7 @@ import {
   setServerKvState
 } from './src/services/sqliteCatalogService';
 import { getDatabaseStats } from './src/server/brickDatabase';
+import { createMcpHubRouter } from './src/server/mcpHubRouter';
 
 dotenv.config();
 
@@ -5024,6 +5025,9 @@ app.get('/api/database/stats', (_req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Multi-Server MCP Ingestion Hub & Status Bento Aggregator
+app.use(createMcpHubRouter());
 
 // Vite middleware integration
 async function startServer() {

@@ -18,7 +18,8 @@ import {
   Sparkles,
   Maximize2,
   Database,
-  Check
+  Check,
+  Activity
 } from 'lucide-react';
 import { Track, StudioTheme } from '../types';
 import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS } from '../data/studioNavigationData';
@@ -74,7 +75,7 @@ export const FoldableMobileDock: React.FC<FoldableMobileDockProps> = ({
   const [trackFilter, setTrackFilter] = useState('');
 
   const primaryDestinations = [
-    { id: 'home', label: 'Home', icon: Home },
+    { id: 'home', label: 'Status', icon: Activity },
     { id: 'lyrics', label: 'Write', icon: FileText },
     { id: 'mixer', label: 'Mixer', icon: Sliders },
     { id: 'nextcloud_sync', label: 'Files', icon: HardDrive }

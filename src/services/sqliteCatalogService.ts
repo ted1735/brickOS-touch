@@ -124,10 +124,63 @@ export function getStudioDb(): any {
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS mcp_servers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        auth_type TEXT DEFAULT 'none',
+        auth_header_name TEXT DEFAULT 'Authorization',
+        auth_token TEXT DEFAULT '',
+        enabled INTEGER DEFAULT 1,
+        is_primary INTEGER DEFAULT 0,
+        last_status TEXT DEFAULT 'pending',
+        last_latency_ms INTEGER DEFAULT 0,
+        last_error TEXT DEFAULT '',
+        server_info_json TEXT DEFAULT '{}',
+        tools_json TEXT DEFAULT '[]',
+        resources_json TEXT DEFAULT '[]',
+        last_synced_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS mcp_pinned_widgets (
+        id TEXT PRIMARY KEY,
+        server_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        args_json TEXT DEFAULT '{}',
+        last_result_json TEXT DEFAULT 'null',
+        last_run_at TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS social_outlet_statuses (
+        track_id TEXT NOT NULL,
+        outlet_key TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Not Started',
+        scheduled_slot TEXT DEFAULT '',
+        post_url TEXT DEFAULT '',
+        post_id TEXT DEFAULT '',
+        cohort TEXT DEFAULT 'Cohort C',
+        playlist_id TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (track_id, outlet_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS mcp_telemetry_cache (
+        cache_key TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
 
     sqliteDb = db;
     seedDatabaseIfNeeded(db);
+    ensureDefaultMcpServer(db);
     console.log(`[SQLite Studio DB] Initialized WAL database at ${dbPath}`);
     return sqliteDb;
   } catch (err) {
@@ -654,4 +707,430 @@ export function setServerKvState(key: string, value: string): void {
     `).run(key, value, new Date().toISOString());
   } catch {}
 }
+
+export interface StoredMcpServerRecord {
+  id: string;
+  name: string;
+  url: string;
+  authType: 'none' | 'bearer' | 'header';
+  authHeaderName: string;
+  authToken: string;
+  hasAuthToken: boolean;
+  enabled: boolean;
+  isPrimary: boolean;
+  lastStatus: string;
+  lastLatencyMs: number;
+  lastError: string;
+  serverInfo: Record<string, any>;
+  tools: any[];
+  resources: any[];
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function ensureDefaultMcpServer(dbInstance?: any): void {
+  const db = dbInstance || getStudioDb();
+  if (!db) return;
+  try {
+    const now = new Date().toISOString();
+    const existing = db.prepare(`SELECT id FROM mcp_servers WHERE id = 'brickos-primary-mcp'`).get();
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO mcp_servers (
+          id, name, url, auth_type, auth_header_name, auth_token,
+          enabled, is_primary, last_status, last_latency_ms, last_error,
+          server_info_json, tools_json, resources_json, last_synced_at, created_at, updated_at
+        ) VALUES (?, ?, ?, 'none', 'Authorization', '', 1, 1, 'ready', 0, '', '{}', '[]', '[]', NULL, ?, ?)
+      `).run(
+        'brickos-primary-mcp',
+        'brickOS Remote MCP (brick-mcp.moyercloud.com)',
+        'https://brick-mcp.moyercloud.com/mcp',
+        now,
+        now
+      );
+    }
+  } catch (err) {
+    console.warn('[SQLite MCP] Seed default MCP server warning:', err);
+  }
+}
+
+function mapMcpServerRow(r: any, includeSecrets = false): StoredMcpServerRecord {
+  let serverInfo: Record<string, any> = {};
+  let tools: any[] = [];
+  let resources: any[] = [];
+  try { serverInfo = JSON.parse(r.server_info_json || '{}'); } catch {}
+  try { tools = JSON.parse(r.tools_json || '[]'); } catch {}
+  try { resources = JSON.parse(r.resources_json || '[]'); } catch {}
+  const rawToken = String(r.auth_token || '');
+  return {
+    id: r.id,
+    name: r.name,
+    url: r.url,
+    authType: (r.auth_type || 'none') as 'none' | 'bearer' | 'header',
+    authHeaderName: r.auth_header_name || 'Authorization',
+    authToken: includeSecrets ? rawToken : (rawToken ? '••••••••' : ''),
+    hasAuthToken: rawToken.length > 0,
+    enabled: Boolean(r.enabled),
+    isPrimary: Boolean(r.is_primary),
+    lastStatus: r.last_status || 'pending',
+    lastLatencyMs: Number(r.last_latency_ms || 0),
+    lastError: r.last_error || '',
+    serverInfo,
+    tools,
+    resources,
+    lastSyncedAt: r.last_synced_at || null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
+
+export function listMcpServersFromSqlite(includeSecrets = false): StoredMcpServerRecord[] {
+  const db = getStudioDb();
+  if (!db) return [];
+  ensureDefaultMcpServer(db);
+  try {
+    const rows = db.prepare('SELECT * FROM mcp_servers ORDER BY is_primary DESC, created_at ASC').all() as any[];
+    return rows.map((r) => mapMcpServerRow(r, includeSecrets));
+  } catch {
+    return [];
+  }
+}
+
+export function getMcpServerByIdFromSqlite(id: string, includeSecrets = true): StoredMcpServerRecord | null {
+  const db = getStudioDb();
+  if (!db) return null;
+  ensureDefaultMcpServer(db);
+  try {
+    const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as any;
+    return row ? mapMcpServerRow(row, includeSecrets) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function upsertMcpServerInSqlite(input: {
+  id?: string;
+  name: string;
+  url: string;
+  authType?: 'none' | 'bearer' | 'header';
+  authHeaderName?: string;
+  authToken?: string;
+  enabled?: boolean;
+  isPrimary?: boolean;
+}): StoredMcpServerRecord | null {
+  const db = getStudioDb();
+  if (!db) return null;
+  ensureDefaultMcpServer(db);
+  const now = new Date().toISOString();
+  const id = (input.id && input.id.trim()) || `mcp-${crypto.randomBytes(5).toString('hex')}`;
+  const existing = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as any;
+
+  let finalToken = existing?.auth_token || '';
+  if (typeof input.authToken === 'string' && input.authToken !== '••••••••') {
+    finalToken = input.authToken.trim();
+  }
+  if (input.authType === 'none') {
+    finalToken = '';
+  }
+
+  db.prepare(`
+    INSERT INTO mcp_servers (
+      id, name, url, auth_type, auth_header_name, auth_token,
+      enabled, is_primary, last_status, last_latency_ms, last_error,
+      server_info_json, tools_json, resources_json, last_synced_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      url = excluded.url,
+      auth_type = excluded.auth_type,
+      auth_header_name = excluded.auth_header_name,
+      auth_token = excluded.auth_token,
+      enabled = excluded.enabled,
+      updated_at = excluded.updated_at
+  `).run(
+    id,
+    input.name.trim(),
+    input.url.trim(),
+    input.authType || 'none',
+    (input.authHeaderName || 'Authorization').trim(),
+    finalToken,
+    input.enabled === false ? 0 : 1,
+    existing?.is_primary ? 1 : (input.isPrimary ? 1 : 0),
+    existing?.last_status || 'pending',
+    existing?.last_latency_ms || 0,
+    existing?.last_error || '',
+    existing?.server_info_json || '{}',
+    existing?.tools_json || '[]',
+    existing?.resources_json || '[]',
+    existing?.last_synced_at || null,
+    existing?.created_at || now,
+    now
+  );
+
+  return getMcpServerByIdFromSqlite(id, false);
+}
+
+export function updateMcpDiscoveryInSqlite(
+  id: string,
+  payload: {
+    lastStatus: string;
+    lastLatencyMs: number;
+    lastError?: string;
+    serverInfo?: Record<string, any>;
+    tools?: any[];
+    resources?: any[];
+  }
+): void {
+  const db = getStudioDb();
+  if (!db) return;
+  try {
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE mcp_servers SET
+        last_status = ?,
+        last_latency_ms = ?,
+        last_error = ?,
+        server_info_json = COALESCE(?, server_info_json),
+        tools_json = COALESCE(?, tools_json),
+        resources_json = COALESCE(?, resources_json),
+        last_synced_at = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      payload.lastStatus,
+      payload.lastLatencyMs,
+      payload.lastError || '',
+      payload.serverInfo ? JSON.stringify(payload.serverInfo) : null,
+      payload.tools ? JSON.stringify(payload.tools) : null,
+      payload.resources ? JSON.stringify(payload.resources) : null,
+      now,
+      now,
+      id
+    );
+  } catch (err) {
+    console.warn('[SQLite MCP] Update discovery warning:', err);
+  }
+}
+
+export function deleteMcpServerFromSqlite(id: string): boolean {
+  const db = getStudioDb();
+  if (!db || id === 'brickos-primary-mcp') return false;
+  try {
+    db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface McpPinnedWidgetRecord {
+  id: string;
+  serverId: string;
+  toolName: string;
+  title: string;
+  args: Record<string, any>;
+  lastResult: any;
+  lastRunAt: string | null;
+  createdAt: string;
+}
+
+export function listMcpPinnedWidgets(): McpPinnedWidgetRecord[] {
+  const db = getStudioDb();
+  if (!db) return [];
+  try {
+    const rows = db.prepare('SELECT * FROM mcp_pinned_widgets ORDER BY created_at DESC').all() as any[];
+    return rows.map((r) => {
+      let args: Record<string, any> = {};
+      let lastResult: any = null;
+      try { args = JSON.parse(r.args_json || '{}'); } catch {}
+      try { lastResult = JSON.parse(r.last_result_json || 'null'); } catch {}
+      return {
+        id: r.id,
+        serverId: r.server_id,
+        toolName: r.tool_name,
+        title: r.title,
+        args,
+        lastResult,
+        lastRunAt: r.last_run_at || null,
+        createdAt: r.created_at
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function upsertMcpPinnedWidget(input: {
+  id?: string;
+  serverId: string;
+  toolName: string;
+  title: string;
+  args?: Record<string, any>;
+  lastResult?: any;
+}): McpPinnedWidgetRecord | null {
+  const db = getStudioDb();
+  if (!db) return null;
+  try {
+    const now = new Date().toISOString();
+    const id = input.id || `pin-${crypto.randomBytes(5).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO mcp_pinned_widgets (
+        id, server_id, tool_name, title, args_json, last_result_json, last_run_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        args_json = excluded.args_json,
+        last_result_json = excluded.last_result_json,
+        last_run_at = excluded.last_run_at
+    `).run(
+      id,
+      input.serverId,
+      input.toolName,
+      input.title,
+      JSON.stringify(input.args || {}),
+      JSON.stringify(input.lastResult ?? null),
+      input.lastResult !== undefined ? now : null,
+      now
+    );
+    return listMcpPinnedWidgets().find((w) => w.id === id) || null;
+  } catch (err) {
+    console.warn('[SQLite MCP] Pin widget warning:', err);
+    return null;
+  }
+}
+
+export function deleteMcpPinnedWidget(id: string): boolean {
+  const db = getStudioDb();
+  if (!db) return false;
+  try {
+    db.prepare('DELETE FROM mcp_pinned_widgets WHERE id = ?').run(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface SocialOutletStatusRecord {
+  trackId: string;
+  outletKey: string;
+  status: string;
+  scheduledSlot: string;
+  postUrl: string;
+  postId: string;
+  cohort: string;
+  playlistId: string;
+  notes: string;
+  updatedAt: string;
+}
+
+export function listSocialOutletStatuses(): SocialOutletStatusRecord[] {
+  const db = getStudioDb();
+  if (!db) return [];
+  try {
+    const rows = db.prepare('SELECT * FROM social_outlet_statuses ORDER BY updated_at DESC').all() as any[];
+    return rows.map((r) => ({
+      trackId: r.track_id,
+      outletKey: r.outlet_key,
+      status: r.status,
+      scheduledSlot: r.scheduled_slot || '',
+      postUrl: r.post_url || '',
+      postId: r.post_id || '',
+      cohort: r.cohort || 'Cohort C',
+      playlistId: r.playlist_id || '',
+      notes: r.notes || '',
+      updatedAt: r.updated_at
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function upsertSocialOutletStatus(input: {
+  trackId: string;
+  outletKey: string;
+  status: string;
+  scheduledSlot?: string;
+  postUrl?: string;
+  postId?: string;
+  cohort?: string;
+  playlistId?: string;
+  notes?: string;
+}): SocialOutletStatusRecord | null {
+  const db = getStudioDb();
+  if (!db) return null;
+  try {
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO social_outlet_statuses (
+        track_id, outlet_key, status, scheduled_slot, post_url, post_id, cohort, playlist_id, notes, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(track_id, outlet_key) DO UPDATE SET
+        status = excluded.status,
+        scheduled_slot = excluded.scheduled_slot,
+        post_url = excluded.post_url,
+        post_id = excluded.post_id,
+        cohort = excluded.cohort,
+        playlist_id = excluded.playlist_id,
+        notes = excluded.notes,
+        updated_at = excluded.updated_at
+    `).run(
+      input.trackId,
+      input.outletKey,
+      input.status,
+      input.scheduledSlot || '',
+      input.postUrl || '',
+      input.postId || '',
+      input.cohort || 'Cohort C',
+      input.playlistId || '',
+      input.notes || '',
+      now
+    );
+    return {
+      trackId: input.trackId,
+      outletKey: input.outletKey,
+      status: input.status,
+      scheduledSlot: input.scheduledSlot || '',
+      postUrl: input.postUrl || '',
+      postId: input.postId || '',
+      cohort: input.cohort || 'Cohort C',
+      playlistId: input.playlistId || '',
+      notes: input.notes || '',
+      updatedAt: now
+    };
+  } catch (err) {
+    console.warn('[SQLite Social Outlet] Upsert warning:', err);
+    return null;
+  }
+}
+
+export function getMcpTelemetryCache<T = any>(cacheKey: string): { payload: T; updatedAt: string } | null {
+  const db = getStudioDb();
+  if (!db) return null;
+  try {
+    const row = db.prepare('SELECT payload_json, updated_at FROM mcp_telemetry_cache WHERE cache_key = ?').get(cacheKey) as any;
+    if (!row) return null;
+    return {
+      payload: JSON.parse(row.payload_json),
+      updatedAt: row.updated_at
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function setMcpTelemetryCache(cacheKey: string, payload: any): void {
+  const db = getStudioDb();
+  if (!db) return;
+  try {
+    db.prepare(`
+      INSERT INTO mcp_telemetry_cache (cache_key, payload_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(cache_key) DO UPDATE SET
+        payload_json = excluded.payload_json,
+        updated_at = excluded.updated_at
+    `).run(cacheKey, JSON.stringify(payload), new Date().toISOString());
+  } catch {}
+}
+
 
