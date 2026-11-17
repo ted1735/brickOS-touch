@@ -35,6 +35,7 @@ export const OmniPostTab: React.FC<OmniPostTabProps> = ({
   const [platform, setPlatform] = useState<'tiktok' | 'reels' | 'shorts'>('tiktok');
   const [template, setTemplate] = useState<'viral_hook' | 'selah_bts' | 'anthem_drop' | 'fitness_15k'>('viral_hook');
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Default captions based on templates
@@ -73,6 +74,7 @@ export const OmniPostTab: React.FC<OmniPostTabProps> = ({
   // Generate with Gemini
   const handleGenerateAiCopy = async () => {
     setIsGeneratingCopy(true);
+    setCopyError(null);
     try {
       const res = await fetch('/api/gemini/chat', {
         method: 'POST',
@@ -89,12 +91,14 @@ Template focus: ${template}
 Ensure high 3-second hook velocity, blue-collar authenticity, zero religious clichés, and clear Call To Action.`
             }
           ],
-          model: 'gemini-3.8-flash'
+          model: 'gemini-4-hydrogen'
         })
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || `Gemini request failed (HTTP ${res.status})`);
+      }
       if (data.reply) {
-        // Update current platform caption with response
         setCaptions(prev => ({
           ...prev,
           [template]: {
@@ -103,8 +107,8 @@ Ensure high 3-second hook velocity, blue-collar authenticity, zero religious cli
           }
         }));
       }
-    } catch (_) {
-      // Keep existing caption
+    } catch (err: any) {
+      setCopyError(err?.message || 'Failed to generate AI caption. Check GEMINI_API_KEY configuration.');
     } finally {
       setIsGeneratingCopy(false);
     }
@@ -285,6 +289,11 @@ Ensure high 3-second hook velocity, blue-collar authenticity, zero religious cli
 
             {/* Caption Textarea */}
             <div className="space-y-2">
+              {copyError && (
+                <div className="p-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs">
+                  {copyError}
+                </div>
+              )}
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-white uppercase tracking-wider">
                   Platform Caption & Hashtags ({activeCaption.length} chars)

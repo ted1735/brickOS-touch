@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -138,6 +139,24 @@ export { db, app };
 export const isFirebaseConfigured = (): boolean => {
   return !!db && !!app && !isFirestoreQuotaExhausted();
 };
+
+/**
+ * Verifies Firestore connectivity at startup only when quota circuit breaker is inactive.
+ */
+export async function testConnection(): Promise<boolean> {
+  if (!db || isFirestoreQuotaExhausted()) return false;
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    return true;
+  } catch (error: any) {
+    if (isQuotaExhaustedError(error)) {
+      tripFirestoreQuotaCircuitBreaker(error?.message);
+    } else if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firestore connection check: client is offline, running in local cache mode.');
+    }
+    return false;
+  }
+}
 
 // ==========================================
 // TRACKS PERSISTENCE & MILESTONE FINALIZATION

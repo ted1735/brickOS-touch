@@ -96,7 +96,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditResult, setAuditResult] = useState<string | null>(null);
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
-  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.8-flash'>('gemini-3.8-flash');
+  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-4-hydrogen'>('gemini-4-hydrogen');
   const [copiedBlock, setCopiedBlock] = useState<number | null>(null);
   const [isFeedbackCopied, setIsFeedbackCopied] = useState(false);
 
@@ -1177,7 +1177,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
               onChange={(e) => setAuditModel(e.target.value as any)}
               className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
             >
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash (Fast & Efficient)</option>
+              <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (Fast & Efficient)</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Theological)</option>
             </select>
 
@@ -2655,7 +2655,7 @@ export const LyricsAndSunoTab: React.FC<LyricsAndSunoTabProps> = ({
                           onChange={(e) => setAuditModel(e.target.value as any)}
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
                         >
-                          <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                          <option value="gemini-4-hydrogen">Gemini 4 Hydrogen</option>
                           <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
                         </select>
                         <button

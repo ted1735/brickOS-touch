@@ -1,16 +1,63 @@
+export type McpAuthType = 'none' | 'bearer' | 'header' | 'profile';
+
+export interface McpAuthProfilePublic {
+  id: string;
+  name: string;
+  authType: 'bearer' | 'header' | 'env_bearer';
+  headerName: string;
+  envVarName: string;
+  hasSecret: boolean;
+  tokenPreview: string;
+  description: string;
+  lastVerifiedAt: string | null;
+  lastVerifiedStatus: number;
+  linkedServerCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface McpAuthTestResult {
+  ok: boolean;
+  httpStatus: number;
+  latencyMs: number;
+  authModeUsed: string;
+  authChallenge: string;
+  protocolVersion?: string;
+  serverInfo?: Record<string, any>;
+  toolCount?: number;
+  resourceCount?: number;
+  error?: string;
+  hint?: string;
+}
+
+export interface McpPollingStatus {
+  enabled: boolean;
+  intervalMs: number;
+  isPolling: boolean;
+  lastPollAt: string | null;
+  lastPollDurationMs: number;
+  nextPollAt: string | null;
+  consecutiveErrors: number;
+  lastErrors: string[];
+}
+
 export interface McpServerPublic {
   id: string;
   name: string;
   url: string;
-  authType: 'none' | 'bearer' | 'header';
+  authType: McpAuthType;
   authHeaderName: string;
   authToken: string;
+  authProfileId?: string;
+  authProfileName?: string;
+  tokenPreview?: string;
   hasAuthToken: boolean;
   enabled: boolean;
   isPrimary: boolean;
   lastStatus: string;
   lastLatencyMs: number;
   lastError: string;
+  consecutiveFailures?: number;
   serverInfo: {
     name?: string;
     version?: string;
@@ -117,6 +164,49 @@ export interface McpTrackSummary {
   local_project_folder: string | null;
 }
 
+export interface ShortMetadataOverride {
+  shortId: string;
+  trackSlug: string;
+  trackTitle: string;
+  campaign: string;
+  status: string;
+  title: string;
+  hookText: string;
+  caption: string;
+  scheduledSlot: string;
+  playlistId: string;
+  youtubeId: string;
+  youtubeUrl: string;
+  spotifyUrl: string;
+  appleMusicUrl: string;
+  youtubeMusicUrl: string;
+  canonicalMasterFile: string;
+  videoAssetUrl: string;
+  thumbnailAssetUrl: string;
+  notes: string;
+  lastSyncedAt: string | null;
+  updatedAt: string;
+}
+
+export type MatrixSortMode =
+  | 'manual'
+  | 'date_desc'
+  | 'date_asc'
+  | 'completion_desc'
+  | 'completion_asc';
+
+export type MatrixActiveOverride = 'auto' | 'pinned' | 'archived';
+export type MatrixNeedsActionOverride = 'auto' | 'flagged' | 'cleared';
+
+export interface MatrixTrackPreference {
+  trackId: string;
+  activeOverride: MatrixActiveOverride;
+  needsActionOverride: MatrixNeedsActionOverride;
+  actionNote: string;
+  manualRank: number;
+  updatedAt: string;
+}
+
 export interface DashboardIngestPayload {
   success: boolean;
   fetchedAt: string;
@@ -176,7 +266,12 @@ export interface DashboardIngestPayload {
   mcpTracks: McpTrackSummary[];
   progressMarkdown: string;
   outletStatuses: SocialOutletStatus[];
+  shortOverrides?: ShortMetadataOverride[];
+  matrixPreferences?: MatrixTrackPreference[];
+  matrixSortMode?: MatrixSortMode;
   pinnedWidgets: McpPinnedWidget[];
+  polling?: McpPollingStatus;
+  authProfiles?: McpAuthProfilePublic[];
 }
 
 export const SOCIAL_OUTLET_DEFINITIONS = [
@@ -206,7 +301,7 @@ export const SOCIAL_OUTLET_DEFINITIONS = [
   },
   {
     key: 'distro_streaming',
-    label: 'Spotify & Apple DistroKit',
+    label: 'Spotify & Apple (DistroKid)',
     handle: 'DistroKid / Streaming Masters',
     source: 'MCP Release Links'
   }
@@ -264,20 +359,24 @@ export const COHORT_RULES = [
   }
 ] as const;
 
-export function toTrackSlug(titleOrSlug: string): string {
-  return String(titleOrSlug || '')
+export function toTrackSlug(titleOrSlug: unknown): string {
+  return String(titleOrSlug ?? '')
     .toLowerCase()
     .replace(/['’]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
 
-export function matchMcpSlug(trackTitle: string, mcpTracks: McpTrackSummary[]): string {
+export function matchMcpSlug(trackTitle: unknown, mcpTracks: McpTrackSummary[]): string {
   const norm = toTrackSlug(trackTitle);
-  const exact = mcpTracks.find((m) => m.slug === norm || toTrackSlug(m.title) === norm);
+  const safeTracks = Array.isArray(mcpTracks) ? mcpTracks.filter(Boolean) : [];
+  if (!norm) return safeTracks[0]?.slug || '';
+  const exact = safeTracks.find(
+    (m) => m?.slug === norm || toTrackSlug(m?.title) === norm
+  );
   if (exact) return exact.slug;
-  const partial = mcpTracks.find(
-    (m) => norm.includes(m.slug) || m.slug.includes(norm)
+  const partial = safeTracks.find(
+    (m) => Boolean(m?.slug) && (norm.includes(m.slug) || m.slug.includes(norm))
   );
   return partial ? partial.slug : norm;
 }
@@ -288,6 +387,7 @@ export function getTelemetryWindowTag(publishedAtIso?: string): {
 } {
   if (!publishedAtIso) return { label: 'Queued', tone: 'neutral' };
   const diffHours = (Date.now() - new Date(publishedAtIso).getTime()) / (1000 * 60 * 60);
+  if (Number.isNaN(diffHours)) return { label: 'Queued', tone: 'neutral' };
   if (diffHours < 0) return { label: 'Scheduled', tone: 'cyan' };
   if (diffHours < 24) return { label: `T+${Math.max(1, Math.floor(diffHours))}h (24h Freeze)`, tone: 'amber' };
   if (diffHours < 72) return { label: `T+${Math.floor(diffHours)}h (Approaching T+72h)`, tone: 'cyan' };
@@ -295,9 +395,9 @@ export function getTelemetryWindowTag(publishedAtIso?: string): {
   return { label: `T+${Math.floor(diffHours / 24)}d Final`, tone: 'neutral' };
 }
 
-export function checkDaypartViolation(cohort: string, scheduledSlot: string): string | null {
+export function checkDaypartViolation(cohort: string, scheduledSlot?: string): string | null {
   if (!scheduledSlot) return null;
-  const lower = scheduledSlot.toLowerCase();
+  const lower = String(scheduledSlot ?? '').toLowerCase();
   const isSatMorning = lower.includes('sat') && (lower.includes('05:') || lower.includes('5:15') || lower.includes('morning'));
   if (isSatMorning && (cohort === 'Cohort C' || cohort === 'Cohort D')) {
     return `${cohort} blocked in Saturday 05:15 AM EST slot (reserved for Cohort A Athletic/Grit drops).`;

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Track } from '../types';
 import {
+  McpServerPublic,
   McpTrackSummary,
   ReadyShortItem,
   MuseMessageItem,
@@ -31,6 +32,7 @@ interface CurrentProjectCoordinationPanelProps {
   tracks: Track[];
   selectedTrack: Track;
   onSelectTrack: (track: Track) => void;
+  servers?: McpServerPublic[];
   mcpTracks: McpTrackSummary[];
   readyShorts: ReadyShortItem[];
   museMessages: MuseMessageItem[];
@@ -55,6 +57,7 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
   tracks,
   selectedTrack,
   onSelectTrack,
+  servers = [],
   mcpTracks,
   readyShorts,
   museMessages,
@@ -64,14 +67,19 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
   onNavigateToTab,
   onNotify
 }) => {
-  const matchedSlug = matchMcpSlug(selectedTrack.title, mcpTracks);
+  const selectedTitleLc = String(selectedTrack?.title ?? '').toLowerCase();
+  const matchedSlug = matchMcpSlug(selectedTrack?.title || '', mcpTracks);
   const [trackSlugInput, setTrackSlugInput] = useState<string>(matchedSlug);
+  const [activeServerId, setActiveServerId] = useState<string>(
+    servers[0]?.id || 'brickos-primary-mcp'
+  );
   const [coordData, setCoordData] = useState<{
     trackRecord?: any;
     previewAssets?: any;
     auditReport?: any;
     latencyMs?: number;
   } | null>(null);
+  const [coordError, setCoordError] = useState<string | null>(null);
   const [isLoadingCoord, setIsLoadingCoord] = useState(false);
 
   // Action states for EGM MCP tools
@@ -106,15 +114,15 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
   const [approveResult, setApproveResult] = useState<any>(null);
 
   // Selected Cohort & Playlist persisted with track's YouTube outlet record
-  const trackOutletRecords = outletStatuses.filter((o) => o.trackId === selectedTrack.id);
-  const primaryOutletRecord = trackOutletRecords.find((o) => o.outletKey === 'youtube_shorts');
+  const trackOutletRecords = outletStatuses.filter((o) => o?.trackId === selectedTrack?.id);
+  const primaryOutletRecord = trackOutletRecords.find((o) => o?.outletKey === 'youtube_shorts');
   const [cohort, setCohort] = useState<string>(primaryOutletRecord?.cohort || 'Cohort C');
   const [playlistId, setPlaylistId] = useState<string>(
     primaryOutletRecord?.playlistId || CANONICAL_PLAYLISTS[0].id
   );
 
   useEffect(() => {
-    const nextSlug = matchMcpSlug(selectedTrack.title, mcpTracks);
+    const nextSlug = matchMcpSlug(selectedTrack?.title || '', mcpTracks);
     setTrackSlugInput(nextSlug);
     setCoordData(null);
     setSunoHooksResult(null);
@@ -122,39 +130,51 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
     setRescueResult(null);
     setApproveResult(null);
     const ytRec = outletStatuses.find(
-      (o) => o.trackId === selectedTrack.id && o.outletKey === 'youtube_shorts'
+      (o) => o?.trackId === selectedTrack?.id && o?.outletKey === 'youtube_shorts'
     );
     if (ytRec?.cohort) setCohort(ytRec.cohort);
     if (ytRec?.playlistId) setPlaylistId(ytRec.playlistId);
     loadProjectCoordination(nextSlug);
-  }, [selectedTrack.id, mcpTracks.length]);
+  }, [selectedTrack?.id, mcpTracks.length]);
 
-  const loadProjectCoordination = async (slugToLoad: string) => {
+  const loadProjectCoordination = async (slugToLoad: string, serverOverride?: string) => {
     if (!slugToLoad) return;
     setIsLoadingCoord(true);
+    setCoordError(null);
+    const targetServer = serverOverride || activeServerId || 'brickos-primary-mcp';
     try {
       const res = await fetch('/api/mcp/project-coordination', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackSlug: slugToLoad })
+        body: JSON.stringify({ trackSlug: slugToLoad, serverId: targetServer })
       });
       const data = await res.json();
-      if (data.success) {
-        setCoordData(data);
-        const relatedShort = readyShorts.find(
-          (s) =>
-            s.track.toLowerCase().includes(selectedTrack.title.toLowerCase()) ||
-            selectedTrack.title.toLowerCase().includes(s.track.toLowerCase())
-        );
-        if (relatedShort) {
-          if (relatedShort.youtube_id && relatedShort.youtube_id !== 'PENDING_PUBLISH') {
-            setRescuePostId(relatedShort.youtube_id);
-          }
-          if (relatedShort.scheduled_slot) setApproveSlot(relatedShort.scheduled_slot);
-        }
+      if (!res.ok || !data.success) {
+        const errMsg = data?.error || `Failed to sync project coordination (HTTP ${res.status})`;
+        setCoordError(errMsg);
+        onNotify(errMsg, 'error');
+        return;
       }
-    } catch {
-      // keep responsive
+      setCoordData(data);
+      const relatedShort = (Array.isArray(readyShorts) ? readyShorts : []).find(
+        (s) => {
+          const sTrackLc = String(s?.track ?? '').toLowerCase();
+          return (
+            Boolean(selectedTitleLc && sTrackLc.includes(selectedTitleLc)) ||
+            Boolean(sTrackLc && selectedTitleLc.includes(sTrackLc))
+          );
+        }
+      );
+      if (relatedShort) {
+        if (relatedShort.youtube_id && relatedShort.youtube_id !== 'PENDING_PUBLISH') {
+          setRescuePostId(relatedShort.youtube_id);
+        }
+        if (relatedShort.scheduled_slot) setApproveSlot(relatedShort.scheduled_slot);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || 'Network error fetching project coordination state';
+      setCoordError(errMsg);
+      onNotify(errMsg, 'error');
     } finally {
       setIsLoadingCoord(false);
     }
@@ -165,12 +185,16 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        serverId: 'brickos-primary-mcp',
+        serverId: activeServerId || 'brickos-primary-mcp',
         toolName,
         arguments: args
       })
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data?.error || `MCP tool error (HTTP ${res.status})` };
+    }
+    return data;
   };
 
   const handleRunAudit = async () => {
@@ -183,6 +207,8 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
       } else {
         onNotify(data.error || 'Audit failed', 'error');
       }
+    } catch (err: any) {
+      onNotify(err?.message || 'Audit request failed', 'error');
     } finally {
       setIsRunningAudit(false);
     }
@@ -196,7 +222,13 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
         clip_duration_sec: 20
       });
       setSunoHooksResult(data.success ? data.data : { error: data.error });
-      onNotify(data.success ? 'Suno audio strike check completed.' : data.error || 'Ingest failed', data.success ? 'success' : 'error');
+      onNotify(
+        data.success ? 'Suno audio strike check completed.' : data.error || 'Ingest failed',
+        data.success ? 'success' : 'error'
+      );
+    } catch (err: any) {
+      setSunoHooksResult({ error: err?.message || 'Suno ingest failed' });
+      onNotify(err?.message || 'Suno audio ingest failed', 'error');
     } finally {
       setIsIngestingSuno(false);
     }
@@ -212,7 +244,13 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
       });
       setPlaybookResult(data.success ? data.data : { error: data.error });
       if (data.data?.job_id) setJobIdInput(String(data.data.job_id));
-      onNotify(data.success ? `Playbook stage '${playbookStage}' dispatched.` : data.error || 'Playbook dispatch failed', data.success ? 'success' : 'error');
+      onNotify(
+        data.success ? `Playbook stage '${playbookStage}' dispatched.` : data.error || 'Playbook dispatch failed',
+        data.success ? 'success' : 'error'
+      );
+    } catch (err: any) {
+      setPlaybookResult({ error: err?.message || 'Playbook dispatch error' });
+      onNotify(err?.message || 'Playbook dispatch failed', 'error');
     } finally {
       setIsRunningPlaybook(false);
     }
@@ -230,6 +268,12 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
         wait_seconds: 5
       });
       setJobWaitResult(data.success ? data.data : { error: data.error });
+      if (!data.success) {
+        onNotify(data.error || 'Job poll failed', 'error');
+      }
+    } catch (err: any) {
+      setJobWaitResult({ error: err?.message || 'Job poll error' });
+      onNotify(err?.message || 'Job wait failed', 'error');
     } finally {
       setIsWaitingJob(false);
     }
@@ -255,7 +299,13 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
 
       const data = await callMcpTool('brickos_telemetry_rescue_check', args);
       setRescueResult(data.success ? data.data : { error: data.error });
-      onNotify(data.success ? 'Retention rescue check evaluated.' : data.error || 'Rescue check failed', data.success ? 'success' : 'error');
+      onNotify(
+        data.success ? 'Retention rescue check evaluated.' : data.error || 'Rescue check failed',
+        data.success ? 'success' : 'error'
+      );
+    } catch (err: any) {
+      setRescueResult({ error: err?.message || 'Rescue check error' });
+      onNotify(err?.message || 'Retention rescue check failed', 'error');
     } finally {
       setIsCheckingRescue(false);
     }
@@ -276,24 +326,35 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
         platforms: ['YouTube @brickRedeemed', 'Facebook Page', 'IG @brickredeemed', 'IG @theknotcreations']
       });
       setApproveResult(data.success ? data.data : { error: data.error });
-      onNotify(data.success ? 'Duplicate Guard & Release Approval updated.' : data.error || 'Approval check failed', data.success ? 'success' : 'error');
+      onNotify(
+        data.success ? 'Duplicate Guard & Release Approval updated.' : data.error || 'Approval check failed',
+        data.success ? 'success' : 'error'
+      );
+    } catch (err: any) {
+      setApproveResult({ error: err?.message || 'Release approval error' });
+      onNotify(err?.message || 'Release approval check failed', 'error');
     } finally {
       setIsApprovingRelease(false);
     }
   };
 
-  const matchingShorts = readyShorts.filter(
-    (s) =>
-      s.track.toLowerCase().includes(selectedTrack.title.toLowerCase()) ||
-      s.campaign.toLowerCase().includes(selectedTrack.title.toLowerCase()) ||
-      selectedTrack.title.toLowerCase().includes(s.track.toLowerCase())
-  );
+  const matchingShorts = (Array.isArray(readyShorts) ? readyShorts : []).filter((s) => {
+    if (!s || !selectedTitleLc) return false;
+    const sTrackLc = String(s?.track ?? '').toLowerCase();
+    const sCampLc = String(s?.campaign ?? '').toLowerCase();
+    return (
+      sTrackLc.includes(selectedTitleLc) ||
+      sCampLc.includes(selectedTitleLc) ||
+      (sTrackLc && selectedTitleLc.includes(sTrackLc))
+    );
+  });
 
-  const matchingMuse = museMessages.filter(
-    (m) =>
-      (m.campaign || '').toLowerCase().includes(selectedTrack.title.toLowerCase()) ||
-      m.message.toLowerCase().includes(selectedTrack.title.toLowerCase())
-  );
+  const matchingMuse = (Array.isArray(museMessages) ? museMessages : []).filter((m) => {
+    if (!m || !selectedTitleLc) return false;
+    const mCampLc = String(m?.campaign ?? '').toLowerCase();
+    const mMsgLc = String(m?.message ?? '').toLowerCase();
+    return mCampLc.includes(selectedTitleLc) || mMsgLc.includes(selectedTitleLc);
+  });
 
   const daypartWarning = checkDaypartViolation(cohort, approveSlot);
 
@@ -320,6 +381,27 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {servers.length > 0 && (
+              <select
+                value={activeServerId}
+                onChange={(e) => {
+                  const nextSrv = e.target.value;
+                  setActiveServerId(nextSrv);
+                  loadProjectCoordination(trackSlugInput, nextSrv);
+                }}
+                className={`min-h-[44px] px-3 py-2 rounded-xl border text-xs font-medium cursor-pointer ${
+                  isDarkMode ? 'bg-slate-950 border-slate-700 text-cyan-300' : 'bg-white border-slate-300 text-slate-900'
+                }`}
+                aria-label="Select MCP endpoint"
+              >
+                {servers.map((srv) => (
+                  <option key={srv.id} value={srv.id}>
+                    MCP: {srv.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               value={selectedTrack.id}
               onChange={(e) => {
@@ -360,6 +442,12 @@ export const CurrentProjectCoordinationPanel: React.FC<CurrentProjectCoordinatio
             </div>
           </div>
         </div>
+
+        {coordError && (
+          <div className="mt-3 p-3 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs font-mono">
+            {coordError}
+          </div>
+        )}
 
         {/* Deep Links into Studio Subsystems */}
         <div className="mt-4 pt-3 border-t border-slate-800/40 flex flex-wrap items-center gap-2">

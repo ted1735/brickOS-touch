@@ -35,6 +35,7 @@ import {
 } from './src/services/sqliteCatalogService';
 import { getDatabaseStats } from './src/server/brickDatabase';
 import { createMcpHubRouter } from './src/server/mcpHubRouter';
+import { mcpPollingEngine } from './src/server/mcpProxyService';
 
 dotenv.config();
 
@@ -203,19 +204,27 @@ async function resolveImageData(input: string, fallbackMime = 'image/png'): Prom
 }
 
 // Robust Cascade Fallback Generator for Text & Chat Tasks
-// Shields against temporary 503 high-demand spikes on gemini-3.8-flash
+// Maps legacy model names to active Gemini aliases and cascades cleanly on transient failures
+function normalizeGeminiModel(preferredModel?: string, defaultModel = 'gemini-4-hydrogen'): string {
+  const m = String(preferredModel || '').trim();
+  if (!m || m === 'gemini-3.5-flash' || m === 'gemini-3.8-flash') {
+    return defaultModel;
+  }
+  return m;
+}
+
 async function generateContentWithFallback(
   ai: GoogleGenAI,
   preferredModel: string,
   params: { contents: any; config?: any }
 ): Promise<{ text: string; usedModel: string; rawResponse?: any }> {
-  const normalizedPreferred = preferredModel === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : preferredModel;
+  const normalizedPreferred = normalizeGeminiModel(preferredModel, 'gemini-4-hydrogen');
   const candidateModels = Array.from(
     new Set([
       normalizedPreferred,
-      'gemini-3.1-pro-preview',
-      'gemini-3.8-flash',
+      'gemini-4-hydrogen',
       'gemini-3.1-flash-lite',
+      'gemini-3.1-pro-preview',
     ].filter(Boolean))
   );
 
@@ -248,7 +257,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Search Grounding using gemini-3.8-flash with googleSearch tool
+// 2. Search Grounding using gemini-4-hydrogen with googleSearch tool
 app.post('/api/gemini/search', async (req, res) => {
   try {
     const { query } = req.body;
@@ -257,7 +266,7 @@ app.post('/api/gemini/search', async (req, res) => {
     }
     const ai = getGenAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: `You are an elite music industry research consultant grounded in current Billboard Christian/Gospel chart trends, Nashville Christian audio production benchmarks, and theological scripture reference indexing.\n\nQuery: ${query}`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -290,10 +299,10 @@ app.post('/api/gemini/search', async (req, res) => {
   }
 });
 
-// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-3.8-flash)
+// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-4-hydrogen)
 app.post('/api/gemini/audit-lyric', async (req, res) => {
   try {
-    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.8-flash' } = req.body;
+    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-4-hydrogen' } = req.body;
     const ai = getGenAI();
 
     const systemPrompt = `You are the Lead Theological & Lyrical Supervisor for brickOS Sovereign Records.
@@ -319,7 +328,7 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
 - 60-Second Standalone Hook Assessment
 - Ready-to-use Rewrite Suggestions for weak sections.`;
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = normalizeGeminiModel(model, 'gemini-4-hydrogen');
     const result = await generateContentWithFallback(ai, targetModel, {
       contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`
     });
@@ -334,7 +343,7 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
 // 3b. Automated Lyric Rewrite Engine incorporating approved audit feedback
 app.post('/api/gemini/rewrite-lyrics', async (req, res) => {
   try {
-    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.8-flash' } = req.body;
+    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-4-hydrogen' } = req.body;
     if (!lyrics) {
       return res.status(400).json({ error: 'Original lyrics are required' });
     }
@@ -370,7 +379,7 @@ ${lyrics}
 
 Output the full rewritten lyrics now:`;
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = normalizeGeminiModel(model, 'gemini-4-hydrogen');
     const result = await generateContentWithFallback(ai, targetModel, { contents: prompt });
 
     // Strip any markdown code blocks if the model wrapped output
@@ -386,7 +395,7 @@ Output the full rewritten lyrics now:`;
 // 3c. 3-Way Song Version Comparative Audit Engine
 app.post('/api/gemini/compare-versions', async (req, res) => {
   try {
-    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-3.8-flash' } = req.body;
+    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-4-hydrogen' } = req.body;
     if (!versions || !Array.isArray(versions) || versions.length < 2) {
       return res.status(400).json({ error: 'At least 2 versions are required for comparative audit' });
     }
@@ -427,7 +436,7 @@ ${versionBlocks}
 
 Deliver your comprehensive comparative audit now:`;
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = normalizeGeminiModel(model, 'gemini-4-hydrogen');
     const result = await generateContentWithFallback(ai, targetModel, { contents: prompt });
 
     res.json({ audit: result.text, modelUsed: result.usedModel });
@@ -449,7 +458,7 @@ app.post('/api/gemini/chat', async (req, res) => {
       parts: [{ text: m.content }],
     }));
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.1-pro-preview');
+    const targetModel = normalizeGeminiModel(model, 'gemini-3.1-pro-preview');
     const result = await generateContentWithFallback(ai, targetModel, {
       contents,
       config: {
@@ -623,7 +632,7 @@ app.post('/api/gemini/modify-asset', async (req, res) => {
       let refinedPrompt = currentPrompt || editPrompt;
       try {
         const textResponse = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: `A music producer asked Gemini to change an album visual: "${userInstruction}".
 Original title: "${currentName || 'Album Visual'}"
 Original prompt: "${currentPrompt || ''}"
@@ -668,7 +677,7 @@ Return actionable JSON:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-4-hydrogen',
         contents: `Process user modification request: ${userInstruction}`,
         config: {
           systemInstruction,
@@ -705,7 +714,7 @@ app.post('/api/gemini/analyze-image', async (req, res) => {
     const userPrompt = prompt || 'Analyze this image in detail for album art, video seed frame suitability, color harmony, visual mood, theological symbolism, and short-form hook retention.';
 
     let responseText = '';
-    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.8-flash'];
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
 
     for (const model of candidates) {
       try {
@@ -884,7 +893,7 @@ app.post('/api/gemini/analyze-video', async (req, res) => {
       ];
     }
 
-    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.8-flash'];
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
     let responseText = '';
 
     for (const model of candidates) {
@@ -1478,7 +1487,20 @@ async function smartFetch(urlStr: string, options: any = {}, forceTailscale = fa
 
 // Tailscale Status API
 app.get('/api/tailscale/status', async (req, res) => {
-  const isDaemonRunning = ensureTailscaledRunning();
+  const isInstalled = isTailscaleBinaryInstalled();
+  const isDaemonRunning = isInstalled ? ensureTailscaledRunning() : false;
+  if (!isInstalled) {
+    return res.json({
+      success: false,
+      isInstalled: false,
+      isDaemonRunning: false,
+      backendState: 'NotInstalledInContainer',
+      authUrl: null,
+      tailscaleIPs: [],
+      peers: [],
+      error: 'Tailscale CLI is not installed inside this cloud container. Use the Nextcloud direct public HTTPS endpoint or configure a custom reachable HTTPS URL.'
+    });
+  }
   try {
     const rawJson = execSync('tailscale status --peers=true --json', { timeout: 6000 }).toString();
     const data = JSON.parse(rawJson);
@@ -5047,6 +5069,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[brickOS Studio] Server running on http://0.0.0.0:${PORT}`);
+    mcpPollingEngine.start();
   });
 }
 

@@ -15,18 +15,26 @@ import {
   Terminal,
   ChevronRight,
   Shield,
-  Clock
+  Clock,
+  Eye,
+  EyeOff,
+  Lock,
+  FlaskConical
 } from 'lucide-react';
 import {
   McpServerPublic,
   McpToolDefinition,
   McpResourceDefinition,
-  McpPinnedWidget
+  McpPinnedWidget,
+  McpAuthProfilePublic,
+  McpAuthTestResult,
+  McpAuthType
 } from '../types/mcpStatus';
 
 interface McpHubIngestionPanelProps {
   servers: McpServerPublic[];
   pinnedWidgets: McpPinnedWidget[];
+  authProfiles?: McpAuthProfilePublic[];
   progressMarkdown?: string;
   isDarkMode: boolean;
   onRefreshDashboard: () => Promise<void>;
@@ -36,6 +44,7 @@ interface McpHubIngestionPanelProps {
 export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
   servers,
   pinnedWidgets,
+  authProfiles = [],
   progressMarkdown = '',
   isDarkMode,
   onRefreshDashboard,
@@ -56,19 +65,47 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
   const [resourceContent, setResourceContent] = useState<string>(progressMarkdown);
   const [isLoadingResource, setIsLoadingResource] = useState(false);
 
+  // Auth Manager State (Reusable Bearer / Header / Env Profiles)
+  const [profiles, setProfiles] = useState<McpAuthProfilePublic[]>(authProfiles);
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [editingProfileId, setEditingProfileId] = useState<string | undefined>(undefined);
+  const [profName, setProfName] = useState('');
+  const [profAuthType, setProfAuthType] = useState<'bearer' | 'header' | 'env_bearer'>('bearer');
+  const [profHeaderName, setProfHeaderName] = useState('Authorization');
+  const [profEnvVarName, setProfEnvVarName] = useState('BRICK_MCP_BEARER_TOKEN');
+  const [profSecret, setProfSecret] = useState('');
+  const [profClearSecret, setProfClearSecret] = useState(false);
+  const [profDescription, setProfDescription] = useState('');
+  const [showProfSecretText, setShowProfSecretText] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profTestTargetUrl, setProfTestTargetUrl] = useState(
+    servers[0]?.url || 'https://brick-mcp.moyercloud.com/mcp'
+  );
+  const [profTestResult, setProfTestResult] = useState<McpAuthTestResult | null>(null);
+  const [isTestingProfAuth, setIsTestingProfAuth] = useState(false);
+
   // Add / Edit MCP server drawer state
   const [showServerForm, setShowServerForm] = useState(false);
   const [editingServerId, setEditingServerId] = useState<string | undefined>(undefined);
   const [formName, setFormName] = useState('');
   const [formUrl, setFormUrl] = useState('');
-  const [formAuthType, setFormAuthType] = useState<'none' | 'bearer' | 'header'>('none');
+  const [formAuthType, setFormAuthType] = useState<McpAuthType>('none');
+  const [formAuthProfileId, setFormAuthProfileId] = useState('');
   const [formAuthHeaderName, setFormAuthHeaderName] = useState('Authorization');
   const [formAuthToken, setFormAuthToken] = useState('');
+  const [formClearToken, setFormClearToken] = useState(false);
+  const [showServerSecretText, setShowServerSecretText] = useState(false);
   const [isSavingServer, setIsSavingServer] = useState(false);
+  const [isTestingServerAuth, setIsTestingServerAuth] = useState(false);
+  const [serverTestResult, setServerTestResult] = useState<McpAuthTestResult | null>(null);
   const [discoveringId, setDiscoveringId] = useState<string | null>(null);
 
   const selectedServer =
     servers.find((s) => s.id === selectedServerId) || servers[0] || null;
+
+  useEffect(() => {
+    setProfiles(authProfiles);
+  }, [authProfiles]);
 
   useEffect(() => {
     if (progressMarkdown && !resourceContent) {
@@ -76,11 +113,33 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
     }
   }, [progressMarkdown]);
 
-  useEffect(() => {
-    if (selectedServer?.tools?.length && !selectedTool) {
-      setSelectedTool(selectedServer.tools[0]);
+  const populateToolDefaults = (tool: McpToolDefinition) => {
+    setSelectedTool(tool);
+    setToolOutput(null);
+    setToolError(null);
+    const defaults: Record<string, string> = {};
+    const props = tool.inputSchema?.properties || {};
+    for (const [key, def] of Object.entries(props)) {
+      if (def?.default !== undefined) {
+        defaults[key] = typeof def.default === 'object' ? JSON.stringify(def.default) : String(def.default);
+      }
     }
-  }, [selectedServer]);
+    setToolArgs(defaults);
+  };
+
+  useEffect(() => {
+    if (selectedServer?.tools?.length) {
+      const stillExists = selectedTool
+        ? selectedServer.tools.some((t) => t.name === selectedTool.name)
+        : false;
+      if (!selectedTool || !stillExists) {
+        populateToolDefaults(selectedServer.tools[0]);
+      }
+    } else if (selectedTool) {
+      setSelectedTool(null);
+      setToolArgs({});
+    }
+  }, [selectedServer?.id, selectedServer?.tools?.length]);
 
   const cardSurface = isDarkMode
     ? 'bg-slate-900/90 border-slate-800 text-slate-100'
@@ -89,14 +148,178 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
     ? 'bg-slate-950/80 border-slate-800 text-slate-200'
     : 'bg-slate-50 border-slate-200 text-slate-800';
   const mutedText = isDarkMode ? 'text-slate-400' : 'text-slate-600';
+  const inputSurface = isDarkMode
+    ? 'bg-slate-900 border-slate-700 text-white'
+    : 'bg-white border-slate-300 text-slate-900';
+
+  const refreshProfilesFromApi = async () => {
+    try {
+      const res = await fetch('/api/mcp/auth/profiles');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && Array.isArray(data.profiles)) {
+        setProfiles(data.profiles);
+      }
+    } catch {
+      // ignore background list error
+    }
+  };
+
+  // ==========================================
+  // AUTH PROFILE HANDLERS
+  // ==========================================
+
+  const handleOpenAddProfile = () => {
+    setEditingProfileId(undefined);
+    setProfName('Gemini Android Bearer Token');
+    setProfAuthType('bearer');
+    setProfHeaderName('Authorization');
+    setProfEnvVarName('BRICK_MCP_BEARER_TOKEN');
+    setProfSecret('');
+    setProfClearSecret(false);
+    setProfDescription('Bearer token shared with Gemini Android MCP integration');
+    setProfTestTargetUrl(selectedServer?.url || 'https://brick-mcp.moyercloud.com/mcp');
+    setProfTestResult(null);
+    setShowProfSecretText(false);
+    setShowProfileForm(true);
+  };
+
+  const handleOpenEditProfile = (prof: McpAuthProfilePublic) => {
+    setEditingProfileId(prof.id);
+    setProfName(prof.name);
+    setProfAuthType(prof.authType);
+    setProfHeaderName(prof.headerName || 'Authorization');
+    setProfEnvVarName(prof.envVarName || 'BRICK_MCP_BEARER_TOKEN');
+    setProfSecret(prof.hasSecret ? '••••••••' : '');
+    setProfClearSecret(false);
+    setProfDescription(prof.description || '');
+    setProfTestTargetUrl(selectedServer?.url || 'https://brick-mcp.moyercloud.com/mcp');
+    setProfTestResult(null);
+    setShowProfSecretText(false);
+    setShowProfileForm(true);
+  };
+
+  const handleTestProfileAuth = async () => {
+    if (!profTestTargetUrl.trim()) {
+      onNotify('Enter a target MCP endpoint URL to run auth diagnostic.', 'error');
+      return;
+    }
+    setIsTestingProfAuth(true);
+    setProfTestResult(null);
+    try {
+      const res = await fetch('/api/mcp/auth/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: profTestTargetUrl.trim(),
+          authType: profAuthType === 'env_bearer' ? 'profile' : profAuthType,
+          authProfileId: profAuthType === 'env_bearer' ? editingProfileId : undefined,
+          authHeaderName: profHeaderName.trim() || 'Authorization',
+          authToken: profSecret
+        })
+      });
+      const data = await res.json();
+      if (data.result) {
+        setProfTestResult(data.result);
+      } else {
+        setProfTestResult({
+          ok: false,
+          httpStatus: res.status,
+          latencyMs: 0,
+          authModeUsed: profAuthType,
+          authChallenge: '',
+          error: data.error || 'Diagnostic failed'
+        });
+      }
+    } catch (err: any) {
+      setProfTestResult({
+        ok: false,
+        httpStatus: 0,
+        latencyMs: 0,
+        authModeUsed: profAuthType,
+        authChallenge: '',
+        error: err?.message || 'Network request failed'
+      });
+    } finally {
+      setIsTestingProfAuth(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profName.trim()) {
+      onNotify('Auth profile name is required.', 'error');
+      return;
+    }
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch('/api/mcp/auth/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingProfileId,
+          name: profName.trim(),
+          authType: profAuthType,
+          headerName: profHeaderName.trim() || 'Authorization',
+          envVarName: profEnvVarName.trim(),
+          secret: profClearSecret ? '' : profSecret,
+          clearSecret: profClearSecret,
+          description: profDescription.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Failed to save auth profile (HTTP ${res.status})`);
+      }
+      if (Array.isArray(data.profiles)) {
+        setProfiles(data.profiles);
+      } else {
+        await refreshProfilesFromApi();
+      }
+      setShowProfileForm(false);
+      await onRefreshDashboard();
+      onNotify(`Saved encrypted auth profile "${data.profile?.name || profName}"`, 'success');
+    } catch (err: any) {
+      onNotify(err?.message || 'Failed to save auth profile', 'error');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleDeleteProfile = async (prof: McpAuthProfilePublic) => {
+    try {
+      const res = await fetch(`/api/mcp/auth/profiles/${encodeURIComponent(prof.id)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Could not remove auth profile');
+      }
+      if (Array.isArray(data.profiles)) {
+        setProfiles(data.profiles);
+      }
+      await onRefreshDashboard();
+      onNotify(`Deleted auth profile "${prof.name}"`, 'info');
+    } catch (err: any) {
+      onNotify(err?.message || 'Failed to delete auth profile', 'error');
+    }
+  };
+
+  // ==========================================
+  // SERVER REGISTRY & HANDSHAKE TESTER
+  // ==========================================
 
   const handleOpenAddServer = () => {
     setEditingServerId(undefined);
     setFormName('');
     setFormUrl('https://');
-    setFormAuthType('none');
+    setFormAuthType(profiles.length > 0 ? 'profile' : 'none');
+    setFormAuthProfileId(profiles[0]?.id || '');
     setFormAuthHeaderName('Authorization');
     setFormAuthToken('');
+    setFormClearToken(false);
+    setShowServerSecretText(false);
+    setServerTestResult(null);
     setShowServerForm(true);
   };
 
@@ -105,9 +328,60 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
     setFormName(srv.name);
     setFormUrl(srv.url);
     setFormAuthType(srv.authType || 'none');
+    setFormAuthProfileId(srv.authProfileId || profiles[0]?.id || '');
     setFormAuthHeaderName(srv.authHeaderName || 'Authorization');
     setFormAuthToken(srv.hasAuthToken ? '••••••••' : '');
+    setFormClearToken(false);
+    setShowServerSecretText(false);
+    setServerTestResult(null);
     setShowServerForm(true);
+  };
+
+  const handleTestServerAuth = async () => {
+    if (!formUrl.trim()) {
+      onNotify('Enter the MCP endpoint URL before testing handshake.', 'error');
+      return;
+    }
+    setIsTestingServerAuth(true);
+    setServerTestResult(null);
+    try {
+      const res = await fetch('/api/mcp/auth/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serverId: editingServerId,
+          url: formUrl.trim(),
+          authType: formAuthType,
+          authHeaderName: formAuthHeaderName.trim() || 'Authorization',
+          authToken: formClearToken ? '' : formAuthToken,
+          authProfileId: formAuthType === 'profile' ? formAuthProfileId : undefined
+        })
+      });
+      const data = await res.json();
+      if (data.result) {
+        setServerTestResult(data.result);
+      } else {
+        setServerTestResult({
+          ok: false,
+          httpStatus: res.status,
+          latencyMs: 0,
+          authModeUsed: formAuthType,
+          authChallenge: '',
+          error: data.error || 'Auth handshake failed'
+        });
+      }
+    } catch (err: any) {
+      setServerTestResult({
+        ok: false,
+        httpStatus: 0,
+        latencyMs: 0,
+        authModeUsed: formAuthType,
+        authChallenge: '',
+        error: err?.message || 'Test request failed'
+      });
+    } finally {
+      setIsTestingServerAuth(false);
+    }
   };
 
   const handleSaveServer = async (e: React.FormEvent) => {
@@ -126,21 +400,25 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
           name: formName.trim(),
           url: formUrl.trim(),
           authType: formAuthType,
+          authProfileId: formAuthType === 'profile' ? formAuthProfileId : '',
           authHeaderName: formAuthHeaderName.trim() || 'Authorization',
-          authToken: formAuthToken,
+          authToken: formClearToken ? '' : formAuthToken,
+          clearAuthToken: formClearToken,
           enabled: true,
           discover: true
         })
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to save server');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Failed to save server (HTTP ${res.status})`);
+      }
       setShowServerForm(false);
       if (data.server?.id) setSelectedServerId(data.server.id);
       await onRefreshDashboard();
       onNotify(
         data.discovery?.ok
           ? `Connected ${data.server.name} (${data.discovery.tools?.length || 0} tools discovered)`
-          : `Saved ${data.server.name} (check connection status)`,
+          : `Saved ${data.server.name} (${data.discovery?.error || 'check connection status'})`,
         data.discovery?.ok ? 'success' : 'info'
       );
     } catch (err: any) {
@@ -160,13 +438,13 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
       });
       const data = await res.json();
       await onRefreshDashboard();
-      if (data.success) {
+      if (res.ok && data.success) {
         onNotify(
           `Synced ${data.discovery?.tools?.length || 0} tools & ${data.discovery?.resources?.length || 0} resources (${data.discovery?.latencyMs}ms)`,
           'success'
         );
       } else {
-        onNotify(data.discovery?.error || 'MCP discovery failed', 'error');
+        onNotify(data.discovery?.error || data.error || 'MCP discovery failed', 'error');
       }
     } catch (err: any) {
       onNotify(err?.message || 'Discovery request failed', 'error');
@@ -182,15 +460,20 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
         method: 'DELETE'
       });
       const data = await res.json();
-      if (data.success) {
-        if (selectedServerId === srv.id) setSelectedServerId('brickos-primary-mcp');
-        await onRefreshDashboard();
-        onNotify(`Removed MCP server "${srv.name}"`, 'info');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete MCP server');
       }
+      if (selectedServerId === srv.id) setSelectedServerId('brickos-primary-mcp');
+      await onRefreshDashboard();
+      onNotify(`Removed MCP server "${srv.name}"`, 'info');
     } catch (err: any) {
       onNotify(err?.message || 'Failed to delete server', 'error');
     }
   };
+
+  // ==========================================
+  // LIVE TOOL RUNNER & RESOURCE READER
+  // ==========================================
 
   const parseToolArgsForCall = (): Record<string, any> => {
     const props = selectedTool?.inputSchema?.properties || {};
@@ -217,17 +500,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
   };
 
   const handleSelectTool = (tool: McpToolDefinition) => {
-    setSelectedTool(tool);
-    setToolOutput(null);
-    setToolError(null);
-    const defaults: Record<string, string> = {};
-    const props = tool.inputSchema?.properties || {};
-    for (const [key, def] of Object.entries(props)) {
-      if (def?.default !== undefined) {
-        defaults[key] = typeof def.default === 'object' ? JSON.stringify(def.default) : String(def.default);
-      }
-    }
-    setToolArgs(defaults);
+    populateToolDefaults(tool);
   };
 
   const handleRunTool = async () => {
@@ -247,8 +520,8 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
       });
       const data = await res.json();
       setToolLatency(data.latencyMs ?? null);
-      if (!data.success) {
-        setToolError(data.error || 'Tool call failed');
+      if (!res.ok || !data.success) {
+        setToolError(data.error || `Tool call failed (HTTP ${res.status})`);
         setToolOutput(null);
       } else {
         setToolOutput(data.data);
@@ -275,10 +548,11 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
         })
       });
       const data = await res.json();
-      if (data.success) {
-        await onRefreshDashboard();
-        onNotify(`Pinned "${selectedTool.annotations?.title || selectedTool.name}" to Global Status Bento.`, 'success');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to pin widget');
       }
+      await onRefreshDashboard();
+      onNotify(`Pinned "${selectedTool.annotations?.title || selectedTool.name}" to Global Status Bento.`, 'success');
     } catch (err: any) {
       onNotify(err?.message || 'Failed to pin widget', 'error');
     }
@@ -286,10 +560,16 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
 
   const handleUnpin = async (pinId: string) => {
     try {
-      await fetch(`/api/mcp/pins/${encodeURIComponent(pinId)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/mcp/pins/${encodeURIComponent(pinId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to unpin widget');
+      }
       await onRefreshDashboard();
       onNotify('Unpinned MCP widget from Status Bento.', 'info');
-    } catch {}
+    } catch (err: any) {
+      onNotify(err?.message || 'Failed to unpin widget', 'error');
+    }
   };
 
   const handleLoadResource = async (resItem: McpResourceDefinition) => {
@@ -303,12 +583,12 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
         body: JSON.stringify({ serverId: selectedServer.id, uri: resItem.uri })
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setResourceContent(
           typeof data.content === 'string' ? data.content : JSON.stringify(data.content, null, 2)
         );
       } else {
-        setResourceContent(`Error loading resource: ${data.error || 'Unknown error'}`);
+        setResourceContent(`Error loading resource: ${data.error || `HTTP ${res.status}`}`);
       }
     } catch (err: any) {
       setResourceContent(`Failed to read resource: ${err?.message}`);
@@ -319,15 +599,279 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* SECTION 0: MCP AUTH MANAGER (GEMINI ANDROID BEARER TOKEN & ENCRYPTED CREDENTIAL VAULT) */}
+      <section className={`rounded-2xl border p-4 sm:p-5 ${cardSurface}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800/40">
+          <div>
+            <h2 className="text-base sm:text-lg font-bold tracking-tight flex items-center gap-2">
+              <Lock className="w-4 h-4 text-cyan-400" />
+              <span>MCP Auth Manager (Bearer Token Vault)</span>
+            </h2>
+            <p className={`text-xs mt-0.5 ${mutedText}`}>
+              Encrypted AES-256-GCM server-side storage for Gemini Android Bearer tokens &amp; custom auth headers. Secrets are never returned to the browser.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenAddProfile}
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center gap-2 transition cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <Key className="w-4 h-4" />
+            <span>New Bearer Auth Profile</span>
+          </button>
+        </div>
+
+        {/* Auth Profile Add / Edit Drawer */}
+        {showProfileForm && (
+          <form onSubmit={handleSaveProfile} className={`mt-4 rounded-xl border p-4 space-y-3 ${subSurface}`}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">
+                {editingProfileId ? 'Edit Bearer Auth Profile' : 'Create Reusable Bearer Auth Profile'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowProfileForm(false)}
+                className={`text-xs px-2.5 py-1 rounded-lg hover:bg-slate-800 cursor-pointer ${mutedText}`}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Profile Name</label>
+                <input
+                  type="text"
+                  value={profName}
+                  onChange={(e) => setProfName(e.target.value)}
+                  placeholder="Gemini Android Bearer Token"
+                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${inputSurface}`}
+                />
+              </div>
+              <div>
+                <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Credential Type</label>
+                <select
+                  value={profAuthType}
+                  onChange={(e) => setProfAuthType(e.target.value as 'bearer' | 'header' | 'env_bearer')}
+                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${inputSurface}`}
+                >
+                  <option value="bearer">Bearer Token (Authorization: Bearer &lt;token&gt;)</option>
+                  <option value="header">Custom Header Name + Secret</option>
+                  <option value="env_bearer">Server Env Var Binding (process.env)</option>
+                </select>
+              </div>
+
+              {profAuthType === 'header' && (
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Header Name</label>
+                  <input
+                    type="text"
+                    value={profHeaderName}
+                    onChange={(e) => setProfHeaderName(e.target.value)}
+                    placeholder="X-API-Key"
+                    className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${inputSurface}`}
+                  />
+                </div>
+              )}
+
+              {profAuthType === 'env_bearer' ? (
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Server Environment Variable Name</label>
+                  <input
+                    type="text"
+                    value={profEnvVarName}
+                    onChange={(e) => setProfEnvVarName(e.target.value)}
+                    placeholder="BRICK_MCP_BEARER_TOKEN"
+                    className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${inputSurface}`}
+                  />
+                </div>
+              ) : (
+                <div className={profAuthType === 'bearer' ? 'md:col-span-2' : ''}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`text-xs font-medium ${mutedText}`}>
+                      {profAuthType === 'bearer' ? 'Bearer Token (same token used in Gemini Android)' : 'Header Secret Value'}
+                    </label>
+                    {editingProfileId && (
+                      <label className="flex items-center gap-1.5 text-xs text-amber-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={profClearSecret}
+                          onChange={(e) => {
+                            setProfClearSecret(e.target.checked);
+                            if (e.target.checked) setProfSecret('');
+                          }}
+                        />
+                        <span>Clear Stored Secret</span>
+                      </label>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showProfSecretText ? 'text' : 'password'}
+                      value={profSecret}
+                      disabled={profClearSecret}
+                      onChange={(e) => setProfSecret(e.target.value)}
+                      placeholder="Paste Bearer token (leave •••••••• unchanged to keep current secret)"
+                      className={`w-full min-h-[44px] pl-3 pr-10 py-2 rounded-lg border text-sm font-mono ${inputSurface}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowProfSecretText((v) => !v)}
+                      className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded ${mutedText} hover:text-white cursor-pointer`}
+                      title={showProfSecretText ? 'Hide token' : 'Reveal token input'}
+                    >
+                      {showProfSecretText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="md:col-span-2">
+                <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Notes / Endpoint Scope</label>
+                <input
+                  type="text"
+                  value={profDescription}
+                  onChange={(e) => setProfDescription(e.target.value)}
+                  placeholder="Optional description (e.g. brick-mcp.moyercloud.com + staging MCPs)"
+                  className={`w-full min-h-[40px] px-3 py-1.5 rounded-lg border text-xs ${inputSurface}`}
+                />
+              </div>
+            </div>
+
+            {/* Live Bearer Test Bar */}
+            <div className="pt-2 border-t border-slate-800/50 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="url"
+                  value={profTestTargetUrl}
+                  onChange={(e) => setProfTestTargetUrl(e.target.value)}
+                  placeholder="https://brick-mcp.moyercloud.com/mcp"
+                  className={`flex-1 min-w-[220px] min-h-[40px] px-3 py-1.5 rounded-lg border text-xs font-mono ${inputSurface}`}
+                />
+                <button
+                  type="button"
+                  onClick={handleTestProfileAuth}
+                  disabled={isTestingProfAuth}
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 cursor-pointer ${
+                    isDarkMode ? 'border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/50' : 'border-cyan-400 text-cyan-700 hover:bg-cyan-50'
+                  }`}
+                >
+                  <FlaskConical className={`w-3.5 h-3.5 ${isTestingProfAuth ? 'animate-pulse' : ''}`} />
+                  <span>{isTestingProfAuth ? 'Probing Handshake...' : 'Test Auth Against Endpoint'}</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="min-h-[44px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>{isSavingProfile ? 'Encrypting & Saving...' : 'Save Auth Profile'}</span>
+                </button>
+              </div>
+
+              {profTestResult && (
+                <div
+                  className={`rounded-lg border p-3 text-xs font-mono space-y-1 ${
+                    profTestResult.ok
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                      : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                  }`}
+                >
+                  <div className="font-semibold flex flex-wrap items-center gap-2">
+                    <span>HTTP {profTestResult.httpStatus || 'ERR'}</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{profTestResult.latencyMs}ms</span>
+                    <span>·</span>
+                    <span>{profTestResult.authModeUsed}</span>
+                    {profTestResult.ok && (
+                      <span>· {profTestResult.toolCount || 0} tools, {profTestResult.resourceCount || 0} resources</span>
+                    )}
+                  </div>
+                  {profTestResult.authChallenge && (
+                    <div>WWW-Authenticate: {profTestResult.authChallenge}</div>
+                  )}
+                  {profTestResult.error && <div>Detail: {profTestResult.error}</div>}
+                  {profTestResult.hint && <div className="opacity-90">Hint: {profTestResult.hint}</div>}
+                </div>
+              )}
+            </div>
+          </form>
+        )}
+
+        {/* Stored Profiles List */}
+        {profiles.length > 0 ? (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {profiles.map((prof) => (
+              <div key={prof.id} className={`rounded-xl border p-3.5 flex flex-col justify-between gap-2.5 ${subSurface}`}>
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold truncate">{prof.name}</span>
+                    <span
+                      className={`text-[11px] font-mono tabular-nums ${
+                        prof.lastVerifiedStatus === 200
+                          ? 'text-emerald-400'
+                          : prof.lastVerifiedStatus >= 400
+                          ? 'text-rose-400'
+                          : mutedText
+                      }`}
+                    >
+                      {prof.lastVerifiedStatus ? `HTTP ${prof.lastVerifiedStatus}` : 'Unverified'}
+                    </span>
+                  </div>
+                  <div className={`text-[11px] font-mono mt-1 ${mutedText}`}>
+                    {prof.authType === 'env_bearer'
+                      ? `env:${prof.envVarName || 'UNSET'}`
+                      : `${prof.authType === 'bearer' ? 'Bearer' : prof.headerName} · ${prof.tokenPreview || 'No secret'}`}
+                  </div>
+                  {prof.description && (
+                    <p className={`text-[11px] mt-1 line-clamp-2 ${mutedText}`}>{prof.description}</p>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/40">
+                  <span className={`text-[11px] font-mono tabular-nums ${mutedText}`}>
+                    {prof.linkedServerCount || 0} linked endpoint{(prof.linkedServerCount || 0) === 1 ? '' : 's'}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditProfile(prof)}
+                      className={`min-h-[34px] px-2.5 rounded-lg border text-xs font-medium cursor-pointer ${
+                        isDarkMode ? 'border-slate-700 hover:bg-slate-800 text-slate-200' : 'border-slate-300 hover:bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      Rotate / Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProfile(prof)}
+                      className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                      title="Delete Auth Profile"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          !showProfileForm && (
+            <div className={`mt-4 rounded-xl border p-3.5 text-xs ${subSurface} ${mutedText}`}>
+              No reusable Bearer Auth Profiles saved yet. Add your Gemini Android Bearer token here or configure per-server authentication below.
+            </div>
+          )
+        )}
+      </section>
+
       {/* SECTION 1: REGISTERED MCP SERVERS REGISTRY */}
       <section className={`rounded-2xl border p-4 sm:p-5 ${cardSurface}`}>
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800/40">
           <div>
             <h2 className="text-base sm:text-lg font-bold tracking-tight">
-              Registered MCP Servers & Ingestion Pipeline
+              Registered MCP Servers &amp; Ingestion Pipeline
             </h2>
             <p className={`text-xs mt-0.5 ${mutedText}`}>
-              Server-side JSON-RPC 2.0 proxy supporting Streamable HTTP + SSE and optional Bearer/custom auth headers.
+              Server-side JSON-RPC 2.0 proxy supporting Streamable HTTP + SSE, reusable Bearer Auth Profiles, and direct header tokens.
             </p>
           </div>
           <button
@@ -340,7 +884,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
           </button>
         </div>
 
-        {/* Add / Edit Form */}
+        {/* Add / Edit Server Form */}
         {showServerForm && (
           <form
             onSubmit={handleSaveServer}
@@ -348,7 +892,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">
-                {editingServerId ? 'Edit MCP Server Connection' : 'Connect New MCP Server'}
+                {editingServerId ? 'Edit MCP Server Connection & Auth' : 'Connect New MCP Server'}
               </h3>
               <button
                 type="button"
@@ -366,9 +910,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. Muse Social MCP or Home Suno Runner"
-                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${
-                    isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
+                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${inputSurface}`}
                 />
               </div>
               <div>
@@ -378,26 +920,48 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                   value={formUrl}
                   onChange={(e) => setFormUrl(e.target.value)}
                   placeholder="https://example.moyercloud.com/mcp"
-                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${
-                    isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
+                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${inputSurface}`}
                 />
               </div>
               <div>
                 <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Authentication Mode</label>
                 <select
                   value={formAuthType}
-                  onChange={(e) => setFormAuthType(e.target.value as 'none' | 'bearer' | 'header')}
-                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${
-                    isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
+                  onChange={(e) => {
+                    const nextType = e.target.value as McpAuthType;
+                    setFormAuthType(nextType);
+                    if (nextType === 'profile' && !formAuthProfileId && profiles[0]?.id) {
+                      setFormAuthProfileId(profiles[0].id);
+                    }
+                  }}
+                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${inputSurface}`}
                 >
                   <option value="none">No Auth Header</option>
-                  <option value="bearer">Bearer Token (Authorization: Bearer ...)</option>
+                  <option value="profile">Shared Bearer Auth Profile (Recommended)</option>
+                  <option value="bearer">Direct Bearer Token (Authorization: Bearer ...)</option>
                   <option value="header">Custom Header Key / Value</option>
                 </select>
               </div>
-              {formAuthType !== 'none' && (
+
+              {formAuthType === 'profile' && (
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Linked Auth Profile</label>
+                  <select
+                    value={formAuthProfileId}
+                    onChange={(e) => setFormAuthProfileId(e.target.value)}
+                    className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm ${inputSurface}`}
+                  >
+                    <option value="">-- Select Bearer Auth Profile --</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.tokenPreview || p.envVarName || p.authType})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(formAuthType === 'bearer' || formAuthType === 'header') && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {formAuthType === 'header' && (
                     <div>
@@ -407,28 +971,87 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                         value={formAuthHeaderName}
                         onChange={(e) => setFormAuthHeaderName(e.target.value)}
                         placeholder="X-API-Key"
-                        className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${
-                          isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                        }`}
+                        className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${inputSurface}`}
                       />
                     </div>
                   )}
                   <div className={formAuthType === 'bearer' ? 'sm:col-span-2' : ''}>
-                    <label className={`block text-xs font-medium mb-1 ${mutedText}`}>Token / Secret Value</label>
-                    <input
-                      type="password"
-                      value={formAuthToken}
-                      onChange={(e) => setFormAuthToken(e.target.value)}
-                      placeholder="Stored server-side only in SQLite"
-                      className={`w-full min-h-[44px] px-3 py-2 rounded-lg border text-sm font-mono ${
-                        isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={`text-xs font-medium ${mutedText}`}>Token / Secret Value</label>
+                      {editingServerId && (
+                        <label className="flex items-center gap-1.5 text-xs text-amber-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formClearToken}
+                            onChange={(e) => {
+                              setFormClearToken(e.target.checked);
+                              if (e.target.checked) setFormAuthToken('');
+                            }}
+                          />
+                          <span>Clear Token</span>
+                        </label>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showServerSecretText ? 'text' : 'password'}
+                        value={formAuthToken}
+                        disabled={formClearToken}
+                        onChange={(e) => setFormAuthToken(e.target.value)}
+                        placeholder="Encrypted at rest in server-side SQLite"
+                        className={`w-full min-h-[44px] pl-3 pr-10 py-2 rounded-lg border text-sm font-mono ${inputSurface}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowServerSecretText((v) => !v)}
+                        className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded ${mutedText} hover:text-white cursor-pointer`}
+                      >
+                        {showServerSecretText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
-            <div className="flex justify-end pt-1">
+
+            {serverTestResult && (
+              <div
+                className={`rounded-lg border p-3 text-xs font-mono space-y-1 ${
+                  serverTestResult.ok
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                    : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                }`}
+              >
+                <div className="font-semibold flex flex-wrap items-center gap-2">
+                  <span>HTTP {serverTestResult.httpStatus || 'ERR'}</span>
+                  <span>·</span>
+                  <span className="tabular-nums">{serverTestResult.latencyMs}ms</span>
+                  <span>·</span>
+                  <span>{serverTestResult.authModeUsed}</span>
+                  {serverTestResult.ok && (
+                    <span>· {serverTestResult.toolCount || 0} tools discovered</span>
+                  )}
+                </div>
+                {serverTestResult.authChallenge && (
+                  <div>WWW-Authenticate: {serverTestResult.authChallenge}</div>
+                )}
+                {serverTestResult.error && <div>Detail: {serverTestResult.error}</div>}
+                {serverTestResult.hint && <div className="opacity-90">Hint: {serverTestResult.hint}</div>}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleTestServerAuth}
+                disabled={isTestingServerAuth}
+                className={`min-h-[44px] px-4 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 cursor-pointer ${
+                  isDarkMode ? 'border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/50' : 'border-cyan-400 text-cyan-700 hover:bg-cyan-50'
+                }`}
+              >
+                <FlaskConical className={`w-3.5 h-3.5 ${isTestingServerAuth ? 'animate-pulse' : ''}`} />
+                <span>{isTestingServerAuth ? 'Testing Handshake...' : 'Test Auth & Handshake'}</span>
+              </button>
               <button
                 type="submit"
                 disabled={isSavingServer}
@@ -473,16 +1096,21 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                         {isConnected ? 'Connected' : srv.lastStatus || 'Pending'}
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono">{srv.lastLatencyMs || 0}ms</span>
+                      <span className="font-mono tabular-nums">{srv.lastLatencyMs || 0}ms</span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono">{srv.tools?.length || 0} tools</span>
+                      <span className="font-mono tabular-nums">{srv.tools?.length || 0} tools</span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono">{srv.resources?.length || 0} resources</span>
-                      {srv.hasAuthToken && (
+                      <span className="font-mono tabular-nums">{srv.resources?.length || 0} resources</span>
+                      {(srv.hasAuthToken || srv.authType === 'profile') && (
                         <>
                           <span aria-hidden="true">·</span>
                           <span className="inline-flex items-center gap-1 text-cyan-400">
-                            <Key className="w-3 h-3" /> {srv.authType === 'bearer' ? 'Bearer' : srv.authHeaderName}
+                            <Key className="w-3 h-3" />
+                            {srv.authType === 'profile'
+                              ? `Profile: ${srv.authProfileName || 'Linked'}`
+                              : srv.authType === 'bearer'
+                              ? `Bearer ${srv.tokenPreview || ''}`
+                              : srv.authHeaderName}
                           </span>
                         </>
                       )}
@@ -645,9 +1273,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                             <select
                               value={toolArgs[propKey] ?? ''}
                               onChange={(e) => setToolArgs((prev) => ({ ...prev, [propKey]: e.target.value }))}
-                              className={`w-full min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-mono ${
-                                isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                              }`}
+                              className={`w-full min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-mono ${inputSurface}`}
                             >
                               <option value="">-- select --</option>
                               {schema.enum.map((opt: string) => (
@@ -662,9 +1288,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                               value={toolArgs[propKey] ?? ''}
                               onChange={(e) => setToolArgs((prev) => ({ ...prev, [propKey]: e.target.value }))}
                               placeholder={schema?.description || (schema?.default !== undefined ? `Default: ${schema.default}` : '')}
-                              className={`w-full min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-mono ${
-                                isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                              }`}
+                              className={`w-full min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-mono ${inputSurface}`}
                             />
                           )}
                         </div>
@@ -693,7 +1317,7 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
                       <span>Pin to Status Bento</span>
                     </button>
                     {toolLatency !== null && (
-                      <span className={`text-xs font-mono flex items-center gap-1 ${mutedText}`}>
+                      <span className={`text-xs font-mono tabular-nums flex items-center gap-1 ${mutedText}`}>
                         <Clock className="w-3 h-3" /> {toolLatency}ms
                       </span>
                     )}
@@ -732,10 +1356,10 @@ export const McpHubIngestionPanel: React.FC<McpHubIngestionPanelProps> = ({
             <div>
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-emerald-400" />
-                <span>Live brickOS Rules & Ledger Resources</span>
+                <span>Live brickOS Rules &amp; Ledger Resources</span>
               </h3>
               <p className={`text-xs mt-0.5 ${mutedText}`}>
-                Ground-truth rules hosted by `brickos-remote-mcp` governing brand playlists, cohort windows & EGM gates.
+                Ground-truth rules hosted by `brickos-remote-mcp` governing brand playlists, cohort windows &amp; EGM gates.
               </p>
             </div>
           </div>

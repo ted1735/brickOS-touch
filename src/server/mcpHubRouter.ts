@@ -1,11 +1,9 @@
 import express from 'express';
-import { fetch as undiciFetch } from 'undici';
 import { GoogleGenAI } from '@google/genai';
 import {
   listMcpServersFromSqlite,
   getMcpServerByIdFromSqlite,
   upsertMcpServerInSqlite,
-  updateMcpDiscoveryInSqlite,
   deleteMcpServerFromSqlite,
   listMcpPinnedWidgets,
   upsertMcpPinnedWidget,
@@ -13,205 +11,83 @@ import {
   listSocialOutletStatuses,
   upsertSocialOutletStatus,
   getMcpTelemetryCache,
-  setMcpTelemetryCache,
-  StoredMcpServerRecord
+  listMcpAuthProfilesFromSqlite,
+  upsertMcpAuthProfileInSqlite,
+  deleteMcpAuthProfileFromSqlite,
+  listShortMetadataOverrides,
+  upsertShortMetadataOverride,
+  listMatrixTrackPreferences,
+  upsertMatrixTrackPreference,
+  bulkSaveMatrixTrackPreferences,
+  saveMatrixSortOrderInSqlite,
+  getMatrixSortModeFromSqlite,
+  setMatrixSortModeInSqlite
 } from '../services/sqliteCatalogService';
-
-export interface McpRpcResult<T = any> {
-  ok: boolean;
-  status: number;
-  latencyMs: number;
-  raw?: any;
-  parsed?: T;
-  error?: string;
-}
-
-function buildAuthHeaders(server: StoredMcpServerRecord): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream'
-  };
-  if (server.authType === 'bearer' && server.authToken) {
-    headers['Authorization'] = server.authToken.startsWith('Bearer ')
-      ? server.authToken
-      : `Bearer ${server.authToken}`;
-  } else if (server.authType === 'header' && server.authHeaderName && server.authToken) {
-    headers[server.authHeaderName] = server.authToken;
-  }
-  return headers;
-}
-
-function extractMcpTextPayload(rpcJson: any): any {
-  const content = rpcJson?.result?.content;
-  if (Array.isArray(content) && content.length > 0) {
-    const first = content[0];
-    if (first?.type === 'text' && typeof first.text === 'string') {
-      const trimmed = first.text.trim();
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try {
-          return JSON.parse(trimmed);
-        } catch {
-          return trimmed;
-        }
-      }
-      return trimmed;
-    }
-    return content;
-  }
-  const contents = rpcJson?.result?.contents;
-  if (Array.isArray(contents) && contents.length > 0) {
-    return contents[0]?.text ?? contents[0];
-  }
-  return rpcJson?.result ?? rpcJson;
-}
-
-function parseSseOrJson(text: string): any {
-  const trimmed = text.trim();
-  if (!trimmed) return {};
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    return JSON.parse(trimmed);
-  }
-  // Parse SSE stream lines: pick last JSON-RPC data payload
-  const lines = trimmed.split(/\r?\n/);
-  let lastData: any = null;
-  for (const line of lines) {
-    if (line.startsWith('data:')) {
-      const candidate = line.slice(5).trim();
-      if (!candidate || candidate === '[DONE]') continue;
-      try {
-        lastData = JSON.parse(candidate);
-      } catch {
-        // ignore partial non-json event lines
-      }
-    }
-  }
-  if (lastData !== null) return lastData;
-  return { rawText: trimmed };
-}
-
-export async function callMcpRpc<T = any>(
-  server: StoredMcpServerRecord,
-  method: string,
-  params: Record<string, any> = {},
-  timeoutMs = 12000
-): Promise<McpRpcResult<T>> {
-  const start = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await undiciFetch(server.url, {
-      method: 'POST',
-      headers: buildAuthHeaders(server),
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-        method,
-        params
-      }),
-      signal: controller.signal
-    });
-    const text = await response.text();
-    const latencyMs = Date.now() - start;
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        status: response.status,
-        latencyMs,
-        error: `HTTP ${response.status}: ${text.slice(0, 300)}`
-      };
-    }
-
-    const rpcJson = parseSseOrJson(text);
-    if (rpcJson?.error) {
-      return {
-        ok: false,
-        status: response.status,
-        latencyMs,
-        raw: rpcJson,
-        error: rpcJson.error?.message || JSON.stringify(rpcJson.error)
-      };
-    }
-
-    const parsed =
-      method === 'tools/call' || method === 'resources/read'
-        ? extractMcpTextPayload(rpcJson)
-        : rpcJson?.result ?? rpcJson;
-
-    return {
-      ok: true,
-      status: response.status,
-      latencyMs,
-      raw: rpcJson,
-      parsed
-    };
-  } catch (err: any) {
-    return {
-      ok: false,
-      status: 0,
-      latencyMs: Date.now() - start,
-      error: err?.name === 'AbortError' ? `Timeout after ${timeoutMs}ms` : err?.message || String(err)
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export async function discoverMcpServer(server: StoredMcpServerRecord) {
-  const initRes = await callMcpRpc(server, 'initialize', {
-    protocolVersion: '2025-03-26',
-    capabilities: {},
-    clientInfo: { name: 'brickos-studio-hub', version: '2.0.0' }
-  });
-
-  if (!initRes.ok) {
-    updateMcpDiscoveryInSqlite(server.id, {
-      lastStatus: 'error',
-      lastLatencyMs: initRes.latencyMs,
-      lastError: initRes.error || 'Initialization failed'
-    });
-    return {
-      ok: false,
-      latencyMs: initRes.latencyMs,
-      error: initRes.error || 'Initialization failed',
-      serverInfo: server.serverInfo,
-      tools: server.tools,
-      resources: server.resources
-    };
-  }
-
-  const [toolsRes, resourcesRes] = await Promise.all([
-    callMcpRpc(server, 'tools/list', {}),
-    callMcpRpc(server, 'resources/list', {})
-  ]);
-
-  const tools = Array.isArray(toolsRes.parsed?.tools) ? toolsRes.parsed.tools : [];
-  const resources = Array.isArray(resourcesRes.parsed?.resources) ? resourcesRes.parsed.resources : [];
-  const serverInfo = initRes.parsed?.serverInfo || {};
-
-  updateMcpDiscoveryInSqlite(server.id, {
-    lastStatus: 'connected',
-    lastLatencyMs: initRes.latencyMs,
-    lastError: '',
-    serverInfo,
-    tools,
-    resources
-  });
-
-  return {
-    ok: true,
-    latencyMs: initRes.latencyMs,
-    serverInfo,
-    protocolVersion: initRes.parsed?.protocolVersion || '2025-03-26',
-    tools,
-    resources
-  };
-}
+import { mcpProxyService, mcpPollingEngine, mergeShortOverridesIntoShorts } from './mcpProxyService';
 
 export function createMcpHubRouter(): express.Router {
   const router = express.Router();
 
-  // List registered MCP servers (secrets masked)
+  // ==========================================
+  // MCP AUTH MANAGER ROUTES (BEARER / HEADER / ENV VAULT)
+  // ==========================================
+
+  router.get('/api/mcp/auth/profiles', (_req, res) => {
+    try {
+      const profiles = listMcpAuthProfilesFromSqlite(false);
+      res.json({ success: true, profiles });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/mcp/auth/profiles', (req, res) => {
+    try {
+      const { id, name, authType, headerName, secret, envVarName, description, clearSecret } = req.body || {};
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ success: false, error: 'Profile name is required.' });
+      }
+      const saved = upsertMcpAuthProfileInSqlite({
+        id,
+        name: String(name),
+        authType: authType || 'bearer',
+        headerName: headerName || 'Authorization',
+        secret: typeof secret === 'string' ? secret : undefined,
+        envVarName: envVarName ? String(envVarName) : '',
+        description: description ? String(description) : '',
+        clearSecret: Boolean(clearSecret)
+      });
+      if (!saved) {
+        return res.status(500).json({ success: false, error: 'Failed to store auth profile in encrypted vault.' });
+      }
+      res.json({ success: true, profile: saved, profiles: listMcpAuthProfilesFromSqlite(false) });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.delete('/api/mcp/auth/profiles/:id', (req, res) => {
+    try {
+      const deleted = deleteMcpAuthProfileFromSqlite(req.params.id);
+      res.json({ success: deleted, profiles: listMcpAuthProfilesFromSqlite(false) });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/mcp/auth/test', async (req, res) => {
+    try {
+      const result = await mcpProxyService.testAuthAndHandshake(req.body || {});
+      res.json({ success: result.ok, result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ==========================================
+  // MULTI-SERVER MCP REGISTRY & PROXY ROUTES
+  // ==========================================
+
   router.get('/api/mcp/servers', (_req, res) => {
     try {
       const servers = listMcpServersFromSqlite(false);
@@ -221,10 +97,20 @@ export function createMcpHubRouter(): express.Router {
     }
   });
 
-  // Register or update an MCP server (auto-discovers capabilities on save if enabled)
   router.post('/api/mcp/servers', async (req, res) => {
     try {
-      const { id, name, url, authType, authHeaderName, authToken, enabled, discover = true } = req.body || {};
+      const {
+        id,
+        name,
+        url,
+        authType,
+        authHeaderName,
+        authToken,
+        authProfileId,
+        clearAuthToken,
+        enabled,
+        discover = true
+      } = req.body || {};
       if (!name || !url) {
         return res.status(400).json({ success: false, error: 'Server name and URL are required.' });
       }
@@ -234,7 +120,9 @@ export function createMcpHubRouter(): express.Router {
         url: String(url),
         authType: authType || 'none',
         authHeaderName: authHeaderName || 'Authorization',
-        authToken: typeof authToken === 'string' ? authToken : '',
+        authToken: typeof authToken === 'string' ? authToken : undefined,
+        authProfileId: typeof authProfileId === 'string' ? authProfileId : '',
+        clearAuthToken: Boolean(clearAuthToken),
         enabled: enabled !== false
       });
 
@@ -244,10 +132,7 @@ export function createMcpHubRouter(): express.Router {
 
       let discovery: any = null;
       if (discover && saved.enabled) {
-        const withSecret = getMcpServerByIdFromSqlite(saved.id, true);
-        if (withSecret) {
-          discovery = await discoverMcpServer(withSecret);
-        }
+        discovery = await mcpProxyService.discover(saved.id);
       }
 
       const fresh = getMcpServerByIdFromSqlite(saved.id, false);
@@ -257,7 +142,6 @@ export function createMcpHubRouter(): express.Router {
     }
   });
 
-  // Delete custom MCP server
   router.delete('/api/mcp/servers/:id', (req, res) => {
     try {
       const { id } = req.params;
@@ -271,23 +155,21 @@ export function createMcpHubRouter(): express.Router {
     }
   });
 
-  // Run initialize + tools/list + resources/list on an MCP server
   router.post('/api/mcp/discover', async (req, res) => {
     try {
       const serverId = req.body?.serverId || 'brickos-primary-mcp';
-      const server = getMcpServerByIdFromSqlite(serverId, true);
-      if (!server) {
+      const discovery = await mcpProxyService.discover(serverId);
+      const updatedServer = getMcpServerByIdFromSqlite(serverId, false);
+      if (!updatedServer) {
         return res.status(404).json({ success: false, error: `MCP server '${serverId}' not found.` });
       }
-      const discovery = await discoverMcpServer(server);
-      const updatedServer = getMcpServerByIdFromSqlite(serverId, false);
-      res.json({ success: discovery.ok, server: updatedServer, discovery });
+      res.json({ success: Boolean(discovery.ok), server: updatedServer, discovery });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Execute any tool on any registered MCP server
+  // Execute any tool via unified McpToolCaller
   router.post('/api/mcp/call', async (req, res) => {
     try {
       const serverId = req.body?.serverId || 'brickos-primary-mcp';
@@ -298,21 +180,11 @@ export function createMcpHubRouter(): express.Router {
         return res.status(400).json({ success: false, error: 'toolName is required.' });
       }
 
-      const server = getMcpServerByIdFromSqlite(serverId, true);
-      if (!server) {
-        return res.status(404).json({ success: false, error: `MCP server '${serverId}' not found.` });
+      const result = await mcpProxyService.callTool({ serverId, toolName, arguments: args });
+      if (result.httpStatus === 404) {
+        return res.status(404).json(result);
       }
-
-      const timeoutMs = toolName === 'brickos_job_wait' ? 50000 : 18000;
-      const rpc = await callMcpRpc(server, 'tools/call', { name: toolName, arguments: args }, timeoutMs);
-      res.json({
-        success: rpc.ok,
-        serverId,
-        toolName,
-        latencyMs: rpc.latencyMs,
-        data: rpc.parsed ?? null,
-        error: rpc.error || null
-      });
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -326,25 +198,47 @@ export function createMcpHubRouter(): express.Router {
       if (!uri) {
         return res.status(400).json({ success: false, error: 'Resource uri is required.' });
       }
-      const server = getMcpServerByIdFromSqlite(serverId, true);
-      if (!server) {
-        return res.status(404).json({ success: false, error: `MCP server '${serverId}' not found.` });
+      const result = await mcpProxyService.readResource(serverId, uri);
+      if (result.error?.includes('not found')) {
+        return res.status(404).json(result);
       }
-      const rpc = await callMcpRpc(server, 'resources/read', { uri });
-      res.json({
-        success: rpc.ok,
-        serverId,
-        uri,
-        latencyMs: rpc.latencyMs,
-        content: rpc.parsed ?? '',
-        error: rpc.error || null
-      });
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Pinned MCP widgets CRUD
+  // ==========================================
+  // BACKGROUND POLLING ENGINE CONTROLS
+  // ==========================================
+
+  router.get('/api/mcp/polling/status', (_req, res) => {
+    res.json({ success: true, polling: mcpPollingEngine.getStatus() });
+  });
+
+  router.post('/api/mcp/polling/config', (req, res) => {
+    try {
+      const { enabled, intervalMs } = req.body || {};
+      const polling = mcpPollingEngine.updateConfig({ enabled, intervalMs });
+      res.json({ success: true, polling });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/mcp/polling/trigger', async (_req, res) => {
+    try {
+      const payload = await mcpPollingEngine.triggerPollNow(false);
+      res.json(payload);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ==========================================
+  // PINNED WIDGETS & SOCIAL OUTLET PERSISTENCE
+  // ==========================================
+
   router.get('/api/mcp/pins', (_req, res) => {
     res.json({ success: true, pins: listMcpPinnedWidgets() });
   });
@@ -356,11 +250,9 @@ export function createMcpHubRouter(): express.Router {
         return res.status(400).json({ success: false, error: 'toolName and title are required.' });
       }
       let lastResult: any = undefined;
-      const server = getMcpServerByIdFromSqlite(serverId, true);
-      if (server && server.enabled) {
-        const rpc = await callMcpRpc(server, 'tools/call', { name: toolName, arguments: args }, 12000);
-        if (rpc.ok) lastResult = rpc.parsed;
-      }
+      const callRes = await mcpProxyService.callTool({ serverId, toolName, arguments: args, timeoutMs: 12000 });
+      if (callRes.success) lastResult = callRes.data;
+
       const pin = upsertMcpPinnedWidget({ id, serverId, toolName, title, args, lastResult });
       res.json({ success: true, pin });
     } catch (err: any) {
@@ -372,7 +264,6 @@ export function createMcpHubRouter(): express.Router {
     res.json({ success: deleteMcpPinnedWidget(req.params.id) });
   });
 
-  // Social Outlet Status persistence
   router.get('/api/studio/outlet-statuses', (_req, res) => {
     res.json({ success: true, statuses: listSocialOutletStatuses() });
   });
@@ -400,182 +291,329 @@ export function createMcpHubRouter(): express.Router {
     }
   });
 
-  // Unified Dashboard Ingest Endpoint: aggregates live telemetry from brickOS MCP + custom MCP pins
+  // ==========================================
+  // ALIGNMENT MATRIX LISTS, SORT ORDER & SHORT SYNC
+  // ==========================================
+
+  router.post('/api/studio/matrix/preference', (req, res) => {
+    try {
+      const { trackId, activeOverride, needsActionOverride, actionNote, manualRank } = req.body || {};
+      if (!trackId) {
+        return res.status(400).json({ success: false, error: 'trackId is required.' });
+      }
+      const record = upsertMatrixTrackPreference({
+        trackId: String(trackId),
+        activeOverride,
+        needsActionOverride,
+        actionNote,
+        manualRank
+      });
+      res.json({
+        success: true,
+        record,
+        matrixPreferences: listMatrixTrackPreferences()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/studio/matrix/bulk', (req, res) => {
+    try {
+      const { updates = [], resetAllToAuto = false } = req.body || {};
+      const matrixPreferences = bulkSaveMatrixTrackPreferences(
+        Array.isArray(updates) ? updates : [],
+        Boolean(resetAllToAuto)
+      );
+      res.json({ success: true, matrixPreferences });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/studio/matrix/reorder', (req, res) => {
+    try {
+      const { orderedTrackIds } = req.body || {};
+      if (!Array.isArray(orderedTrackIds)) {
+        return res.status(400).json({ success: false, error: 'orderedTrackIds array is required.' });
+      }
+      const matrixPreferences = saveMatrixSortOrderInSqlite(orderedTrackIds.map(String));
+      const matrixSortMode = getMatrixSortModeFromSqlite();
+      res.json({ success: true, matrixPreferences, matrixSortMode });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/studio/matrix/sort-mode', (req, res) => {
+    try {
+      const sortMode = setMatrixSortModeInSqlite(String(req.body?.sortMode || 'manual'));
+      res.json({ success: true, matrixSortMode: sortMode });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/api/mcp/shorts/update-sync', async (req, res) => {
+    try {
+      const {
+        shortId,
+        trackId,
+        trackSlug,
+        trackTitle,
+        campaign,
+        status,
+        title,
+        hookText,
+        caption,
+        scheduledSlot,
+        playlistId,
+        youtubeId,
+        youtubeUrl,
+        spotifyUrl,
+        appleMusicUrl,
+        youtubeMusicUrl,
+        canonicalMasterFile,
+        videoAssetUrl,
+        thumbnailAssetUrl,
+        notes,
+        outletUpdates = [],
+        syncTargets = {}
+      } = req.body || {};
+
+      if (!shortId || !title) {
+        return res.status(400).json({ success: false, error: 'shortId and title are required.' });
+      }
+
+      const willSyncRemote = Boolean(syncTargets.trackDb || syncTargets.approveRelease || syncTargets.museBridge);
+      const savedOverride = upsertShortMetadataOverride({
+        shortId: String(shortId),
+        trackSlug: trackSlug ? String(trackSlug) : '',
+        trackTitle: trackTitle ? String(trackTitle) : '',
+        campaign: campaign ? String(campaign) : '',
+        status: status ? String(status) : 'READY - UPDATED IN STUDIO',
+        title: String(title),
+        hookText: hookText !== undefined ? String(hookText) : '',
+        caption: caption !== undefined ? String(caption) : '',
+        scheduledSlot: scheduledSlot !== undefined ? String(scheduledSlot) : '',
+        playlistId: playlistId ? String(playlistId) : '',
+        youtubeId: youtubeId ? String(youtubeId) : '',
+        youtubeUrl: youtubeUrl ? String(youtubeUrl) : '',
+        spotifyUrl: spotifyUrl ? String(spotifyUrl) : '',
+        appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : '',
+        youtubeMusicUrl: youtubeMusicUrl ? String(youtubeMusicUrl) : '',
+        canonicalMasterFile: canonicalMasterFile ? String(canonicalMasterFile) : '',
+        videoAssetUrl: videoAssetUrl ? String(videoAssetUrl) : '',
+        thumbnailAssetUrl: thumbnailAssetUrl ? String(thumbnailAssetUrl) : '',
+        notes: notes !== undefined ? String(notes) : '',
+        markSynced: willSyncRemote
+      });
+
+      if (trackId && Array.isArray(outletUpdates)) {
+        for (const item of outletUpdates) {
+          if (item?.outletKey && item?.status) {
+            upsertSocialOutletStatus({
+              trackId: String(trackId),
+              outletKey: String(item.outletKey),
+              status: String(item.status),
+              scheduledSlot: scheduledSlot ? String(scheduledSlot) : '',
+              postUrl: item.outletKey === 'youtube_shorts' ? String(youtubeUrl || '') : '',
+              postId: item.outletKey === 'youtube_shorts' ? String(youtubeId || '') : '',
+              playlistId: playlistId ? String(playlistId) : '',
+              notes: notes ? String(notes) : ''
+            });
+          }
+        }
+      }
+
+      const serverId = String(syncTargets.serverId || 'brickos-primary-mcp');
+      const syncResults: Array<{ target: string; ok: boolean; detail: string }> = [
+        {
+          target: 'Local SQLite Override',
+          ok: Boolean(savedOverride),
+          detail: savedOverride ? 'Saved metadata & outlet statuses locally.' : 'Failed writing SQLite override.'
+        }
+      ];
+
+      if (syncTargets.trackDb && trackSlug) {
+        const trackSyncRes = await mcpProxyService.callTool({
+          serverId,
+          toolName: 'brickos_track_sync',
+          arguments: {
+            track_slug: String(trackSlug),
+            action: 'upsert',
+            title: String(trackTitle || campaign || title),
+            master_file: canonicalMasterFile ? String(canonicalMasterFile) : undefined,
+            package: {
+              short_id: String(shortId),
+              title: String(title),
+              hook_text: String(hookText || ''),
+              caption: String(caption || ''),
+              scheduled_slot: String(scheduledSlot || ''),
+              playlist_id: String(playlistId || ''),
+              youtube_id: String(youtubeId || ''),
+              youtube_url: String(youtubeUrl || ''),
+              spotify_url: String(spotifyUrl || ''),
+              apple_music_url: String(appleMusicUrl || ''),
+              youtube_music_url: String(youtubeMusicUrl || '')
+            }
+          }
+        });
+        syncResults.push({
+          target: 'brickOS MCP Track DB',
+          ok: trackSyncRes.success,
+          detail: trackSyncRes.success
+            ? `Synced metadata package via brickos_track_sync (${trackSyncRes.latencyMs}ms).`
+            : trackSyncRes.error || 'brickos_track_sync failed.'
+        });
+      }
+
+      if (syncTargets.approveRelease && trackSlug && canonicalMasterFile) {
+        const approveRes = await mcpProxyService.callTool({
+          serverId,
+          toolName: 'brickos_approve_release',
+          arguments: {
+            track_slug: String(trackSlug),
+            short_cut: String(shortId),
+            canonical_master_file: String(canonicalMasterFile),
+            post_id: youtubeId ? String(youtubeId) : undefined,
+            scheduled_slot: scheduledSlot ? String(scheduledSlot) : undefined,
+            platforms: ['YouTube @brickRedeemed', 'TikTok @brickredeemed', 'IG @brickredeemed', 'IG @theknotcreations', 'Facebook Page']
+          }
+        });
+        syncResults.push({
+          target: 'Release Approval & Duplicate Guard',
+          ok: approveRes.success,
+          detail: approveRes.success
+            ? `Validated canonical release stage (${approveRes.latencyMs}ms).`
+            : approveRes.error || 'brickos_approve_release failed.'
+        });
+      } else if (syncTargets.approveRelease) {
+        syncResults.push({
+          target: 'Release Approval & Duplicate Guard',
+          ok: false,
+          detail: 'Skipped: canonicalMasterFile is required for brickos_approve_release.'
+        });
+      }
+
+      if (syncTargets.museBridge) {
+        const museMsg = [
+          `Updated metadata for "${title}"`,
+          hookText ? `Hook: "${hookText}"` : '',
+          scheduledSlot ? `Slot: ${scheduledSlot}` : '',
+          playlistId ? `Playlist: &list=${playlistId}` : '',
+          youtubeUrl ? `YT: ${youtubeUrl}` : '',
+          spotifyUrl ? `Spotify: ${spotifyUrl}` : '',
+          caption ? `Caption: ${String(caption).slice(0, 280)}` : ''
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        const museRes = await mcpProxyService.callTool({
+          serverId,
+          toolName: 'brickos_muse_bridge',
+          arguments: {
+            action: 'send_directive',
+            campaign: String(campaign || trackTitle || title),
+            report_type: 'STATUS_UPDATE',
+            message: museMsg,
+            scheduled_items: [
+              {
+                short_id: String(shortId),
+                title: String(title),
+                scheduled_slot: String(scheduledSlot || ''),
+                youtube_url: String(youtubeUrl || ''),
+                spotify_url: String(spotifyUrl || ''),
+                apple_music_url: String(appleMusicUrl || '')
+              }
+            ]
+          }
+        });
+        syncResults.push({
+          target: 'Meta Muse (Edison) Bridge',
+          ok: museRes.success,
+          detail: museRes.success
+            ? `Dispatched updated schedule & caption directive (${museRes.latencyMs}ms).`
+            : museRes.error || 'brickos_muse_bridge failed.'
+        });
+      }
+
+      res.json({
+        success: true,
+        override: savedOverride,
+        shortOverrides: listShortMetadataOverrides(),
+        outletStatuses: listSocialOutletStatuses(),
+        syncResults
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Unified Dashboard Ingest Endpoint
   router.get('/api/mcp/dashboard-ingest', async (req, res) => {
-    const start = Date.now();
     const forceCacheFallback = req.query.cacheOnly === '1';
+
+    const enrichCachedPayload = (cachedPayload: any, updatedAt: string, extraErrors?: string[]) => {
+      const shortOverrides = listShortMetadataOverrides();
+      return {
+        ...cachedPayload,
+        readyShorts: mergeShortOverridesIntoShorts(cachedPayload.readyShorts || [], shortOverrides),
+        outletStatuses: listSocialOutletStatuses(),
+        shortOverrides,
+        matrixPreferences: listMatrixTrackPreferences(),
+        matrixSortMode: getMatrixSortModeFromSqlite(),
+        servers: listMcpServersFromSqlite(false),
+        authProfiles: listMcpAuthProfilesFromSqlite(false),
+        polling: mcpPollingEngine.getStatus(),
+        fromCache: true,
+        cachedAt: updatedAt,
+        ...(extraErrors ? { errors: extraErrors } : {})
+      };
+    };
 
     if (forceCacheFallback) {
       const cached = getMcpTelemetryCache('dashboard_ingest_v1');
       if (cached) {
-        return res.json({ ...cached.payload, fromCache: true, cachedAt: cached.updatedAt });
+        return res.json(enrichCachedPayload(cached.payload, cached.updatedAt));
       }
     }
 
     try {
-      const serversWithSecrets = listMcpServersFromSqlite(true);
-      const primary =
-        serversWithSecrets.find((s) => s.id === 'brickos-primary-mcp') ||
-        serversWithSecrets.find((s) => s.enabled) ||
-        null;
-
-      let primaryDiscovery: any = null;
-      let socialStats: any = null;
-      let sheetStats: any = null;
-      let readyShorts: any[] = [];
-      let releaseLinks: Record<string, any> = {};
-      let museMessages: any = null;
-      let trackSyncList: any = null;
-      let progressMd = '';
-      const errors: string[] = [];
-
-      if (primary && primary.enabled) {
-        // Refresh discovery metadata if empty or stale (> 10m)
-        const isStale =
-          !primary.lastSyncedAt ||
-          Date.now() - new Date(primary.lastSyncedAt).getTime() > 10 * 60 * 1000 ||
-          primary.tools.length === 0;
-
-        if (isStale) {
-          primaryDiscovery = await discoverMcpServer(primary);
-        }
-
-        const [statsRes, sheetRes, shortsRes, linksRes, museRes, tracksRes, progressRes] = await Promise.all([
-          callMcpRpc(primary, 'tools/call', { name: 'brickos_get_social_stats', arguments: { source: 'all', limit: 15 } }, 15000),
-          callMcpRpc(
-            primary,
-            'tools/call',
-            { name: 'brickos_get_social_stats', arguments: { source: 'google_sheet', sheet_tab: 'Posts', limit: 15 } },
-            10000
-          ),
-          callMcpRpc(primary, 'tools/call', { name: 'get_ready_shorts', arguments: {} }, 12000),
-          callMcpRpc(primary, 'tools/call', { name: 'get_live_release_links', arguments: {} }, 10000),
-          callMcpRpc(
-            primary,
-            'tools/call',
-            { name: 'brickos_muse_bridge', arguments: { action: 'read_messages', limit: 15 } },
-            12000
-          ),
-          callMcpRpc(
-            primary,
-            'tools/call',
-            { name: 'brickos_track_sync', arguments: { track_slug: 'the-milestone', action: 'list' } },
-            12000
-          ),
-          callMcpRpc(primary, 'resources/read', { uri: 'brickos://PROGRESS.md' }, 10000)
-        ]);
-
-        if (statsRes.ok) socialStats = statsRes.parsed;
-        else if (statsRes.error) errors.push(`brickos_get_social_stats: ${statsRes.error}`);
-
-        if (sheetRes.ok) sheetStats = sheetRes.parsed?.google_sheet || sheetRes.parsed;
-
-        if (shortsRes.ok && Array.isArray(shortsRes.parsed)) readyShorts = shortsRes.parsed;
-        else if (shortsRes.error) errors.push(`get_ready_shorts: ${shortsRes.error}`);
-
-        if (linksRes.ok && linksRes.parsed) releaseLinks = linksRes.parsed;
-        if (museRes.ok && museRes.parsed) museMessages = museRes.parsed;
-        if (tracksRes.ok && tracksRes.parsed) trackSyncList = tracksRes.parsed;
-        if (progressRes.ok && typeof progressRes.parsed === 'string') progressMd = progressRes.parsed;
-      }
-
-      // Discover any custom enabled servers that haven't synced yet
-      const customServers = serversWithSecrets.filter((s) => s.id !== 'brickos-primary-mcp' && s.enabled);
-      await Promise.all(
-        customServers.map(async (srv) => {
-          if (!srv.lastSyncedAt || srv.tools.length === 0) {
-            await discoverMcpServer(srv);
-          }
-        })
-      );
-
-      // Refresh pinned widgets across all enabled MCP servers
-      const pins = listMcpPinnedWidgets();
-      const refreshedPins = await Promise.all(
-        pins.map(async (pin) => {
-          const srv = serversWithSecrets.find((s) => s.id === pin.serverId && s.enabled);
-          if (!srv) return pin;
-          const rpc = await callMcpRpc(srv, 'tools/call', { name: pin.toolName, arguments: pin.args }, 10000);
-          if (rpc.ok) {
-            return upsertMcpPinnedWidget({
-              id: pin.id,
-              serverId: pin.serverId,
-              toolName: pin.toolName,
-              title: pin.title,
-              args: pin.args,
-              lastResult: rpc.parsed
-            }) || pin;
-          }
-          return pin;
-        })
-      );
-
-      const outletStatuses = listSocialOutletStatuses();
-      const maskedServers = listMcpServersFromSqlite(false);
-
-      const payload = {
-        success: true,
-        fetchedAt: new Date().toISOString(),
-        latencyMs: Date.now() - start,
-        fromCache: false,
-        errors,
-        servers: maskedServers,
-        primaryDiscovery,
-        youtube: socialStats?.youtube || null,
-        metaMuse: {
-          reportsSummary: socialStats?.meta_muse || null,
-          messages: museMessages?.messages || [],
-          totalMessages: museMessages?.total_messages || 0
-        },
-        googleSheet: sheetStats || null,
-        readyShorts,
-        releaseLinks,
-        mcpTracks: Array.isArray(trackSyncList?.tracks) ? trackSyncList.tracks : [],
-        progressMarkdown: progressMd,
-        outletStatuses,
-        pinnedWidgets: refreshedPins
-      };
-
-      if (socialStats || readyShorts.length > 0) {
-        setMcpTelemetryCache('dashboard_ingest_v1', payload);
-      }
-
+      const payload = await mcpPollingEngine.triggerPollNow(false);
       res.json(payload);
     } catch (err: any) {
       const cached = getMcpTelemetryCache('dashboard_ingest_v1');
       if (cached) {
-        return res.json({
-          ...cached.payload,
-          fromCache: true,
-          cachedAt: cached.updatedAt,
-          errors: [err.message]
-        });
+        return res.json(enrichCachedPayload(cached.payload, cached.updatedAt, [err.message]));
       }
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Pull deep per-project coordination telemetry for the active track_slug
+  // Pull deep per-project coordination telemetry from selected or primary MCP server
   router.post('/api/mcp/project-coordination', async (req, res) => {
     const start = Date.now();
     try {
       const trackSlug = String(req.body?.trackSlug || '').trim();
+      const serverId = String(req.body?.serverId || 'brickos-primary-mcp').trim();
       if (!trackSlug) {
         return res.status(400).json({ success: false, error: 'trackSlug is required.' });
       }
-      const server = getMcpServerByIdFromSqlite('brickos-primary-mcp', true);
+      const server = getMcpServerByIdFromSqlite(serverId, true);
       if (!server || !server.enabled) {
-        return res.status(404).json({ success: false, error: 'Primary brickOS MCP server is disabled or missing.' });
+        return res.status(404).json({ success: false, error: `MCP server '${serverId}' is disabled or missing.` });
       }
 
       const [trackGet, previewAssets, auditResult] = await Promise.all([
-        callMcpRpc(server, 'tools/call', { name: 'brickos_track_sync', arguments: { track_slug: trackSlug, action: 'get' } }, 12000),
-        callMcpRpc(server, 'tools/call', { name: 'brickos_preview_assets', arguments: { track_slug: trackSlug } }, 12000),
-        callMcpRpc(server, 'tools/call', { name: 'brickos_audit_playbook', arguments: { track_slug: trackSlug } }, 12000)
+        mcpProxyService.callRpc(server, 'tools/call', { name: 'brickos_track_sync', arguments: { track_slug: trackSlug, action: 'get' } }, 12000),
+        mcpProxyService.callRpc(server, 'tools/call', { name: 'brickos_preview_assets', arguments: { track_slug: trackSlug } }, 12000),
+        mcpProxyService.callRpc(server, 'tools/call', { name: 'brickos_audit_playbook', arguments: { track_slug: trackSlug } }, 12000)
       ]);
 
       res.json({
         success: true,
+        serverId,
         trackSlug,
         latencyMs: Date.now() - start,
         trackRecord: trackGet.ok ? trackGet.parsed : { error: trackGet.error },
@@ -609,7 +647,7 @@ export function createMcpHubRouter(): express.Router {
         }
       });
 
-      const prompt = `You are the brickOS Release Director coordinating audio masters, vertical Shorts, YouTube @brickRedeemed stats, Meta Muse (Edison IG/FB), TikTok, X, and Spotify/Apple DistroKit.
+      const prompt = `You are the brickOS Release Director coordinating audio masters, vertical Shorts, YouTube @brickRedeemed stats, Meta Muse (Edison IG/FB), TikTok, X, and Spotify/Apple (DistroKid).
 Analyze the live operational snapshot below and provide a concise, high-signal 4-bullet Status Brief covering:
 1) Immediate Action Required (e.g. Meta Muse v2 vs v5_clean corrections, IG manual cancellations, or Google Sheet sync),
 2) YouTube & Shorts Velocity vs 10-post median baseline,
@@ -621,14 +659,28 @@ Keep every bullet concrete, reference real campaign names, dates, and numbers fr
 LIVE SNAPSHOT:
 ${JSON.stringify(snapshot).slice(0, 12000)}`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: prompt
-      });
+      const candidates = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'];
+      let briefText = '';
+      let lastErr: any = null;
+      for (const model of candidates) {
+        try {
+          const response = await ai.models.generateContent({ model, contents: prompt });
+          if (response.text) {
+            briefText = response.text;
+            break;
+          }
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+
+      if (!briefText) {
+        throw lastErr || new Error('Gemini returned an empty brief.');
+      }
 
       res.json({
         success: true,
-        brief: response.text || 'No brief returned.',
+        brief: briefText,
         generatedAt: new Date().toISOString()
       });
     } catch (err: any) {

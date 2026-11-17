@@ -12,18 +12,28 @@ import {
   CheckCircle2,
   AlertTriangle,
   Play,
+  Pause,
   ArrowRight,
   Plug,
   Copy,
-  FileText,
-  Headphones,
-  Layers,
-  HardDrive,
-  Sliders
+  Clock,
+  Edit3,
+  SlidersHorizontal,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  Archive,
+  Pin,
+  Check,
+  Flag
 } from 'lucide-react';
 import { Track, CompositionSession } from '../types';
 import {
   DashboardIngestPayload,
+  ReadyShortItem,
+  YouTubeVideoStat,
+  MatrixSortMode,
+  MatrixTrackPreference,
   SOCIAL_OUTLET_DEFINITIONS,
   OUTLET_STATUS_OPTIONS,
   CANONICAL_PLAYLISTS,
@@ -33,6 +43,8 @@ import {
 import { CurrentProjectCoordinationPanel } from './CurrentProjectCoordinationPanel';
 import { McpHubIngestionPanel } from './McpHubIngestionPanel';
 import { StudioWorkspace, getSuggestedTrackStep } from './StudioHome';
+import { ShortMetadataSyncModal, EditableShortPayload } from './ShortMetadataSyncModal';
+import { CampaignListManagerModal, MatrixRowSummary } from './CampaignListManagerModal';
 
 interface StatusBentoDashboardProps {
   tracks: Track[];
@@ -49,12 +61,50 @@ interface StatusBentoDashboardProps {
 
 type BentoSubView = 'bento' | 'project' | 'mcp';
 
+const lc = (v: unknown): string => String(v ?? '').toLowerCase();
+
+const parseEffectiveDateInfo = (input: {
+  shortSlot?: string;
+  ytPublishedAt?: string;
+  latestOutletUpdatedAt?: string;
+}): { timestampMs: number; label: string } => {
+  const candidates = [input.shortSlot, input.ytPublishedAt, input.latestOutletUpdatedAt];
+  for (const raw of candidates) {
+    const rawStr = String(raw || '').trim();
+    if (!rawStr) continue;
+    const parsed = Date.parse(rawStr);
+    if (!Number.isNaN(parsed)) {
+      const d = new Date(parsed);
+      return {
+        timestampMs: parsed,
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      };
+    }
+    const cleaned = rawStr
+      .replace(/(\d+)(st|nd|rd|th)/gi, '$1')
+      .replace(/\(.*?\)/g, '')
+      .trim();
+    const parsedWithYear = Date.parse(`${cleaned} ${new Date().getFullYear()}`);
+    if (!Number.isNaN(parsedWithYear)) {
+      const d = new Date(parsedWithYear);
+      return {
+        timestampMs: parsedWithYear,
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      };
+    }
+    return {
+      timestampMs: 0,
+      label: rawStr.length > 18 ? `${rawStr.slice(0, 16)}…` : rawStr
+    };
+  }
+  return { timestampMs: 0, label: 'Unscheduled' };
+};
+
 export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
   tracks,
   selectedTrack,
   onSelectTrack,
   onContinueTrack,
-  onOpenWorkspace,
   onNavigateToTab,
   onCopyText,
   isDarkMode,
@@ -66,6 +116,10 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [matrixFilter, setMatrixFilter] = useState<'active' | 'all' | 'issues'>('active');
+  const [matrixSortMode, setMatrixSortMode] = useState<MatrixSortMode>('manual');
+  const [editingShortTarget, setEditingShortTarget] = useState<EditableShortPayload | null>(null);
+  const [isListManagerOpen, setIsListManagerOpen] = useState<boolean>(false);
+  const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
 
   // Gemini brief state (user-initiated)
   const [dailyBrief, setDailyBrief] = useState<string>('');
@@ -84,19 +138,58 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
   // Image error tracking so broken external URLs fall back gracefully
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
-  const fetchDashboardIngest = async (silent = false) => {
+  // Background polling countdown state synced to backend McpPollingEngine
+  const [secondsUntilNextPoll, setSecondsUntilNextPoll] = useState<number | null>(null);
+  const [isUpdatingPolling, setIsUpdatingPolling] = useState<boolean>(false);
+
+  const fetchDashboardIngest = async (silent = false, triggerPoll = false) => {
     if (!silent) setIsRefreshing(true);
     try {
-      const res = await fetch('/api/mcp/dashboard-ingest');
+      const endpoint = triggerPoll
+        ? '/api/mcp/polling/trigger'
+        : '/api/mcp/dashboard-ingest';
+      const res = await fetch(endpoint, triggerPoll ? { method: 'POST' } : undefined);
       const data: DashboardIngestPayload = await res.json();
+      if (!res.ok) {
+        throw new Error((data as any)?.error || `Dashboard ingest failed (HTTP ${res.status})`);
+      }
       if (data && data.success) {
         setIngest(data);
+        if (data.matrixSortMode) setMatrixSortMode(data.matrixSortMode);
       }
     } catch (err: any) {
       if (!silent) onNotify(err?.message || 'MCP dashboard refresh failed', 'error');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+    }
+  };
+
+  const handleUpdatePollingConfig = async (updates: { enabled?: boolean; intervalMs?: number }) => {
+    setIsUpdatingPolling(true);
+    try {
+      const res = await fetch('/api/mcp/polling/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update polling config');
+      }
+      setIngest((prev) => (prev ? { ...prev, polling: data.polling } : prev));
+      if (updates.enabled !== undefined) {
+        onNotify(
+          updates.enabled ? 'MCP Auto-Refresh Polling enabled.' : 'MCP Auto-Refresh Polling paused.',
+          'info'
+        );
+      } else if (updates.intervalMs) {
+        onNotify(`MCP polling interval set to ${Math.round(updates.intervalMs / 1000)}s.`, 'info');
+      }
+    } catch (err: any) {
+      onNotify(err?.message || 'Polling config error', 'error');
+    } finally {
+      setIsUpdatingPolling(false);
     }
   };
 
@@ -109,6 +202,7 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
           const cachedData = await cacheRes.json();
           if (active && cachedData?.success) {
             setIngest(cachedData);
+            if (cachedData.matrixSortMode) setMatrixSortMode(cachedData.matrixSortMode);
             setIsLoading(false);
           }
         }
@@ -121,6 +215,40 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
       active = false;
     };
   }, []);
+
+  // Synchronized countdown + lightweight cache pull when background poller ticks
+  useEffect(() => {
+    const polling = ingest?.polling;
+    if (!polling?.enabled) {
+      setSecondsUntilNextPoll(null);
+      return;
+    }
+
+    let triggeredEdgeRefresh = false;
+    const tick = () => {
+      if (!polling.nextPollAt) {
+        setSecondsUntilNextPoll(Math.round((polling.intervalMs || 60000) / 1000));
+        return;
+      }
+      const diffSec = Math.max(0, Math.ceil((new Date(polling.nextPollAt).getTime() - Date.now()) / 1000));
+      setSecondsUntilNextPoll(diffSec);
+      if (diffSec === 0 && !triggeredEdgeRefresh) {
+        triggeredEdgeRefresh = true;
+        setTimeout(() => {
+          fetch('/api/mcp/dashboard-ingest?cacheOnly=1')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((cached) => {
+              if (cached?.success) setIngest(cached);
+            })
+            .catch(() => {});
+        }, 1800);
+      }
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [ingest?.polling?.enabled, ingest?.polling?.nextPollAt, ingest?.polling?.intervalMs]);
 
   const handleSaveOutletStatus = async (payload: {
     trackId: string;
@@ -140,19 +268,20 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.success && data.record) {
-        setIngest((prev) => {
-          if (!prev) return prev;
-          const remaining = prev.outletStatuses.filter(
-            (o) => !(o.trackId === payload.trackId && o.outletKey === payload.outletKey)
-          );
-          return {
-            ...prev,
-            outletStatuses: [data.record, ...remaining]
-          };
-        });
-        onNotify(`Updated ${payload.outletKey.replace('_', ' ')} status to ${payload.status}`, 'success');
+      if (!res.ok || !data.success || !data.record) {
+        throw new Error(data?.error || `Failed to update outlet status (HTTP ${res.status})`);
       }
+      setIngest((prev) => {
+        if (!prev) return prev;
+        const remaining = prev.outletStatuses.filter(
+          (o) => !(o.trackId === payload.trackId && o.outletKey === payload.outletKey)
+        );
+        return {
+          ...prev,
+          outletStatuses: [data.record, ...remaining]
+        };
+      });
+      onNotify(`Updated ${payload.outletKey.replace('_', ' ')} status to ${payload.status}`, 'success');
     } catch (err: any) {
       onNotify(err?.message || 'Failed to update outlet status', 'error');
     }
@@ -166,7 +295,7 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          activeTrackTitle: selectedTrack.title,
+          activeTrackTitle: selectedTrack?.title || '',
           snapshot: {
             youtube: ingest.youtube,
             readyShorts: ingest.readyShorts,
@@ -176,11 +305,11 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         })
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setDailyBrief(data.brief);
         onNotify('Generated Gemini live status brief from MCP telemetry.', 'success');
       } else {
-        onNotify(data.error || 'Could not synthesize brief', 'error');
+        onNotify(data.error || `Could not synthesize brief (HTTP ${res.status})`, 'error');
       }
     } catch (err: any) {
       onNotify(err?.message || 'Brief synthesis error', 'error');
@@ -195,7 +324,7 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
     try {
       const args: Record<string, any> = {
         action: museAction,
-        campaign: museCampaign.trim() || selectedTrack.title
+        campaign: museCampaign.trim() || selectedTrack?.title || ''
       };
       if (museMessage.trim()) args.message = museMessage.trim();
       if (museAction === 'send_youtube_retention') {
@@ -220,12 +349,12 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         })
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setMuseMessage('');
         onNotify('Dispatched update to Edison (Meta Muse) via MCP.', 'success');
         await fetchDashboardIngest(true);
       } else {
-        onNotify(data.error || 'Muse bridge call failed', 'error');
+        onNotify(data.error || `Muse bridge call failed (HTTP ${res.status})`, 'error');
       }
     } catch (err: any) {
       onNotify(err?.message || 'Failed contacting Muse', 'error');
@@ -235,123 +364,382 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
   };
 
   const handleOpenProjectCoordination = (trackTitleOrSlug: string) => {
-    const q = trackTitleOrSlug.toLowerCase();
+    const q = lc(trackTitleOrSlug);
+    const safeTracks = (Array.isArray(tracks) ? tracks : []).filter((t): t is Track => Boolean(t));
     const matched =
-      tracks.find(
+      safeTracks.find(
         (t) =>
-          t.title.toLowerCase() === q ||
-          toTrackSlug(t.title) === toTrackSlug(q) ||
-          t.title.toLowerCase().includes(q) ||
-          q.includes(t.title.toLowerCase())
+          lc(t.title) === q ||
+          (q && toTrackSlug(t.title) === toTrackSlug(q)) ||
+          (q && lc(t.title).includes(q)) ||
+          (lc(t.title) && q.includes(lc(t.title)))
       ) || selectedTrack;
-    onSelectTrack(matched);
+    if (matched) onSelectTrack(matched);
     setSubView('project');
   };
 
-  // Merge catalog tracks + MCP tracks + Ready Shorts into the 6-Outlet Matrix
-  const alignmentRows = useMemo(() => {
-    const readyShorts = ingest?.readyShorts || [];
-    const mcpTracks = ingest?.mcpTracks || [];
-    const ytVideos = ingest?.youtube?.videos || [];
-    const outletStatuses = ingest?.outletStatuses || [];
-    const museMsgs = ingest?.metaMuse?.messages || [];
+  const handleOpenShortEditor = (shortItem: ReadyShortItem) => {
+    const shortTitleLc = lc(shortItem.track || shortItem.campaign || shortItem.title);
+    const matchedTrack =
+      (Array.isArray(tracks) ? tracks : []).find(
+        (t) =>
+          t &&
+          (lc(t.title) === lc(shortItem.track) ||
+            lc(t.title) === lc(shortItem.campaign) ||
+            (shortTitleLc && shortTitleLc.includes(lc(t.title))))
+      ) || null;
+    const liveVideo =
+      (ingest?.youtube?.videos || []).find(
+        (v) =>
+          (shortItem.youtube_id && v.video_id === shortItem.youtube_id) ||
+          (shortTitleLc && lc(v.title).includes(shortTitleLc))
+      ) || null;
+    setEditingShortTarget({ short: shortItem, liveVideo, matchedTrack });
+  };
 
-    return tracks
-      .map((t) => {
-        const slug = toTrackSlug(t.title);
-        const mcpMatch = mcpTracks.find(
-          (m) => m.slug === slug || m.title.toLowerCase() === t.title.toLowerCase()
-        );
-        const shortMatch = readyShorts.find(
-          (s) =>
-            s.track.toLowerCase() === t.title.toLowerCase() ||
-            s.campaign.toLowerCase() === t.title.toLowerCase()
-        );
-        const ytMatch = ytVideos.find((v) =>
-          v.title.toLowerCase().includes(t.title.toLowerCase())
-        );
-        const museMatch = museMsgs.find(
-          (m) =>
-            (m.campaign || '').toLowerCase().includes(t.title.toLowerCase()) ||
-            m.message.toLowerCase().includes(t.title.toLowerCase())
-        );
+  const handleOpenLiveVideoEditor = (video: YouTubeVideoStat) => {
+    const vidTitleLc = lc(video.title);
+    const readyShortsList = Array.isArray(ingest?.readyShorts) ? ingest.readyShorts : [];
+    const matchedShort = readyShortsList.find(
+      (s) =>
+        (s.youtube_id && s.youtube_id === video.video_id) ||
+        (lc(s.title) && vidTitleLc.includes(lc(s.title))) ||
+        (lc(s.track) && vidTitleLc.includes(lc(s.track)))
+    );
+    const matchedTrack =
+      (Array.isArray(tracks) ? tracks : []).find(
+        (t) => t && lc(t.title) && vidTitleLc.includes(lc(t.title))
+      ) || null;
 
-        const getOutlet = (outletKey: string) => {
-          const saved = outletStatuses.find(
-            (o) => o.trackId === t.id && o.outletKey === outletKey
-          );
-          if (saved) return saved;
+    if (matchedShort) {
+      setEditingShortTarget({ short: matchedShort, liveVideo: video, matchedTrack });
+      return;
+    }
 
-          let derivedStatus = 'Not Started';
-          if (outletKey === 'youtube_shorts') {
-            if (ytMatch) derivedStatus = 'Published';
-            else if (shortMatch) derivedStatus = 'Scheduled';
-            else if (mcpMatch?.status === 'Published') derivedStatus = 'Published';
-          } else if (outletKey === 'instagram_reels' || outletKey === 'facebook_x') {
-            if (museMatch?.message.toLowerCase().includes('cancel')) derivedStatus = 'Needs Correction';
-            else if (museMatch?.message.toLowerCase().includes('published')) derivedStatus = 'Published';
-            else if (museMatch?.message.toLowerCase().includes('scheduled') || shortMatch) derivedStatus = 'Scheduled';
-          } else if (outletKey === 'distro_streaming') {
-            if (shortMatch?.spotify_url || mcpMatch?.status === 'Published' || t.status === 'Released') {
-              derivedStatus = 'Published';
-            }
-          }
-          return {
-            trackId: t.id,
-            outletKey,
-            status: derivedStatus,
-            scheduledSlot: shortMatch?.scheduled_slot || '',
-            postUrl: outletKey === 'youtube_shorts' ? ytMatch?.url || shortMatch?.youtube_url || '' : '',
-            postId: outletKey === 'youtube_shorts' ? ytMatch?.video_id || shortMatch?.youtube_id || '' : '',
-            cohort: 'Cohort C',
-            playlistId: CANONICAL_PLAYLISTS[0].id,
-            notes: '',
-            updatedAt: ''
-          };
-        };
+    const synthesizedShort: ReadyShortItem = {
+      id: `yt-${video.video_id}`,
+      campaign: matchedTrack?.title || video.title,
+      track: matchedTrack?.title || '',
+      status: video.privacy_status === 'private' ? 'PRIVATE / STAGED ON YOUTUBE' : 'LIVE ON YOUTUBE',
+      title: video.title,
+      youtube_id: video.video_id,
+      youtube_url: video.url,
+      spotify_url: ingest?.releaseLinks?.spotify_track || '',
+      apple_music_url: ingest?.releaseLinks?.apple_music || '',
+      youtube_music_url: ingest?.releaseLinks?.youtube_music || '',
+      scheduled_slot: video.published_at
+        ? new Date(video.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : '',
+      format: '9:16 YouTube Short',
+      duration: video.duration_iso || 'Short'
+    };
+    setEditingShortTarget({ short: synthesizedShort, liveVideo: video, matchedTrack });
+  };
 
-        const outlets = SOCIAL_OUTLET_DEFINITIONS.map((def) => ({
-          def,
-          rec: getOutlet(def.key)
-        }));
-
-        const hasIssue = outlets.some((o) => o.rec.status === 'Needs Correction' || o.rec.status === 'Vetoed / Pulled');
-        const isActiveCampaign =
-          Boolean(shortMatch) ||
-          Boolean(ytMatch) ||
-          Boolean(museMatch) ||
-          t.id === selectedTrack.id ||
-          mcpMatch?.status === 'Published' ||
-          mcpMatch?.status === 'In Progress' ||
-          outlets.some((o) => o.rec.status !== 'Not Started');
-
-        return {
-          track: t,
-          slug: mcpMatch?.slug || slug,
-          mcpStatus: mcpMatch?.status || t.status,
-          shortMatch,
-          ytMatch,
-          museMatch,
-          outlets,
-          hasIssue,
-          isActiveCampaign
-        };
-      })
-      .filter((row) => {
-        if (matrixFilter === 'active' && !row.isActiveCampaign) return false;
-        if (matrixFilter === 'issues' && !row.hasIssue) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return (
-            row.track.title.toLowerCase().includes(q) ||
-            row.track.id.toLowerCase().includes(q) ||
-            row.track.ep.toLowerCase().includes(q) ||
-            row.slug.includes(q)
-          );
-        }
-        return true;
+  const handleUpdateMatrixPreference = async (payload: {
+    trackId: string;
+    activeOverride?: 'auto' | 'pinned' | 'archived';
+    needsActionOverride?: 'auto' | 'flagged' | 'cleared';
+    actionNote?: string;
+  }) => {
+    try {
+      const res = await fetch('/api/studio/matrix/preference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
-  }, [tracks, ingest, selectedTrack.id, matrixFilter, searchQuery]);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || 'Failed updating list assignment');
+      }
+      setIngest((prev) =>
+        prev ? { ...prev, matrixPreferences: data.matrixPreferences || [] } : prev
+      );
+      onNotify('Updated campaign list status.', 'success');
+    } catch (err: any) {
+      onNotify(err?.message || 'Failed updating campaign preference', 'error');
+    }
+  };
+
+  const handleChangeSortMode = async (nextMode: MatrixSortMode) => {
+    setMatrixSortMode(nextMode);
+    try {
+      await fetch('/api/studio/matrix/sort-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sortMode: nextMode })
+      });
+    } catch {}
+  };
+
+  // Merge catalog tracks + MCP tracks + Ready Shorts + Matrix Preferences into sortable rows
+  const allMatrixRows = useMemo(() => {
+    const safeTracks = (Array.isArray(tracks) ? tracks : []).filter((t): t is Track => Boolean(t));
+    const readyShorts = Array.isArray(ingest?.readyShorts) ? ingest.readyShorts.filter(Boolean) : [];
+    const mcpTracks = Array.isArray(ingest?.mcpTracks) ? ingest.mcpTracks.filter(Boolean) : [];
+    const ytVideos = Array.isArray(ingest?.youtube?.videos) ? ingest.youtube.videos.filter(Boolean) : [];
+    const outletStatuses = Array.isArray(ingest?.outletStatuses) ? ingest.outletStatuses.filter(Boolean) : [];
+    const museMsgs = Array.isArray(ingest?.metaMuse?.messages) ? ingest.metaMuse.messages.filter(Boolean) : [];
+    const prefsList = Array.isArray(ingest?.matrixPreferences) ? ingest.matrixPreferences.filter(Boolean) : [];
+    const prefByTrackId = new Map<string, MatrixTrackPreference>();
+    for (const p of prefsList) {
+      if (p?.trackId) prefByTrackId.set(p.trackId, p);
+    }
+
+    const built = safeTracks.map((t, catalogIdx) => {
+      const titleLc = lc(t.title);
+      const slug = toTrackSlug(t.title);
+      const mcpMatch = mcpTracks.find(
+        (m) => (m?.slug && m.slug === slug) || (titleLc && lc(m?.title) === titleLc)
+      );
+      const shortMatch = readyShorts.find(
+        (s) =>
+          (titleLc && lc(s?.track) === titleLc) ||
+          (titleLc && lc(s?.campaign) === titleLc)
+      );
+      const ytMatch = ytVideos.find((v) =>
+        Boolean(titleLc && lc(v?.title).includes(titleLc))
+      );
+      const museMatch = museMsgs.find(
+        (m) =>
+          Boolean(titleLc && lc(m?.campaign).includes(titleLc)) ||
+          Boolean(titleLc && lc(m?.message).includes(titleLc))
+      );
+
+      const getOutlet = (outletKey: string) => {
+        const saved = outletStatuses.find(
+          (o) => o?.trackId === t.id && o?.outletKey === outletKey
+        );
+        if (saved) return saved;
+
+        let derivedStatus = 'Not Started';
+        const museMsgLc = lc(museMatch?.message);
+        if (outletKey === 'youtube_shorts') {
+          if (ytMatch) derivedStatus = 'Published';
+          else if (shortMatch) derivedStatus = 'Scheduled';
+          else if (mcpMatch?.status === 'Published') derivedStatus = 'Published';
+        } else if (outletKey === 'instagram_reels' || outletKey === 'facebook_x') {
+          if (museMsgLc.includes('cancel')) derivedStatus = 'Needs Correction';
+          else if (museMsgLc.includes('published')) derivedStatus = 'Published';
+          else if (museMsgLc.includes('scheduled') || shortMatch) derivedStatus = 'Scheduled';
+        } else if (outletKey === 'distro_streaming') {
+          if (shortMatch?.spotify_url || mcpMatch?.status === 'Published' || t.status === 'Released') {
+            derivedStatus = 'Published';
+          }
+        }
+        return {
+          trackId: t.id,
+          outletKey,
+          status: derivedStatus,
+          scheduledSlot: shortMatch?.scheduled_slot || '',
+          postUrl: outletKey === 'youtube_shorts' ? ytMatch?.url || shortMatch?.youtube_url || '' : '',
+          postId: outletKey === 'youtube_shorts' ? ytMatch?.video_id || shortMatch?.youtube_id || '' : '',
+          cohort: 'Cohort C',
+          playlistId: CANONICAL_PLAYLISTS[0].id,
+          notes: '',
+          updatedAt: ''
+        };
+      };
+
+      const outlets = SOCIAL_OUTLET_DEFINITIONS.map((def) => ({
+        def,
+        rec: getOutlet(def.key)
+      }));
+
+      const autoHasIssue = outlets.some(
+        (o) => o.rec.status === 'Needs Correction' || o.rec.status === 'Vetoed / Pulled'
+      );
+      const autoActive =
+        Boolean(shortMatch) ||
+        Boolean(ytMatch) ||
+        Boolean(museMatch) ||
+        (selectedTrack?.id ? t.id === selectedTrack.id : false) ||
+        mcpMatch?.status === 'Published' ||
+        mcpMatch?.status === 'In Progress' ||
+        outlets.some((o) => o.rec.status !== 'Not Started');
+
+      const pref = prefByTrackId.get(t.id);
+      const effectiveActive =
+        pref?.activeOverride === 'pinned'
+          ? true
+          : pref?.activeOverride === 'archived'
+          ? false
+          : autoActive;
+      const effectiveNeedsAction =
+        pref?.needsActionOverride === 'flagged'
+          ? true
+          : pref?.needsActionOverride === 'cleared'
+          ? false
+          : autoHasIssue;
+
+      const completedCount = outlets.filter((o) =>
+        o.rec.status === 'Published' ||
+        o.rec.status === 'Scheduled' ||
+        o.rec.status === 'Audit Passed'
+      ).length;
+      const completionPct = Math.round((completedCount / Math.max(1, outlets.length)) * 100);
+
+      const latestOutletUpdatedAt = outlets
+        .map((o) => o.rec.updatedAt)
+        .filter(Boolean)
+        .sort()
+        .reverse()[0];
+      const dateInfo = parseEffectiveDateInfo({
+        shortSlot: shortMatch?.scheduled_slot || outlets.find((o) => o.rec.scheduledSlot)?.rec.scheduledSlot,
+        ytPublishedAt: ytMatch?.published_at,
+        latestOutletUpdatedAt
+      });
+
+      return {
+        track: t,
+        slug: mcpMatch?.slug || slug,
+        mcpStatus: mcpMatch?.status || t.status || 'Concept',
+        shortMatch,
+        ytMatch,
+        museMatch,
+        outlets,
+        pref,
+        autoHasIssue,
+        autoActive,
+        hasIssue: effectiveNeedsAction,
+        isActiveCampaign: effectiveActive,
+        completedCount,
+        totalOutlets: outlets.length,
+        completionPct,
+        effectiveDateMs: dateInfo.timestampMs,
+        effectiveDateLabel: dateInfo.label,
+        manualRank: typeof pref?.manualRank === 'number' && pref.manualRank < 9999 ? pref.manualRank : 1000 + catalogIdx
+      };
+    });
+
+    const sorted = [...built];
+    sorted.sort((a, b) => {
+      switch (matrixSortMode) {
+        case 'date_desc':
+          return b.effectiveDateMs - a.effectiveDateMs || a.manualRank - b.manualRank;
+        case 'date_asc': {
+          const aScore = a.effectiveDateMs || Number.MAX_SAFE_INTEGER;
+          const bScore = b.effectiveDateMs || Number.MAX_SAFE_INTEGER;
+          return aScore - bScore || a.manualRank - b.manualRank;
+        }
+        case 'completion_desc':
+          return b.completionPct - a.completionPct || b.completedCount - a.completedCount || a.manualRank - b.manualRank;
+        case 'completion_asc':
+          return a.completionPct - b.completionPct || a.completedCount - b.completedCount || a.manualRank - b.manualRank;
+        case 'manual':
+        default:
+          return a.manualRank - b.manualRank;
+      }
+    });
+
+    return sorted;
+  }, [tracks, ingest, selectedTrack?.id, matrixSortMode]);
+
+  const activeCampaignCount = allMatrixRows.filter((r) => r.isActiveCampaign).length;
+  const needsActionCount = allMatrixRows.filter((r) => r.hasIssue).length;
+
+  const alignmentRows = useMemo(() => {
+    return allMatrixRows.filter((row) => {
+      if (matrixFilter === 'active' && !row.isActiveCampaign) return false;
+      if (matrixFilter === 'issues' && !row.hasIssue) return false;
+      if (searchQuery.trim()) {
+        const q = lc(searchQuery);
+        return (
+          lc(row.track?.title).includes(q) ||
+          lc(row.track?.id).includes(q) ||
+          lc(row.track?.ep).includes(q) ||
+          lc(row.slug).includes(q)
+        );
+      }
+      return true;
+    });
+  }, [allMatrixRows, matrixFilter, searchQuery]);
+
+  const persistManualTrackOrder = async (orderedIds: string[]) => {
+    setMatrixSortMode('manual');
+    // Optimistically update ingest matrixPreferences for instant UI response
+    setIngest((prev) => {
+      if (!prev) return prev;
+      const existing = new Map((prev.matrixPreferences || []).map((p) => [p.trackId, p]));
+      const now = new Date().toISOString();
+      const updated = orderedIds.map((trackId, index) => {
+        const cur = existing.get(trackId);
+        return {
+          trackId,
+          activeOverride: cur?.activeOverride || ('auto' as const),
+          needsActionOverride: cur?.needsActionOverride || ('auto' as const),
+          actionNote: cur?.actionNote || '',
+          manualRank: index,
+          updatedAt: now
+        };
+      });
+      return { ...prev, matrixSortMode: 'manual', matrixPreferences: updated };
+    });
+
+    try {
+      const res = await fetch('/api/studio/matrix/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedTrackIds: orderedIds })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIngest((prev) =>
+          prev
+            ? {
+                ...prev,
+                matrixPreferences: data.matrixPreferences || prev.matrixPreferences,
+                matrixSortMode: data.matrixSortMode || 'manual'
+              }
+            : prev
+        );
+      }
+    } catch {}
+  };
+
+  const handleMoveTrackRow = (trackId: string, direction: 'up' | 'down') => {
+    const visibleIds = alignmentRows.map((r) => r.track.id);
+    const idx = visibleIds.indexOf(trackId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= visibleIds.length) return;
+
+    const fullIds = allMatrixRows.map((r) => r.track.id);
+    const fullA = fullIds.indexOf(visibleIds[idx]);
+    const fullB = fullIds.indexOf(visibleIds[swapIdx]);
+    if (fullA < 0 || fullB < 0) return;
+
+    const reordered = [...fullIds];
+    const [moved] = reordered.splice(fullA, 1);
+    reordered.splice(fullB, 0, moved);
+    persistManualTrackOrder(reordered);
+  };
+
+  const handleDropReorder = (sourceTrackId: string, targetTrackId: string) => {
+    if (!sourceTrackId || sourceTrackId === targetTrackId) return;
+    const fullIds = allMatrixRows.map((r) => r.track.id);
+    const srcIdx = fullIds.indexOf(sourceTrackId);
+    const tgtIdx = fullIds.indexOf(targetTrackId);
+    if (srcIdx < 0 || tgtIdx < 0) return;
+
+    const reordered = [...fullIds];
+    const [moved] = reordered.splice(srcIdx, 1);
+    reordered.splice(tgtIdx, 0, moved);
+    persistManualTrackOrder(reordered);
+  };
+
+  const listManagerSummaries: MatrixRowSummary[] = useMemo(
+    () =>
+      allMatrixRows.map((r) => ({
+        track: r.track,
+        autoActive: r.autoActive,
+        autoHasIssue: r.autoHasIssue,
+        effectiveActive: r.isActiveCampaign,
+        effectiveNeedsAction: r.hasIssue,
+        pref: r.pref
+      })),
+    [allMatrixRows]
+  );
 
   const cardSurface = isDarkMode
     ? 'bg-slate-900/90 border-slate-800 text-slate-100'
@@ -382,45 +770,58 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
 
   const nextStep = getSuggestedTrackStep(selectedTrack);
   const yt = ingest?.youtube;
-  const museMessages = ingest?.metaMuse?.messages || [];
-  const readyShorts = ingest?.readyShorts || [];
-  const servers = ingest?.servers || [];
+  const museMessages = Array.isArray(ingest?.metaMuse?.messages) ? ingest.metaMuse.messages.filter(Boolean) : [];
+  const readyShorts = Array.isArray(ingest?.readyShorts) ? ingest.readyShorts.filter(Boolean) : [];
+  const servers = Array.isArray(ingest?.servers) ? ingest.servers.filter(Boolean) : [];
   const connectedServerCount = servers.filter((s) => s.lastStatus === 'connected').length;
 
   const filteredShorts = readyShorts.filter((s) => {
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
+    const q = lc(searchQuery);
     return (
-      s.title.toLowerCase().includes(q) ||
-      s.campaign.toLowerCase().includes(q) ||
-      s.track.toLowerCase().includes(q) ||
-      s.id.toLowerCase().includes(q)
+      lc(s?.title).includes(q) ||
+      lc(s?.campaign).includes(q) ||
+      lc(s?.track).includes(q) ||
+      lc(s?.id).includes(q)
     );
   });
 
   const filteredMuseMessages = museMessages.filter((m) => {
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
+    const q = lc(searchQuery);
     return (
-      (m.campaign || '').toLowerCase().includes(q) ||
-      m.message.toLowerCase().includes(q) ||
-      m.agent.toLowerCase().includes(q)
+      lc(m?.campaign).includes(q) ||
+      lc(m?.message).includes(q) ||
+      lc(m?.agent).includes(q)
     );
   });
 
+  const polling = ingest?.polling;
+
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-5 pb-6">
-      {/* TOP COMMAND HEADER: VIEW SWITCHER + SEARCH + LIVE MCP SYNC */}
+      {/* TOP COMMAND HEADER: VIEW SWITCHER + AUTO-POLLING + LIVE MCP SYNC */}
       <section className={`rounded-2xl border p-4 sm:p-5 ${cardSurface}`}>
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className={`text-xs font-mono ${mutedText}`}>
-              brick · @brickRedeemed · {connectedServerCount}/{servers.length || 1} MCP Servers Active
-              {ingest?.fetchedAt ? ` · Synced ${new Date(ingest.fetchedAt).toLocaleTimeString()}` : ''}
-              {ingest?.fromCache ? ' · Cached' : ''}
+            <div className={`text-xs font-mono flex flex-wrap items-center gap-1.5 ${mutedText}`}>
+              <span>brick · @brickRedeemed · {connectedServerCount}/{servers.length || 1} MCP Servers Active</span>
+              {ingest?.fetchedAt && <span>· Synced {new Date(ingest.fetchedAt).toLocaleTimeString()}</span>}
+              {ingest?.fromCache && <span>· Cached</span>}
+              {polling && (
+                <span className="inline-flex items-center gap-1 text-cyan-400 tabular-nums">
+                  <span>·</span>
+                  <Clock className="w-3 h-3" />
+                  {polling.enabled
+                    ? polling.isPolling
+                      ? 'Polling now...'
+                      : `Auto-poll ${secondsUntilNextPoll ?? Math.round((polling.intervalMs || 60000) / 1000)}s`
+                    : 'Auto-poll paused'}
+                </span>
+              )}
             </div>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-0.5">
-              brickOS Production, Shorts & Social Status
+              brickOS Production, Shorts &amp; Social Status
             </h2>
           </div>
 
@@ -453,9 +854,38 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
               ))}
             </div>
 
+            {/* Auto-Refresh Polling Interval + Pause/Resume */}
+            <div className="flex items-center gap-1.5">
+              <select
+                value={polling?.intervalMs || 60000}
+                disabled={isUpdatingPolling}
+                onChange={(e) => handleUpdatePollingConfig({ intervalMs: Number(e.target.value) })}
+                aria-label="MCP auto-refresh polling interval"
+                className={`min-h-[44px] px-2.5 py-2 rounded-xl border text-xs font-mono cursor-pointer ${
+                  isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-900'
+                }`}
+              >
+                <option value={30000}>Poll 30s</option>
+                <option value={60000}>Poll 60s</option>
+                <option value={120000}>Poll 2m</option>
+                <option value={300000}>Poll 5m</option>
+              </select>
+              <button
+                type="button"
+                disabled={isUpdatingPolling}
+                onClick={() => handleUpdatePollingConfig({ enabled: !(polling?.enabled ?? true) })}
+                title={polling?.enabled ? 'Pause background auto-polling' : 'Resume background auto-polling'}
+                className={`min-h-[44px] min-w-[44px] px-2.5 py-2 rounded-xl border text-xs font-medium flex items-center justify-center cursor-pointer ${
+                  isDarkMode ? 'bg-slate-950 border-slate-800 hover:bg-slate-900 text-slate-200' : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-800'
+                }`}
+              >
+                {polling?.enabled ?? true ? <Pause className="w-3.5 h-3.5 text-amber-400" /> : <Play className="w-3.5 h-3.5 text-emerald-400" />}
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={() => fetchDashboardIngest(false)}
+              onClick={() => fetchDashboardIngest(false, true)}
               disabled={isRefreshing}
               className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0 ${
                 isDarkMode
@@ -479,7 +909,7 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
           </div>
         </div>
 
-        {/* Filter Bar + Active Studio Continuity Strip */}
+        {/* Streamlined Filter Bar + Primary Next Action */}
         <div className="mt-4 pt-3.5 border-t border-slate-800/40 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${mutedText}`} />
@@ -488,7 +918,7 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter campaigns, tracks, Shorts, Muse updates, or IDs..."
-              className={`w-full min-h-[44px] pl-9 pr-3 py-2 rounded-xl border text-xs ${
+              className={`w-full min-h-[42px] pl-9 pr-3 py-2 rounded-xl border text-xs ${
                 isDarkMode
                   ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
                   : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
@@ -496,49 +926,17 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <span className={`text-xs ${mutedText}`}>
-              Active Track: <strong className={isDarkMode ? 'text-white' : 'text-slate-900'}>{selectedTrack.id} · {selectedTrack.title}</strong>
+              Active Track: <strong className={isDarkMode ? 'text-white' : 'text-slate-900'}>{selectedTrack?.id || '—'} · {selectedTrack?.title || 'Untitled'}</strong>
             </span>
             <button
               type="button"
               onClick={onContinueTrack}
-              className="min-h-[40px] px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="min-h-[40px] px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <span>{nextStep.label}</span>
               <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenWorkspace('write', 'lyrics')}
-              className={`min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer ${subSurface}`}
-            >
-              <FileText className="w-3.5 h-3.5 text-blue-400" />
-              <span>Write</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenWorkspace('produce', 'mixer')}
-              className={`min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer ${subSurface}`}
-            >
-              <Headphones className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Produce</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateToTab('nextcloud_sync')}
-              className={`min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer ${subSurface}`}
-            >
-              <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Files</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateToTab('kanban')}
-              className={`min-h-[40px] px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer ${subSurface}`}
-            >
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Pipeline</span>
             </button>
           </div>
         </div>
@@ -573,6 +971,7 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
           tracks={tracks}
           selectedTrack={selectedTrack}
           onSelectTrack={onSelectTrack}
+          servers={servers}
           mcpTracks={ingest?.mcpTracks || []}
           readyShorts={readyShorts}
           museMessages={museMessages}
@@ -586,9 +985,10 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         <McpHubIngestionPanel
           servers={servers}
           pinnedWidgets={ingest?.pinnedWidgets || []}
+          authProfiles={ingest?.authProfiles || []}
           progressMarkdown={ingest?.progressMarkdown || ''}
           isDarkMode={isDarkMode}
-          onRefreshDashboard={() => fetchDashboardIngest(false)}
+          onRefreshDashboard={() => fetchDashboardIngest(false, true)}
           onNotify={onNotify}
         />
       ) : (
@@ -630,25 +1030,25 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
                     <div className={`rounded-xl border p-3 ${subSurface}`}>
                       <div className={`text-[11px] ${mutedText}`}>Subscribers</div>
                       <div className="text-xl font-bold font-mono tabular-nums mt-0.5">
-                        {yt.channel.subscribers.toLocaleString()}
+                        {(yt.channel?.subscribers ?? 0).toLocaleString()}
                       </div>
                     </div>
                     <div className={`rounded-xl border p-3 ${subSurface}`}>
-                      <div className={`text-[11px] ${mutedText}`}>Total Views · {yt.channel.video_count} Videos</div>
+                      <div className={`text-[11px] ${mutedText}`}>Total Views · {yt.channel?.video_count ?? 0} Videos</div>
                       <div className="text-xl font-bold font-mono tabular-nums mt-0.5">
-                        {yt.channel.total_views.toLocaleString()}
+                        {(yt.channel?.total_views ?? 0).toLocaleString()}
                       </div>
                     </div>
                     <div className={`rounded-xl border p-3 ${subSurface}`}>
                       <div className={`text-[11px] ${mutedText}`}>10-Post Median</div>
                       <div className="text-xl font-bold font-mono tabular-nums text-cyan-400 mt-0.5">
-                        {yt.summary.rolling_median_views.toLocaleString()}
+                        {(yt.summary?.rolling_median_views ?? 0).toLocaleString()}
                       </div>
                     </div>
                     <div className={`rounded-xl border p-3 ${subSurface}`}>
                       <div className={`text-[11px] ${mutedText}`}>Avg Like / View</div>
                       <div className="text-xl font-bold font-mono tabular-nums text-emerald-400 mt-0.5">
-                        {yt.summary.avg_like_to_view_pct}%
+                        {yt.summary?.avg_like_to_view_pct ?? 0}%
                       </div>
                     </div>
                   </div>
@@ -668,32 +1068,36 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
                       <tbody className="divide-y divide-slate-800/40 text-xs">
                         {(yt.videos || []).slice(0, 6).map((v) => {
                           const win = getTelemetryWindowTag(v.published_at);
-                          const isBreakoutEcho = v.views >= 400;
+                          const isBreakoutEcho = (v.views ?? 0) >= 400;
                           return (
                             <tr
                               key={v.video_id}
-                              onClick={() => handleOpenProjectCoordination(v.title)}
-                              className={`cursor-pointer transition ${
+                              onClick={() => handleOpenLiveVideoEditor(v)}
+                              title="Click to edit Short metadata & sync platforms"
+                              className={`cursor-pointer transition group ${
                                 isDarkMode ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'
                               }`}
                             >
-                              <td className="py-2.5 pr-3 max-w-[260px]">
-                                <div className="font-medium truncate">{v.title}</div>
+                              <td className="py-2 pr-3 max-w-[260px]">
+                                <div className="font-medium truncate flex items-center gap-1.5 group-hover:text-indigo-400 transition-colors">
+                                  <span className="truncate">{v.title}</span>
+                                  <Edit3 className="w-3 h-3 opacity-0 group-hover:opacity-100 shrink-0 text-indigo-400" />
+                                </div>
                                 <div className={`text-[11px] font-mono ${mutedText}`}>
                                   {v.video_id} · {v.duration_iso || 'Short'}
                                   {isBreakoutEcho ? ' · Breakout (>400 views)' : ''}
                                 </div>
                               </td>
-                              <td className="py-2.5 px-2 text-right font-mono tabular-nums font-semibold">
-                                {v.views.toLocaleString()}
+                              <td className="py-2 px-2 text-right font-mono tabular-nums font-semibold">
+                                {(v.views ?? 0).toLocaleString()}
                               </td>
-                              <td className="py-2.5 px-2 text-right font-mono tabular-nums">
-                                {v.likes.toLocaleString()}
+                              <td className="py-2 px-2 text-right font-mono tabular-nums">
+                                {(v.likes ?? 0).toLocaleString()}
                               </td>
-                              <td className="py-2.5 px-2 text-right font-mono tabular-nums text-emerald-400">
-                                {v.like_to_view_pct}%
+                              <td className="py-2 px-2 text-right font-mono tabular-nums text-emerald-400">
+                                {v.like_to_view_pct ?? 0}%
                               </td>
-                              <td className="py-2.5 pl-2 text-right font-mono text-[11px] whitespace-nowrap">
+                              <td className="py-2 pl-2 text-right font-mono text-[11px] whitespace-nowrap">
                                 <span
                                   className={
                                     win.tone === 'amber'
@@ -874,34 +1278,46 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
             </section>
           </div>
 
-          {/* BENTO ROW 2: READY SHORTS PUBLISHING QUEUE */}
+          {/* BENTO ROW 2: READY SHORTS PUBLISHING QUEUE (Clickable Edit & Sync) */}
           <section className={`rounded-2xl border p-4 sm:p-5 space-y-4 ${cardSurface}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm sm:text-base font-bold">
-                  Ready Shorts & Scheduled Slots ({filteredShorts.length})
+                  Ready Shorts &amp; Scheduled Slots ({filteredShorts.length})
                 </h3>
                 <p className={`text-xs mt-0.5 ${mutedText}`}>
-                  Approved 1080×1920 vertical cuts staged from brickos-remote-mcp with opening vocal strike hooks & streaming links.
+                  Click any live or scheduled Short to preview, edit metadata &amp; hooks, or sync across YouTube, TikTok, IG, Facebook, and DistroKid.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => onNavigateToTab('omnipost')}
-                className={`min-h-[38px] px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer ${subSurface}`}
+                className={`min-h-[38px] px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer whitespace-nowrap shrink-0 ${subSurface}`}
               >
                 Open OmniPost Captions
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
               {filteredShorts.map((short) => {
                 const imgBroken = brokenImages[short.id];
                 return (
-                  <div key={short.id} className={`rounded-xl border overflow-hidden flex flex-col justify-between ${subSurface}`}>
-                    <div className="flex gap-3 p-3.5">
+                  <div
+                    key={short.id}
+                    onClick={() => handleOpenShortEditor(short)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleOpenShortEditor(short);
+                      }
+                    }}
+                    className={`rounded-xl border overflow-hidden flex flex-col justify-between text-left cursor-pointer transition hover:border-indigo-500/60 group ${subSurface}`}
+                  >
+                    <div className="flex gap-3 p-3">
                       {/* 9:16 Vertical Thumbnail with resilient gradient fallback */}
-                      <div className="w-20 h-36 rounded-lg overflow-hidden shrink-0 border border-slate-800 bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900 flex flex-col items-center justify-center relative">
+                      <div className="w-16 h-28 rounded-lg overflow-hidden shrink-0 border border-slate-800 bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900 flex flex-col items-center justify-center relative">
                         {short.thumbnail_asset_url && !imgBroken ? (
                           <img
                             src={short.thumbnail_asset_url}
@@ -911,8 +1327,8 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="p-2 text-center space-y-1">
-                            <Play className="w-5 h-5 text-indigo-300 mx-auto" />
+                          <div className="p-1.5 text-center space-y-1">
+                            <Play className="w-4 h-4 text-indigo-300 mx-auto" />
                             <span className="block text-[9px] font-mono text-slate-300 leading-tight">
                               {short.duration || '9:16'}
                             </span>
@@ -920,58 +1336,61 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
                         )}
                       </div>
 
-                      <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className={`text-[11px] font-mono truncate ${mutedText}`}>
                           {short.campaign} · {short.status}
                         </div>
-                        <h4 className="text-sm font-semibold leading-snug line-clamp-2">{short.title}</h4>
+                        <h4 className="text-sm font-semibold leading-snug line-clamp-2 group-hover:text-indigo-400 transition-colors">
+                          {short.title}
+                        </h4>
                         {short.hook_text && (
-                          <div className="text-xs font-mono text-amber-400">
+                          <div className="text-xs font-mono text-amber-400 truncate">
                             Hook: &quot;{short.hook_text}&quot;
                           </div>
                         )}
                         {short.scheduled_slot && (
-                          <div className={`text-xs font-mono ${mutedText}`}>
-                            Slot: {short.scheduled_slot}
+                          <div className={`text-[11px] font-mono truncate ${mutedText}`}>
+                            {short.scheduled_slot}
                           </div>
                         )}
-                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                          {short.video_asset_url && (
-                            <a
-                              href={short.video_asset_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-cyan-400 hover:underline inline-flex items-center gap-1"
-                            >
-                              <span>Master MP4</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                          {short.youtube_url && (
-                            <a
-                              href={short.youtube_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-rose-400 hover:underline inline-flex items-center gap-1"
-                            >
-                              <span>YouTube</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
                       </div>
                     </div>
 
-                    <div className="px-3.5 py-2.5 border-t border-slate-800/40 flex items-center justify-between gap-2">
-                      <span className={`text-[11px] font-mono truncate ${mutedText}`}>
-                        {short.format || '1080x1920 9:16'}
-                      </span>
+                    <div className="px-3 py-2 border-t border-slate-800/40 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenProjectCoordination(short.track || short.campaign);
+                          }}
+                          className={`hover:underline cursor-pointer ${mutedText}`}
+                        >
+                          Open Project
+                        </button>
+                        {short.youtube_url && (
+                          <a
+                            href={short.youtube_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-rose-400 hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>YT</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => handleOpenProjectCoordination(short.track || short.campaign)}
-                        className="min-h-[36px] px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenShortEditor(short);
+                        }}
+                        className="min-h-[34px] px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                       >
-                        Coordinate Project
+                        <Edit3 className="w-3 h-3" />
+                        <span>Edit &amp; Sync</span>
                       </button>
                     </div>
                   </div>
@@ -988,69 +1407,163 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
 
           {/* BENTO ROW 3: 6-OUTLET SOCIAL & SHORTS ALIGNMENT MATRIX */}
           <section className={`rounded-2xl border p-4 sm:p-5 space-y-4 ${cardSurface}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm sm:text-base font-bold">
-                  6-Outlet Production & Shorts Alignment Matrix
+                  6-Outlet Production &amp; Shorts Alignment Matrix
                 </h3>
                 <p className={`text-xs mt-0.5 ${mutedText}`}>
-                  Coordinate YouTube & Shorts, TikTok, Instagram Reels (@brickredeemed + @theknotcreations), Facebook & X, and Spotify/Apple DistroKit.
+                  YouTube &amp; Shorts, TikTok, Instagram Reels (@brickredeemed + @theknotcreations), Facebook &amp; X, and Spotify/Apple (DistroKid).
                 </p>
               </div>
-              <div
-                className={`flex items-center p-1 rounded-xl border self-start ${
-                  isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
-                }`}
-              >
-                {[
-                  { id: 'active' as const, label: 'Active Campaigns' },
-                  { id: 'issues' as const, label: 'Needs Action' },
-                  { id: 'all' as const, label: `All Catalog (${tracks.length})` }
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setMatrixFilter(f.id)}
-                    className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
-                      matrixFilter === f.id
-                        ? 'bg-indigo-600 text-white'
-                        : mutedText
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Filter Switcher with Real Live Counts */}
+                <div
+                  className={`flex items-center p-1 rounded-xl border ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
+                  }`}
+                >
+                  {[
+                    { id: 'active' as const, label: `Active Campaigns (${activeCampaignCount})` },
+                    { id: 'issues' as const, label: `Needs Action (${needsActionCount})` },
+                    { id: 'all' as const, label: `All Catalog (${allMatrixRows.length})` }
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setMatrixFilter(f.id)}
+                      className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer whitespace-nowrap shrink-0 ${
+                        matrixFilter === f.id
+                          ? 'bg-indigo-600 text-white'
+                          : mutedText
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sort Selector: Manual, Date, Completion */}
+                <select
+                  value={matrixSortMode}
+                  onChange={(e) => handleChangeSortMode(e.target.value as MatrixSortMode)}
+                  aria-label="Sort matrix rows"
+                  className={`min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-medium cursor-pointer ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                >
+                  <option value="manual">Sort: Manual Order (Drag / ↑↓)</option>
+                  <option value="date_desc">Sort: Date (Newest / Soonest)</option>
+                  <option value="date_asc">Sort: Date (Oldest First)</option>
+                  <option value="completion_desc">Sort: Completion (Highest %)</option>
+                  <option value="completion_asc">Sort: Completion (Lowest %)</option>
+                </select>
+
+                {/* Bulk Manage Active Campaigns & Needs Action Lists */}
+                <button
+                  type="button"
+                  onClick={() => setIsListManagerOpen(true)}
+                  className={`min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${subSurface}`}
+                  title="Add, pin, archive, or flag tracks across Active Campaigns & Needs Action"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Manage Lists</span>
+                </button>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[920px]">
+              <table className="w-full text-left border-collapse min-w-[1060px]">
                 <thead>
                   <tr className={`border-b text-[11px] font-mono ${isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
-                    <th className="py-2.5 pr-3 font-medium">Production / Track</th>
+                    <th className="py-2.5 pr-2 font-medium w-20">Order</th>
+                    <th className="py-2.5 pr-3 font-medium">Production · Date &amp; Completion</th>
                     {SOCIAL_OUTLET_DEFINITIONS.map((o) => (
                       <th key={o.key} className="py-2.5 px-2 font-medium">
                         <div>{o.label}</div>
                         <div className="text-[10px] opacity-70 font-normal">{o.source}</div>
                       </th>
                     ))}
-                    <th className="py-2.5 pl-2 text-right font-medium">Action</th>
+                    <th className="py-2.5 pl-2 text-right font-medium">Lists &amp; Project</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/40 text-xs">
-                  {alignmentRows.map((row) => (
+                  {alignmentRows.map((row, rowIndex) => (
                     <tr
                       key={row.track.id}
-                      className={isDarkMode ? 'hover:bg-slate-800/35' : 'hover:bg-slate-50'}
+                      draggable
+                      onDragStart={() => setDraggedTrackId(row.track.id)}
+                      onDragOver={(e) => {
+                        if (draggedTrackId && draggedTrackId !== row.track.id) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedTrackId) {
+                          handleDropReorder(draggedTrackId, row.track.id);
+                          setDraggedTrackId(null);
+                        }
+                      }}
+                      onDragEnd={() => setDraggedTrackId(null)}
+                      className={`transition ${
+                        draggedTrackId === row.track.id
+                          ? 'opacity-50'
+                          : isDarkMode
+                          ? 'hover:bg-slate-800/35'
+                          : 'hover:bg-slate-50'
+                      }`}
                     >
-                      <td className="py-3 pr-3 max-w-[220px]">
-                        <div className="font-semibold truncate">{row.track.title}</div>
-                        <div className={`text-[11px] font-mono truncate ${mutedText}`}>
-                          {row.track.id} · {row.mcpStatus}
+                      {/* Reorder Column: Drag Grip + Accessible Up/Down Buttons */}
+                      <td className="py-2.5 pr-2 align-middle">
+                        <div className="flex items-center gap-0.5">
+                          <span
+                            className={`p-1 cursor-grab active:cursor-grabbing ${mutedText}`}
+                            title="Drag row to reorder manually"
+                          >
+                            <GripVertical className="w-3.5 h-3.5" />
+                          </span>
+                          <button
+                            type="button"
+                            disabled={rowIndex === 0}
+                            onClick={() => handleMoveTrackRow(row.track.id, 'up')}
+                            aria-label={`Move ${row.track.title} up`}
+                            title="Move Up"
+                            className={`p-1 rounded hover:bg-slate-800/60 disabled:opacity-25 cursor-pointer ${mutedText}`}
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={rowIndex === alignmentRows.length - 1}
+                            onClick={() => handleMoveTrackRow(row.track.id, 'down')}
+                            aria-label={`Move ${row.track.title} down`}
+                            title="Move Down"
+                            className={`p-1 rounded hover:bg-slate-800/60 disabled:opacity-25 cursor-pointer ${mutedText}`}
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
+
+                      {/* Production / Date / Completion / Action Note */}
+                      <td className="py-2.5 pr-3 max-w-[240px]">
+                        <div className="font-semibold truncate">{row.track.title}</div>
+                        <div className={`text-[11px] font-mono tabular-nums truncate ${mutedText}`}>
+                          {row.track.id} · {row.completedCount}/{row.totalOutlets} ({row.completionPct}%) · {row.effectiveDateLabel}
+                          {row.pref?.activeOverride === 'pinned' ? ' · Pinned' : ''}
+                          {row.pref?.activeOverride === 'archived' ? ' · Archived' : ''}
+                        </div>
+                        {row.pref?.actionNote && (
+                          <div className="text-[11px] text-rose-400 truncate mt-0.5">
+                            Action: {row.pref.actionNote}
+                          </div>
+                        )}
+                      </td>
+
                       {row.outlets.map(({ def, rec }) => (
-                        <td key={def.key} className="py-2.5 px-2">
+                        <td key={def.key} className="py-2 px-2">
                           <select
                             value={rec.status}
                             onChange={(e) =>
@@ -1080,21 +1593,88 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
                           </select>
                         </td>
                       ))}
-                      <td className="py-2.5 pl-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenProjectCoordination(row.track.title)}
-                          className={`min-h-[38px] px-3 py-1 rounded-lg border text-xs font-semibold cursor-pointer whitespace-nowrap ${subSurface}`}
-                        >
-                          Coordinate
-                        </button>
+
+                      {/* Quick Row List Toggles + Open Project Button */}
+                      <td className="py-2 pl-2 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateMatrixPreference({
+                                trackId: row.track.id,
+                                activeOverride: row.isActiveCampaign ? 'archived' : 'pinned'
+                              })
+                            }
+                            title={
+                              row.isActiveCampaign
+                                ? 'Remove / Archive from Active Campaigns'
+                                : 'Pin / Add to Active Campaigns'
+                            }
+                            aria-label={
+                              row.isActiveCampaign
+                                ? `Archive ${row.track.title} from Active Campaigns`
+                                : `Pin ${row.track.title} to Active Campaigns`
+                            }
+                            className={`min-h-[36px] min-w-[36px] px-2 rounded-lg border flex items-center justify-center cursor-pointer transition ${
+                              row.isActiveCampaign
+                                ? `${subSurface} hover:text-amber-400`
+                                : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                            }`}
+                          >
+                            {row.isActiveCampaign ? (
+                              <Archive className="w-3.5 h-3.5" />
+                            ) : (
+                              <Pin className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateMatrixPreference({
+                                trackId: row.track.id,
+                                needsActionOverride: row.hasIssue ? 'cleared' : 'flagged'
+                              })
+                            }
+                            title={
+                              row.hasIssue
+                                ? 'Clear from Needs Action list'
+                                : 'Flag into Needs Action list'
+                            }
+                            aria-label={
+                              row.hasIssue
+                                ? `Clear Needs Action for ${row.track.title}`
+                                : `Flag ${row.track.title} as Needs Action`
+                            }
+                            className={`min-h-[36px] min-w-[36px] px-2 rounded-lg border flex items-center justify-center cursor-pointer transition ${
+                              row.hasIssue
+                                ? 'border-rose-500/40 bg-rose-500/10 text-rose-400 hover:bg-emerald-500/10 hover:text-emerald-400'
+                                : `${subSurface} hover:text-rose-400`
+                            }`}
+                          >
+                            {row.hasIssue ? (
+                              <Check className="w-3.5 h-3.5" />
+                            ) : (
+                              <Flag className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProjectCoordination(row.track.title)}
+                            title="Switch to Current Project coordination tools (8-Check Audit, Suno Hooks, Playbook Stages, Release Guard & Retention Rescue)"
+                            className="min-h-[36px] px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Open Project
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {alignmentRows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className={`py-8 text-center text-xs ${mutedText}`}>
-                        No productions match this filter. Switch to All Catalog above to see every song.
+                      <td colSpan={8} className={`py-8 text-center text-xs ${mutedText}`}>
+                        No productions match this filter. Switch to All Catalog or click Manage Lists above to pin tracks.
                       </td>
                     </tr>
                   )}
@@ -1229,6 +1809,35 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
           </div>
         </div>
       )}
+      {/* INTERACTIVE SHORT METADATA & MULTI-PLATFORM SYNC MODAL */}
+      <ShortMetadataSyncModal
+        isOpen={Boolean(editingShortTarget)}
+        target={editingShortTarget}
+        tracks={tracks}
+        servers={servers}
+        outletStatuses={ingest?.outletStatuses || []}
+        releaseLinks={ingest?.releaseLinks}
+        isDarkMode={isDarkMode}
+        onClose={() => setEditingShortTarget(null)}
+        onSynced={({ outletStatuses }) => {
+          setIngest((prev) => (prev ? { ...prev, outletStatuses } : prev));
+          fetchDashboardIngest(true);
+        }}
+        onOpenProject={(titleOrSlug) => handleOpenProjectCoordination(titleOrSlug)}
+        onNotify={onNotify}
+      />
+
+      {/* ALIGNMENT MATRIX CAMPAIGN LIST MANAGER MODAL */}
+      <CampaignListManagerModal
+        isOpen={isListManagerOpen}
+        rows={listManagerSummaries}
+        isDarkMode={isDarkMode}
+        onClose={() => setIsListManagerOpen(false)}
+        onSaved={(matrixPreferences) => {
+          setIngest((prev) => (prev ? { ...prev, matrixPreferences } : prev));
+        }}
+        onNotify={onNotify}
+      />
     </div>
   );
 };

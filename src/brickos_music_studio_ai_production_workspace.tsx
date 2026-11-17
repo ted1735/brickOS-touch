@@ -62,7 +62,9 @@ import {
   Keyboard,
   Edit3,
   Trash2,
-  Grid
+  Grid,
+  PanelLeftOpen,
+  PanelLeftClose
 } from 'lucide-react';
 import { Track, TrackStatus, TrackVersion, MixerTrack, GeneratedImage, GeneratedVideo, ChatMessage, CompositionSession, NextcloudFolderAsset, PromptItem, UniversalAssetItem, StudioTheme } from './types';
 import { StudioWorkflowGuide } from './components/StudioWorkflowGuide';
@@ -137,6 +139,7 @@ import {
   getLocalCachedTracks,
   isFirebaseConfigured,
   isFirestoreQuotaExhausted,
+  testConnection,
   seedInitialCatalog,
   loadSessionsFromFirestore,
   subscribeToFirestoreSessions,
@@ -412,6 +415,9 @@ export default function BrickOSMusicStudioWorkspace() {
     async function initCloudDatabase() {
       try {
         setIsDbSyncing(true);
+        if (!isFirestoreQuotaExhausted()) {
+          await testConnection();
+        }
         // Load cloud catalog from Firestore (seeds if empty)
         const cloudTracks = await loadTracksFromFirestore(CANONICAL_TRACKS);
         if (isMounted && cloudTracks && cloudTracks.length > 0) {
@@ -453,7 +459,11 @@ export default function BrickOSMusicStudioWorkspace() {
           (err) => {
             if (isMounted) {
               setIsDbConnected(false);
-              setCloudSyncError('Cloud connection lost. Changes remain saved on this device.');
+              if (!isFirestoreQuotaExhausted()) {
+                setCloudSyncError('Cloud connection lost. Changes remain saved on this device.');
+              } else {
+                setCloudSyncError('');
+              }
             }
             console.warn('Firestore real-time subscription error:', err);
           }
@@ -469,13 +479,19 @@ export default function BrickOSMusicStudioWorkspace() {
           (err) => {
             if (isMounted) {
               setIsDbConnected(false);
-              setCloudSyncError('Cloud connection lost. Changes remain saved on this device.');
+              if (!isFirestoreQuotaExhausted()) {
+                setCloudSyncError('Cloud connection lost. Changes remain saved on this device.');
+              } else {
+                setCloudSyncError('');
+              }
             }
             console.warn('Firestore sessions subscription error:', err);
           }
         );
       } catch (err) {
-        if (isMounted) setCloudSyncError('Cloud connection failed. Changes remain saved on this device.');
+        if (isMounted && !isFirestoreQuotaExhausted()) {
+          setCloudSyncError('Cloud connection failed. Changes remain saved on this device.');
+        }
         console.error('Failed to initialize Firestore cloud catalog:', err);
       } finally {
         if (isMounted) setIsDbSyncing(false);
@@ -2014,11 +2030,14 @@ export default function BrickOSMusicStudioWorkspace() {
   };
 
   // Filtered tracks
-  const filteredCatalogTracks = tracks.filter(t => {
-    const matchesSearch = t.title.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-      t.genre.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-      t.vocalCast.toLowerCase().includes(catalogSearch.toLowerCase());
-    const matchesEp = selectedEpFilter === 'ALL' || t.ep.includes(selectedEpFilter);
+  const filteredCatalogTracks = (Array.isArray(tracks) ? tracks : []).filter(t => {
+    if (!t) return false;
+    const searchLc = String(catalogSearch ?? '').toLowerCase();
+    const matchesSearch =
+      String(t.title ?? '').toLowerCase().includes(searchLc) ||
+      String(t.genre ?? '').toLowerCase().includes(searchLc) ||
+      String(t.vocalCast ?? '').toLowerCase().includes(searchLc);
+    const matchesEp = selectedEpFilter === 'ALL' || String(t.ep ?? '').includes(selectedEpFilter);
     return matchesSearch && matchesEp;
   });
 
@@ -2431,6 +2450,31 @@ export default function BrickOSMusicStudioWorkspace() {
             </kbd>
           </button>
 
+          {/* Left Panel Show / Hide (0px Complete Collapse) */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsSideNavOpen((prev) => !prev);
+              setIsSideNavCollapsed(false);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0 ${
+              isSideNavOpen
+                ? 'bg-indigo-600 border-indigo-400 text-white'
+                : isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+            }`}
+            title={isSideNavOpen ? 'Hide Left Panel Completely (0px)' : 'Expand Left Catalog & Navigation Panel'}
+            aria-label={isSideNavOpen ? 'Hide Left Panel' : 'Show Left Panel'}
+          >
+            {isSideNavOpen ? (
+              <PanelLeftClose className="w-3.5 h-3.5" />
+            ) : (
+              <PanelLeftOpen className="w-3.5 h-3.5 text-indigo-400" />
+            )}
+            <span>{isSideNavOpen ? 'Hide Panel' : 'Show Panel'}</span>
+          </button>
+
           {/* Studio Quick Tools Drawer Trigger (Groups secondary tools cleanly) */}
           <button
             type="button"
@@ -2529,8 +2573,11 @@ export default function BrickOSMusicStudioWorkspace() {
                 onNavigateToTab={setActiveTab}
                 activePanelTab={sideNavTab}
                 onSetActivePanelTab={setSideNavTab}
-                isCollapsed={isSideNavCollapsed}
-                onToggleCollapse={() => setIsSideNavCollapsed(!isSideNavCollapsed)}
+                isCollapsed={false}
+                onToggleCollapse={() => {
+                  setIsSideNavCollapsed(false);
+                  setIsSideNavOpen(false);
+                }}
                 onClose={() => setIsSideNavOpen(false)}
                 isDarkMode={isDarkMode}
                 workspaceMode={workspaceMode}
@@ -2540,80 +2587,7 @@ export default function BrickOSMusicStudioWorkspace() {
           </>
         )}
 
-        {/* UNFOLDED FOLDABLE DUAL-PANE SPLIT RAIL (640px–1023px, hinge-aware) */}
-        {!focusMode && !isSideNavOpen && (
-          <aside
-            aria-label="Unfolded Catalog Split Pane"
-            style={{ width: 'clamp(240px, var(--fold-left-pane-width, 268px), 330px)' }}
-            className={`hidden md:flex lg:hidden flex-col flex-shrink-0 border-r overflow-hidden ${
-              isDarkMode
-                ? 'bg-slate-900/75 border-slate-800 text-slate-100'
-                : 'bg-white border-slate-200 text-slate-900'
-            }`}
-          >
-            <div className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
-              <div className="min-w-0">
-                <div className="text-xs font-bold tracking-tight truncate">Catalog Split</div>
-                <div className={`text-[10px] font-mono tabular-nums ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {tracks.length} Master Tracks
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="min-w-[40px] min-h-[40px] rounded-xl bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition cursor-pointer"
-                  title="New Project"
-                  aria-label="Create New Project"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsSideNavOpen(true)}
-                  className={`min-w-[40px] min-h-[40px] rounded-xl border flex items-center justify-center active:scale-95 transition cursor-pointer ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'
-                  }`}
-                  title="Expand Full Sessions & Assets Drawer"
-                  aria-label="Expand Full Drawer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 pb-36">
-              {tracks.map((trk) => {
-                const isSelected = trk.id === selectedTrack.id;
-                return (
-                  <button
-                    key={trk.id}
-                    type="button"
-                    onClick={() => setSelectedTrack(trk)}
-                    className={`w-full min-h-[52px] px-2.5 py-2 rounded-xl border text-left transition active:scale-[0.99] cursor-pointer flex items-center justify-between gap-2 ${
-                      isSelected
-                        ? isDarkMode
-                          ? 'bg-indigo-600/20 border-indigo-500 text-white'
-                          : 'bg-indigo-50 border-indigo-400 text-indigo-950'
-                        : isDarkMode
-                        ? 'bg-slate-950/40 border-slate-800/70 text-slate-300 hover:bg-slate-800/70'
-                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold truncate">{trk.title}</div>
-                      <div className={`text-[10px] font-mono tabular-nums truncate mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {trk.id} · {trk.bpm} BPM · {trk.key}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
-        )}
-
-        {/* CENTER / RIGHT: ACTIVE WORKBENCH */}
+        {/* CENTER / RIGHT: ACTIVE WORKBENCH (Expands to 100% width when left panel is hidden) */}
         <main className={`flex-1 flex flex-col min-w-0 fold-hinge-gutter transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'} ${focusMode ? 'h-screen p-0 m-0 overflow-hidden' : (activeTab === 'kanban' || activeTab === 'brainstorming' ? 'h-[calc(100dvh-180px)] lg:h-[calc(100vh-65px)] overflow-hidden p-2 sm:p-2.5' : (activeTab === 'lyrics' || workspaceMode === 'write') ? 'p-3 sm:p-4 pb-40 lg:pb-6 space-y-3 overflow-y-auto' : 'p-3 sm:p-5 lg:p-6 pb-40 lg:pb-8 space-y-4 lg:space-y-6 overflow-y-auto')}`}>
           
           {/* STUDIO WORKFLOW GUIDE & 5-STAGE PIPELINE NAVIGATOR (Hidden in Write/Lyrics/Whiteboard mode for clean distraction-free view) */}
@@ -2900,28 +2874,24 @@ export default function BrickOSMusicStudioWorkspace() {
                 : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
             }`}>
               <div className="flex items-center gap-2.5 flex-wrap">
-                {/* Collapsible Sidebar / Navigation Quick Toggle */}
+                {/* Collapsible Sidebar / Navigation Quick Toggle (Complete 0px Hide/Show) */}
                 <button
                   type="button"
                   onClick={() => {
-                    if (!isSideNavOpen) {
-                      setIsSideNavOpen(true);
-                      setIsSideNavCollapsed(false);
-                    } else {
-                      setIsSideNavCollapsed(prev => !prev);
-                    }
+                    setIsSideNavOpen((prev) => !prev);
+                    setIsSideNavCollapsed(false);
                   }}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer border shadow-xs ${
-                    isSideNavOpen && !isSideNavCollapsed
+                    isSideNavOpen
                       ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400'
                       : isDarkMode
                       ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                   }`}
-                  title={isSideNavOpen && !isSideNavCollapsed ? 'Collapse Studio Side Navigation Panel' : 'Expand Studio Side Navigation Panel'}
+                  title={isSideNavOpen ? 'Hide Side Panel Completely (0px)' : 'Show Studio Side Navigation Panel'}
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>{isSideNavOpen && !isSideNavCollapsed ? 'Side Nav: Open' : 'Side Nav: Mini'}</span>
+                  {isSideNavOpen ? <PanelLeftClose className="w-3.5 h-3.5" /> : <PanelLeftOpen className="w-3.5 h-3.5" />}
+                  <span>{isSideNavOpen ? 'Panel: Open' : 'Panel: Hidden'}</span>
                 </button>
 
                 <div className="flex items-center gap-2">

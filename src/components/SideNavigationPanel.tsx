@@ -1392,21 +1392,25 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={onToggleCollapse}
               className={`p-1.5 rounded-lg transition cursor-pointer ${
                 isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'
               }`}
-              title="Collapse Side Navigation Panel"
+              title="Collapse Side Panel Completely (0px)"
+              aria-label="Collapse Side Panel Completely"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             {onClose && (
               <button
+                type="button"
                 onClick={onClose}
-                className={`p-1.5 rounded-lg transition cursor-pointer lg:hidden ${
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
                   isDarkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-500 hover:text-rose-600 hover:bg-slate-200'
                 }`}
-                title="Close drawer"
+                title="Hide Side Panel"
+                aria-label="Hide Side Panel"
               >
                 <X className="w-4 h-4" />
               </button>
