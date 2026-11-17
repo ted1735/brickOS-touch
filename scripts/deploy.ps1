@@ -1,4 +1,4 @@
-# scripts/deploy.ps1
+﻿# scripts/deploy.ps1
 param(
     [switch]$SkipBuild = $false
 )
@@ -23,7 +23,11 @@ try {
 
     Write-Host "📦 [2/4] Packaging deployment bundle..." -ForegroundColor Cyan
     $tarPath = "$root\brickos_touch_dist.tar.gz"
-    tar -czf "$tarPath" -C "$root" dist package.json
+    if (Test-Path "$root\data") {
+        tar -czf "$tarPath" -C "$root" dist package.json data
+    } else {
+        tar -czf "$tarPath" -C "$root" dist package.json
+    }
     $tarSize = [math]::Round((Get-Item $tarPath).Length / 1MB, 2)
     Write-Host "  -> Created archive ($tarSize MB)" -ForegroundColor Green
 
