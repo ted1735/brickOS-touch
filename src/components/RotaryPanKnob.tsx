@@ -62,8 +62,8 @@ export const RotaryPanKnob: React.FC<RotaryPanKnobProps> = ({
   // Angle geometry: 270 degrees total range (-135° to +135°), 0° is 12 o'clock (Center)
   const angle = (clampedValue / 100) * 135; // -135deg to +135deg
 
-  // Drag interaction handler
-  const handleMouseDown = (e: React.MouseEvent) => {
+  // Unified Pointer interaction handler (mouse, finger touch, S-Pen)
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
 
     // Alt + Click or Middle Click resets to Center
@@ -73,63 +73,36 @@ export const RotaryPanKnob: React.FC<RotaryPanKnobProps> = ({
       return;
     }
 
-    if (e.button !== 0) return; // only left click
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
 
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     isDraggingRef.current = true;
     startYRef.current = e.clientY;
     startXRef.current = e.clientX;
     startValRef.current = clampedValue;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-
-      const deltaY = startYRef.current - moveEvent.clientY; // upward drag increases
-      const deltaX = moveEvent.clientX - startXRef.current; // rightward drag increases
-      const sensitivity = moveEvent.shiftKey ? 0.25 : 0.85; // shift for fine adjustment
-
-      // Combined directional drag (up/right increases, down/left decreases)
-      const delta = (deltaY + deltaX) * sensitivity;
-      const nextValue = Math.max(-100, Math.min(100, Math.round(startValRef.current + delta)));
-      onChange(nextValue);
-    };
-
-    const handleMouseUp = () => {
-      isDraggingRef.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Touch interaction handler for mobile / trackpads
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (disabled || e.touches.length === 0) return;
-    isDraggingRef.current = true;
-    startYRef.current = e.touches[0].clientY;
-    startXRef.current = e.touches[0].clientX;
-    startValRef.current = clampedValue;
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || disabled) return;
+    e.preventDefault();
+    const deltaY = startYRef.current - e.clientY;
+    const deltaX = e.clientX - startXRef.current;
+    const sensitivity = e.shiftKey ? 0.25 : 0.9;
+    const delta = (deltaY + deltaX) * sensitivity;
+    const nextValue = Math.max(-100, Math.min(100, Math.round(startValRef.current + delta)));
+    onChange(nextValue);
+  };
 
-    const handleTouchMove = (moveEvent: TouchEvent) => {
-      if (!isDraggingRef.current || moveEvent.touches.length === 0) return;
-      moveEvent.preventDefault();
-      const deltaY = startYRef.current - moveEvent.touches[0].clientY;
-      const deltaX = moveEvent.touches[0].clientX - startXRef.current;
-      const delta = (deltaY + deltaX) * 0.85;
-      const nextValue = Math.max(-100, Math.min(100, Math.round(startValRef.current + delta)));
-      onChange(nextValue);
-    };
-
-    const handleTouchEnd = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current) {
       isDraggingRef.current = false;
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleTouchEnd);
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {}
+    }
   };
 
   // Wheel interaction (fine or standard adjustment)
@@ -203,7 +176,7 @@ export const RotaryPanKnob: React.FC<RotaryPanKnobProps> = ({
         type="button"
         disabled={disabled}
         onClick={() => onChange(-100)}
-        className="text-[9px] font-mono px-1 py-0.5 rounded text-slate-500 hover:text-cyan-400 hover:bg-slate-800/80 transition cursor-pointer"
+        className="min-w-[32px] min-h-[36px] sm:min-w-[24px] sm:min-h-[26px] text-[10px] font-mono font-bold px-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800/80 active:scale-95 transition cursor-pointer"
         title="Snap 100% Left"
       >
         L
@@ -212,12 +185,14 @@ export const RotaryPanKnob: React.FC<RotaryPanKnobProps> = ({
       {/* Rotary Knob Dial */}
       <div
         ref={knobRef}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
         onDoubleClick={handleDoubleClick}
-        style={{ width: size, height: size }}
-        className="relative cursor-ns-resize group touch-none shrink-0"
+        style={{ width: size, height: size, touchAction: 'none' }}
+        className="relative cursor-ns-resize group touch-none shrink-0 flex items-center justify-center"
       >
         <svg width={size} height={size} className="overflow-visible">
           {/* Subtle Outer Bezel / Glow */}
@@ -346,7 +321,7 @@ export const RotaryPanKnob: React.FC<RotaryPanKnobProps> = ({
         type="button"
         disabled={disabled}
         onClick={() => onChange(100)}
-        className="text-[9px] font-mono px-1 py-0.5 rounded text-slate-500 hover:text-indigo-400 hover:bg-slate-800/80 transition cursor-pointer"
+        className="min-w-[32px] min-h-[36px] sm:min-w-[24px] sm:min-h-[26px] text-[10px] font-mono font-bold px-1.5 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-slate-800/80 active:scale-95 transition cursor-pointer"
         title="Snap 100% Right"
       >
         R
@@ -357,7 +332,7 @@ export const RotaryPanKnob: React.FC<RotaryPanKnobProps> = ({
         type="button"
         disabled={disabled}
         onClick={() => onChange(0)}
-        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-tight text-center min-w-[36px] transition border cursor-pointer ${
+        className={`min-h-[36px] sm:min-h-[26px] px-2 py-1 rounded-lg text-[10px] font-mono font-bold tabular-nums tracking-tight text-center min-w-[40px] transition border active:scale-95 cursor-pointer ${
           clampedValue === 0
             ? 'bg-slate-900/90 text-sky-400 border-sky-500/30 hover:border-sky-400'
             : clampedValue < 0

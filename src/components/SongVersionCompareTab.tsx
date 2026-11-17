@@ -111,7 +111,7 @@ export const SongVersionCompareTab: React.FC<SongVersionCompareTabProps> = ({
   const [isAiAuditOpen, setIsAiAuditOpen] = useState<boolean>(false);
   const [isAuditing, setIsAuditing] = useState<boolean>(false);
   const [auditResult, setAuditResult] = useState<string>('');
-  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3.8-flash'>('gemini-3.8-flash');
+  const [auditModel, setAuditModel] = useState<'gemini-3.1-pro-preview' | 'gemini-4-hydrogen'>('gemini-4-hydrogen');
   const [diffBaseIndex, setDiffBaseIndex] = useState<number>(0);
 
   // Default triple-stack versions loaded directly from master Google doc catalog
@@ -754,7 +754,7 @@ Take the atmospheric storytelling from **${vers[0]?.versionTag || 'v1'}** for Ve
                   onChange={(e) => setAuditModel(e.target.value as any)}
                   className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded px-2 py-1 focus:outline-none"
                 >
-                  <option value="gemini-3.8-flash">Gemini 3.8 Flash (Fast & Efficient)</option>
+                  <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (Fast & Efficient)</option>
                   <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Theological)</option>
                 </select>
                 <button

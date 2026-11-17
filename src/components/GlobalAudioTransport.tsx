@@ -64,7 +64,7 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
   if (isMinimized) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-40 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        className="hidden lg:block fixed bottom-4 right-4 z-40 animate-in fade-in slide-in-from-bottom-2 duration-200"
       >
         <div
           className={`flex items-center gap-2 p-1.5 px-3 rounded-full border shadow-2xl backdrop-blur-md transition cursor-pointer select-none ${
@@ -78,21 +78,16 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (!isLoadingAudio) onTogglePlayPause();
+              onTogglePlayPause();
             }}
-            disabled={isLoadingAudio}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition ${
-              isLoadingAudio
-                ? 'bg-amber-500/90 text-slate-950 ring-2 ring-amber-400/50 cursor-wait'
-                : isPlaying
-                ? 'bg-amber-500 text-slate-950'
-                : 'bg-indigo-600 text-white'
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
+              isPlaying
+                ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400/50 hover:bg-amber-400'
+                : 'bg-indigo-600 text-white hover:bg-indigo-500'
             }`}
-            title={isLoadingAudio ? 'Buffering Nextcloud audio stream...' : isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
-            {isLoadingAudio ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : isPlaying ? (
+            {isPlaying ? (
               <Pause className="w-3.5 h-3.5 fill-current" />
             ) : (
               <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
@@ -100,9 +95,9 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
           </button>
 
           <div className="flex items-center gap-1.5 text-xs font-bold">
-            <span className={`w-2 h-2 rounded-full ${isLoadingAudio ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'}`} />
+            <span className={`w-2 h-2 rounded-full ${isLoadingAudio && isPlaying ? 'bg-amber-400 animate-ping' : isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
             <span className="max-w-[140px] truncate">
-              {isLoadingAudio ? 'Buffering...' : selectedTrack.title}
+              {selectedTrack.title}
             </span>
           </div>
 
@@ -121,10 +116,10 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
     );
   }
 
-  // EXPANDED FLOATING TRANSPORT CONSOLE
+  // EXPANDED FLOATING TRANSPORT CONSOLE (Desktop only; mobile/foldable uses FoldableMobileDock)
   return (
     <div
-      className="fixed bottom-4 right-4 sm:right-6 z-40 animate-in fade-in slide-in-from-bottom-3 duration-200"
+      className="hidden lg:block fixed bottom-4 right-4 sm:right-6 z-40 animate-in fade-in slide-in-from-bottom-3 duration-200"
     >
       <div
         className={`w-[320px] sm:w-[380px] p-3.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all ${
@@ -212,31 +207,15 @@ export const GlobalAudioTransport: React.FC<GlobalAudioTransportProps> = ({
             </button>
 
             <button
-              onClick={() => {
-                if (!isLoadingAudio) onTogglePlayPause();
-              }}
-              disabled={isLoadingAudio}
-              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition select-none ${
-                isLoadingAudio
-                  ? 'bg-amber-500/90 text-slate-950 ring-2 ring-amber-400/50 cursor-wait'
-                  : isPlaying
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40 cursor-pointer'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30 cursor-pointer'
+              onClick={() => onTogglePlayPause()}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition select-none cursor-pointer ${
+                isPlaying
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
               }`}
-              title={
-                isLoadingAudio
-                  ? 'Buffering Nextcloud audio stream... Please wait'
-                  : isPlaying
-                  ? 'Pause Stem Preview (Space)'
-                  : 'Play Stem Preview (Space)'
-              }
+              title={isPlaying ? 'Pause Stem Preview (Space)' : 'Play Stem Preview (Space)'}
             >
-              {isLoadingAudio ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>Buffering...</span>
-                </>
-              ) : isPlaying ? (
+              {isPlaying ? (
                 <>
                   <Pause className="w-4 h-4 fill-current" />
                   <span>Pause</span>

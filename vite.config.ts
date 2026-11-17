@@ -30,6 +30,12 @@ export default defineConfig(() => {
               if (id.includes('d3')) {
                 return 'vendor-d3';
               }
+              if (id.includes('recharts')) {
+                return 'vendor-recharts';
+              }
+              if (id.includes('@google/genai')) {
+                return 'vendor-genai';
+              }
               if (id.includes('firebase')) {
                 return 'vendor-firebase';
               }

@@ -118,6 +118,9 @@ import { TrackLifecycleStepper } from './components/TrackLifecycleStepper';
 import { SelahPrayerGateModal } from './components/SelahPrayerGateModal';
 import { StudioHome, getSuggestedTrackStep } from './components/StudioHome';
 import type { StudioWorkspace } from './components/StudioHome';
+import { buildNextcloudStreamUrl } from './utils/nextcloudStream';
+import { StatusBentoDashboard } from './components/StatusBentoDashboard';
+import { NextcloudConnectionDebugModal } from './components/NextcloudConnectionDebugModal';
 import { TailscaleVpnModal } from './components/TailscaleVpnModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SongTitleRenameModal } from './components/SongTitleRenameModal';
@@ -251,6 +254,7 @@ export default function BrickOSMusicStudioWorkspace() {
   };
 
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isNextcloudDebugModalOpen, setIsNextcloudDebugModalOpen] = useState(false);
   const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState(false);
   const [isSelahGateOpen, setIsSelahGateOpen] = useState(false);
 
@@ -1006,6 +1010,84 @@ export default function BrickOSMusicStudioWorkspace() {
       audioMiniDaw.startPlayback(stems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
     }
   }, [selectedTrack.id, selectedTrack.title]);
+
+  useEffect(() => {
+    const handleTrackRelinked = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (!detail || !detail.trackId || detail.trackId !== selectedTrack.id) return;
+      const updatedStems = getTrackStems(selectedTrack).map((st) => {
+        if (st.name === detail.stemName || (detail.stemType && st.stemType === detail.stemType)) {
+          const isExternal = detail.streamUrl && String(detail.streamUrl).startsWith('http');
+          const resolvedUrl = isExternal
+            ? detail.streamUrl
+            : buildNextcloudStreamUrl({
+                username: cachedWebdavCredentials.username || 'ncted',
+                password: cachedWebdavCredentials.password || '',
+                webdavPath: detail.newPath,
+                stemType: st.stemType
+              });
+          return {
+            ...st,
+            webdavPath: isExternal ? st.webdavPath : detail.newPath,
+            audioUrl: resolvedUrl,
+            isRealAudio: true
+          };
+        }
+        return st;
+      });
+      setTrackStates(updatedStems);
+      if (isPlaying) {
+        audioMiniDaw.startPlayback(updatedStems, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+        audioMiniDaw.updateBusRouting('daw', updatedStems);
+      }
+    };
+
+    const handlePlaySunoRevision = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (!detail || !detail.streamUrl) return;
+      const revisionChannel: MixerTrack[] = [
+        {
+          id: 1,
+          name: `Suno Take: ${detail.revisionTitle || selectedTrack.title}`,
+          vol: 95,
+          pan: 0,
+          muted: false,
+          solo: false,
+          trimIn: 0,
+          trimOut: 100,
+          freq: 220,
+          waveType: 'sine',
+          color: '#f59e0b',
+          audioUrl: detail.streamUrl,
+          stemType: 'master',
+          isRealAudio: true
+        }
+      ];
+      setTrackStates(revisionChannel);
+      audioMiniDaw.init();
+      const ctx = audioMiniDaw.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      audioMiniDaw.startPlayback(revisionChannel, selectedTrack.bpm, selectedTrack.key, selectedTrack.id, selectedTrack.title);
+      audioMiniDaw.updateBusRouting('daw', revisionChannel);
+      setIsPlaying(true);
+      showToast(`Playing Suno CloudFront revision: ${detail.revisionTitle || selectedTrack.title}`, 'info');
+    };
+
+    const handleOpenWebDav = () => {
+      setActiveTab('nextcloud_sync');
+    };
+
+    window.addEventListener('brickos:track-relinked', handleTrackRelinked);
+    window.addEventListener('brickos:play-suno-revision', handlePlaySunoRevision);
+    window.addEventListener('brickos:open-webdav-explorer', handleOpenWebDav);
+    return () => {
+      window.removeEventListener('brickos:track-relinked', handleTrackRelinked);
+      window.removeEventListener('brickos:play-suno-revision', handlePlaySunoRevision);
+      window.removeEventListener('brickos:open-webdav-explorer', handleOpenWebDav);
+    };
+  }, [selectedTrack, isPlaying]);
 
   // A/B Master Switcher State
   const [activeBus, setActiveBus] = useState<'master' | 'suno' | 'vocal' | 'instrumental' | 'ref'>('master');
@@ -2517,11 +2599,11 @@ export default function BrickOSMusicStudioWorkspace() {
           </>}
 
           {activeTab === 'home' && (
-            <StudioHome
-              track={selectedTrack}
+            <StatusBentoDashboard
+              tracks={tracks}
+              selectedTrack={selectedTrack}
               sessions={sessions}
               isDarkMode={isDarkMode}
-              allTracks={tracks}
               onSelectTrack={(t) => {
                 setSelectedTrack(t);
                 try {
@@ -2539,6 +2621,8 @@ export default function BrickOSMusicStudioWorkspace() {
                 setActiveTab(tab as any);
               }}
               onOpenSession={handleSelectSession}
+              onOpenCreateProject={() => setIsCreateModalOpen(true)}
+              onOpenNextcloudDebug={() => setIsNextcloudDebugModalOpen(true)}
             />
           )}
 
@@ -3357,6 +3441,20 @@ export default function BrickOSMusicStudioWorkspace() {
         isOpen={isTailscaleModalOpen}
         onClose={() => setIsTailscaleModalOpen(false)}
         isDarkMode={isDarkMode}
+        onOpenVisibilityDebugger={() => {
+          setIsTailscaleModalOpen(false);
+          setIsNextcloudDebugModalOpen(true);
+        }}
+      />
+
+      {/* NEXTCLOUD & TAILSCALE VISIBILITY DEBUGGER MODAL */}
+      <NextcloudConnectionDebugModal
+        isOpen={isNextcloudDebugModalOpen}
+        onClose={() => setIsNextcloudDebugModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={(newUrl) => {
+          showToast(`Nextcloud endpoint switched to ${newUrl}`, 'success');
+        }}
       />
 
       {/* SONG TITLE RENAME & LINKED ASSETS SYNCHRONIZATION MODAL */}

@@ -8,7 +8,14 @@
     --safe-top: env(safe-area-inset-top, 0px);
   }
 
+  html,
   body {
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     transition-property: color, background-color, border-color;
     transition-duration: 200ms;
     -webkit-font-smoothing: antialiased;
@@ -17,15 +24,29 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  button, a, input, select, textarea {
+  h1, h2, h3, .font-display {
+    font-family: 'Plus Jakarta Sans', 'DM Sans', system-ui, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
     touch-action: manipulation;
   }
 }
 
 /* Touch-First Ergonomic Utilities (Foldable & Large Tablet) */
 .touch-target {
-  min-width: 48px;
-  min-height: 48px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -35,11 +56,28 @@
   padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
 }
 
-/* Flex Mode & Dual-Screen Support for Foldable Devices (e.g. Galaxy Z Fold) */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Hinge-aware dual-pane layout variables for Foldable Viewport Segments API */
+:root {
+  --fold-left-pane-width: 310px;
+  --fold-hinge-gap: 0px;
+}
+
 @media (horizontal-viewport-segments: 2) {
-  .fold-dual-screen {
-    display: grid !important;
-    grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
+  :root {
+    --fold-left-pane-width: env(viewport-segment-width 0 0, 50%);
+    --fold-hinge-gap: calc(env(viewport-segment-left 1 0, 50%) - env(viewport-segment-right 0 0, 50%));
+  }
+
+  .fold-hinge-gutter {
+    margin-left: max(var(--fold-hinge-gap, 0px), 12px);
   }
 }
 

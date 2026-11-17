@@ -1,7 +1,7 @@
 {
   "name": "brickos-touch",
   "private": true,
-  "version": "4.7.0-touch",
+  "version": "4.9.0-touch",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

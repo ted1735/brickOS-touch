@@ -64,6 +64,9 @@ import { MiniDawProjectBrowserSidebar } from './MiniDawProjectBrowserSidebar';
 import { AutomationLaneEditor, interpolateAutomationValue } from './AutomationLaneEditor';
 import { D3ChannelWaveformVisualizer } from './D3ChannelWaveformVisualizer';
 import { RotaryPanKnob } from './RotaryPanKnob';
+import { MidiStepSequencer } from './MidiStepSequencer';
+import { NextcloudFileExplorer } from './NextcloudFileExplorer';
+import { TouchFader } from './TouchFader';
 import { DEFAULT_DAW_EFFECTS, DAW_FX_PRESET_LIBRARY, INITIAL_DAW_STEMS } from '../data/dawEffectsPresets';
 import { getTrackStems as getUniversalTrackStems } from '../data/nextcloudAssetIndex';
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
@@ -226,6 +229,17 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
     setTargetSeparationTrackId(track.id);
     setChannelProgress(buildDefaultChannelProgress(track.id));
   }, [track.id]);
+
+  useEffect(() => {
+    const handleRelinked = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (detail?.trackId && detail.trackId === track.id) {
+        setTracks(getTrackStems(track));
+      }
+    };
+    window.addEventListener('brickos:track-relinked', handleRelinked);
+    return () => window.removeEventListener('brickos:track-relinked', handleRelinked);
+  }, [track]);
 
   // Execute UVR5 BS-Roformer Stem Separation with live per-channel progress
   const handleExecuteStemSeparation = async (customTrackId?: string) => {
@@ -550,6 +564,8 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
   // Master Bus FX Rack states
   const [effects, setEffects] = useState<DawEffectsState>({ ...DEFAULT_DAW_EFFECTS });
   const [showFxRack, setShowFxRack] = useState<boolean>(true);
+  const [showMidiSequencer, setShowMidiSequencer] = useState<boolean>(true);
+  const [showFileExplorer, setShowFileExplorer] = useState<boolean>(true);
   const [showSecondaryChart, setShowSecondaryChart] = useState<boolean>(false);
   const [activeFxPresetId, setActiveFxPresetId] = useState<string>('fx_nashville_master');
 
@@ -1345,6 +1361,34 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowFileExplorer(!showFileExplorer)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition border ${
+                showFileExplorer
+                  ? 'bg-cyan-950/70 border-cyan-500/60 text-cyan-300 shadow-cyan-950/30'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+              title="Toggle Nextcloud WebDAV File Explorer for Drag & Drop to Mixer"
+            >
+              <HardDrive className="w-3 h-3 text-cyan-400" />
+              <span>WebDAV Explorer</span>
+              {showFileExplorer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            <button
+              onClick={() => setShowMidiSequencer(!showMidiSequencer)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition border ${
+                showMidiSequencer
+                  ? 'bg-amber-950/70 border-amber-500/60 text-amber-300 shadow-amber-950/30'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+              title="Toggle 16-Step MIDI Percussion Sequencer Grid"
+            >
+              <Music className="w-3 h-3 text-amber-400" />
+              <span>16-Step Sequencer</span>
+              {showMidiSequencer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            <button
               onClick={() => setShowFxRack(!showFxRack)}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition border ${
                 showFxRack
@@ -1452,6 +1496,33 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
         bpm={track.bpm}
         keySignature={track.key}
       />
+
+      {/* 16-STEP MIDI PERCUSSION SEQUENCER RACK */}
+      {showMidiSequencer && (
+        <MidiStepSequencer
+          initialBpm={track.bpm}
+          isDawPlaying={isPlaying}
+          onClose={() => setShowMidiSequencer(false)}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* NEXTCLOUD WEBDAV ASSET EXPLORER & DRAG-AND-DROP ORCHESTRATION */}
+      {showFileExplorer && (
+        <NextcloudFileExplorer
+          currentTrack={track}
+          onAssignAssetToTrack={handleAssignAssetToTrack}
+          onBatchAssignStems={(stems) => {
+            stems.forEach(s => handleAssignAssetToTrack(s.channelId, s.asset));
+          }}
+          onClose={() => setShowFileExplorer(false)}
+          isDarkMode={isDarkMode}
+          onRelinkSuccess={(count) => {
+            setNextcloudSyncNotice(`✓ Relinked ${count} assets with authentic Nextcloud WebDAV audio`);
+            setTimeout(() => setNextcloudSyncNotice(''), 4000);
+          }}
+        />
+      )}
 
       {/* EXPANDABLE MASTER BUS FX & MASTERING RACK */}
       {showFxRack && (
@@ -2238,10 +2309,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                   <div className="flex items-center gap-1.5 relative">
                     <button
                       onClick={(e) => handleTrackMuteClick(trk.id, e)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono cursor-pointer ${
+                      className={`min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition font-mono active:scale-95 cursor-pointer ${
                         trk.muted
                           ? 'bg-rose-600 text-white ring-1 ring-rose-400 shadow-sm'
-                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                       }`}
                       title={
                         trk.groupId
@@ -2253,10 +2324,10 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     </button>
                     <button
                       onClick={(e) => handleTrackSoloClick(trk.id, e)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition font-mono cursor-pointer ${
+                      className={`min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition font-mono active:scale-95 cursor-pointer ${
                         trk.solo
                           ? 'bg-amber-500 text-slate-950 font-black ring-1 ring-amber-300 shadow-sm'
-                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                       }`}
                       title={
                         trk.groupId
@@ -2371,20 +2442,17 @@ export const MiniDawMixerTab: React.FC<MiniDawMixerTabProps> = ({
                     isDarkMode={isDarkMode}
                   />
 
-                  {/* Volume Slider */}
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="w-3.5 h-3.5 text-slate-400" />
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={trk.vol}
-                      onChange={(e) => handleUpdateTrack(trk.id, 'vol', parseInt(e.target.value))}
-                      className="w-24 accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  {/* Large Pointer-Capture Touch Fader */}
+                  <div className="flex items-center gap-2 min-w-[180px] sm:min-w-[200px] flex-1 max-w-[260px]">
+                    <Volume2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <TouchFader
+                      value={(!autoState.volumeBypass && dynamicVol !== undefined) ? dynamicVol : trk.vol}
+                      onChange={(newVol) => handleUpdateTrack(trk.id, 'vol', Math.round(newVol))}
+                      color={trkGroup ? trkGroup.color : trk.color}
+                      defaultValue={85}
+                      isDarkMode={isDarkMode}
+                      className="flex-1"
                     />
-                    <span className="text-xs font-mono text-slate-300 w-9 text-right font-bold">
-                      {(!autoState.volumeBypass && dynamicVol !== undefined) ? dynamicVol : trk.vol}%
-                    </span>
                   </div>
 
                   {/* Live Stem Stereo LED Peak Meter */}

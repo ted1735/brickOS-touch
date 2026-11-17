@@ -54,6 +54,7 @@ import { EP_COLLECTIONS } from '../data/canonicalCatalog';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { TIER_1_NAV_ITEMS, TIER_2_NAV_ITEMS, StudioNavItem } from '../data/studioNavigationData';
 import { UniversalAssetEditorModal } from './UniversalAssetEditorModal';
+import { NextcloudConnectionDebugModal } from './NextcloudConnectionDebugModal';
 import { getTrackStems, getTrackNextcloudAssets, NEXTCLOUD_SHARE_ROOT } from '../data/nextcloudAssetIndex';
 import { getSavedNextcloudConfig, saveNextcloudConfig, saveNextcloudAssets, autoMatchAssetToCatalog, buildNextcloudStreamUrl } from '../data/nextcloudFolderAssets';
 import type { StudioWorkspace } from './StudioHome';
@@ -169,6 +170,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   const [ncCopySuccess, setNcCopySuccess] = useState(false);
   const [isSyncingNcAssets, setIsSyncingNcAssets] = useState(false);
   const [ncSyncSuccessMsg, setNcSyncSuccessMsg] = useState<string | null>(null);
+  const [isNcDebugOpen, setIsNcDebugOpen] = useState(false);
 
   // Canonical Nextcloud assets for current track
   const [ncAssets, setNcAssets] = useState<NextcloudFolderAsset[]>(() =>
@@ -985,7 +987,7 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
   // Helper mapping single small word for collapsed sidebar
   const getSingleWordForTab = (id: string, defaultName: string): string => {
     switch (id) {
-      case 'home': return 'HOME';
+      case 'home': return 'STATUS';
       case 'kanban': return 'PIPELINE';
       case 'lyrics': return 'LYRICS';
       case 'version-matrix': return 'MATRIX';
@@ -1192,9 +1194,9 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
               const rect = e.currentTarget.getBoundingClientRect();
               setSidebarHoverItem({
                 id: 'home',
-                word: 'HOME',
-                fullName: 'Studio Command Home',
-                description: 'Overview dashboard, pick up where you left off, fast track switcher, and mission SOP compliance.',
+                word: 'STATUS',
+                fullName: 'brickOS Status Bento & MCP Hub',
+                description: 'All productions, Ready Shorts, YouTube & Meta Muse stats, 6-outlet alignment matrix, and multi-server MCP telemetry.',
                 icon: Home,
                 accentColor: 'text-amber-400',
                 activeBg: 'bg-amber-600',
@@ -1211,13 +1213,13 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                 ? 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
                 : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 shadow-2xs'
             }`}
-            aria-label="Studio Command Home"
+            aria-label="brickOS Status Bento"
           >
             <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
               <Home className={`w-4 h-4 ${activeTab === 'home' ? 'text-white' : 'text-amber-400'}`} />
             </div>
             <span className="text-[9px] font-black tracking-wider uppercase leading-none truncate max-w-[54px] mt-1">
-              HOME
+              STATUS
             </span>
             {activeTab === 'home' && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-slate-950 animate-pulse" />
@@ -1390,21 +1392,25 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
 
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={onToggleCollapse}
               className={`p-1.5 rounded-lg transition cursor-pointer ${
                 isDarkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'
               }`}
-              title="Collapse Side Navigation Panel"
+              title="Collapse Side Panel Completely (0px)"
+              aria-label="Collapse Side Panel Completely"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             {onClose && (
               <button
+                type="button"
                 onClick={onClose}
-                className={`p-1.5 rounded-lg transition cursor-pointer lg:hidden ${
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
                   isDarkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-500 hover:text-rose-600 hover:bg-slate-200'
                 }`}
-                title="Close drawer"
+                title="Hide Side Panel"
+                aria-label="Hide Side Panel"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2081,6 +2087,20 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
                       {showDiagnosticLogs ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
                     </button>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsNcDebugOpen(true)}
+                    className={`w-full py-1.5 px-3 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      isDarkMode
+                        ? 'bg-amber-950/50 hover:bg-amber-900/60 text-amber-200 border-amber-700/50'
+                        : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                    }`}
+                    title="Inspect Tailscale status, DNS, TCP, HTTPS, and exactly what folders/files the Nextcloud server can and cannot see"
+                  >
+                    <Eye className="w-3 h-3 text-amber-400" />
+                    <span>Debug Visibility (Can / Cannot See)</span>
+                  </button>
 
                   {/* Sync success toast notification */}
                   {ncSyncSuccessMsg && (
@@ -3087,6 +3107,16 @@ export const SideNavigationPanel: React.FC<SideNavigationPanelProps> = ({
           </div>
         </div>
       )}
+      <NextcloudConnectionDebugModal
+        isOpen={isNcDebugOpen}
+        onClose={() => setIsNcDebugOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={(newUrl) => {
+          setNcConfig(prev => ({ ...prev, serverUrl: newUrl, lastConnectionStatus: 'connected' }));
+          setNcConnectionStatus('connected');
+          handleTestNcConnection();
+        }}
+      />
     </aside>
   );
 };

@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import net from 'net';
+import dns from 'dns/promises';
 import { Readable } from 'stream';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
@@ -9,15 +11,25 @@ import { fetch as undiciFetch, ProxyAgent, Agent } from 'undici';
 import { exec, execSync, spawn } from 'child_process';
 import { ALL_CANONICAL_NEXTCLOUD_ASSETS, CATALOG_TRACK_DEFINITIONS } from './src/data/nextcloudAssetIndex';
 import { initializeApp as initFirebaseApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
-import { getFirestore as getFirebaseFirestore, doc as firestoreDoc, setDoc as firestoreSetDoc, writeBatch as firestoreWriteBatch } from 'firebase/firestore';
+import {
+  getFirestore as getFirebaseFirestore,
+  doc as firestoreDoc,
+  setDoc as firestoreSetDoc,
+  writeBatch as firestoreWriteBatch,
+  disableNetwork as firestoreDisableNetwork,
+  terminate as firestoreTerminate
+} from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 import { mapTrackFolderAssets, RawAssetItem } from './src/services/metadataMapperService';
 import { CANONICAL_TRACKS } from './src/data/canonicalCatalog';
+import { RELATIONAL_SUNO_CATALOG } from './src/data/relationalSunoCatalog';
+import { SUNO_MASTER_TRACKS } from './src/data/sunoMasterCatalog';
 import {
   getStudioDb,
+  getStudioDbStats,
+  queryFullRelationalCatalog,
   getCatalogEtag,
   refreshCatalogEtag,
-  queryFullRelationalCatalog,
   getSunoRevisionById,
   updateSunoRevisionLocalCachePath,
   getCachedFolderEtag,
@@ -25,8 +37,14 @@ import {
   checkAndUpdateSongPayloadHash,
   getCachedWaveformPeaks,
   saveCachedWaveformPeaks,
-  getStudioDbStats
+  upsertRelinkedAssetInSqlite,
+  querySunoRevisionsForTrack,
+  getServerKvState,
+  setServerKvState
 } from './src/services/sqliteCatalogService';
+import { getDatabaseStats } from './src/server/brickDatabase';
+import { createMcpHubRouter } from './src/server/mcpHubRouter';
+import { mcpPollingEngine } from './src/server/mcpProxyService';
 
 dotenv.config();
 // Initialize SQLite WAL Studio DB on server startup
@@ -34,9 +52,69 @@ getStudioDb();
 
 let serverFirestoreDb: any = null;
 let serverFirestoreQuotaExhausted = false;
+const SERVER_QUOTA_KV_KEY = 'firestore_quota_exhausted';
+
+function isServerQuotaExhaustedError(err: any): boolean {
+  if (!err) return false;
+  const code = String(err?.code || err?.errorInfo?.code || '').toLowerCase();
+  const msg = `${err?.message || ''} ${err?.cause?.message || ''} ${String(err)}`.toLowerCase();
+  return (
+    code === 'resource-exhausted' ||
+    code === '8' ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('quota limit exceeded') ||
+    msg.includes('free daily write units') ||
+    msg.includes('free daily read units')
+  );
+}
+
+function isServerFirestoreQuotaActive(): boolean {
+  if (serverFirestoreQuotaExhausted) return true;
+  try {
+    const raw = getServerKvState(SERVER_QUOTA_KV_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.timestamp) {
+        const ageMs = Date.now() - parsed.timestamp;
+        const sameDay = new Date(parsed.timestamp).toDateString() === new Date().toDateString();
+        if (ageMs < 12 * 60 * 60 * 1000 && sameDay) {
+          serverFirestoreQuotaExhausted = true;
+          return true;
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
+function tripServerFirestoreCircuitBreaker(reason?: string) {
+  const wasActive = serverFirestoreQuotaExhausted;
+  serverFirestoreQuotaExhausted = true;
+  try {
+    setServerKvState(
+      SERVER_QUOTA_KV_KEY,
+      JSON.stringify({ timestamp: Date.now(), reason: reason || 'RESOURCE_EXHAUSTED' })
+    );
+  } catch {}
+  const activeDb = serverFirestoreDb;
+  serverFirestoreDb = null;
+  if (activeDb) {
+    firestoreDisableNetwork(activeDb)
+      .catch(() => {})
+      .finally(() => {
+        firestoreTerminate(activeDb).catch(() => {});
+      });
+  }
+  if (!wasActive) {
+    console.warn(
+      '[Server Firestore Circuit Breaker Active]: Daily free write quota reached (RESOURCE_EXHAUSTED). Terminated gRPC Write stream; persisting locally in SQLite + Nextcloud.'
+    );
+  }
+}
 
 function getServerFirestore() {
-  if (serverFirestoreQuotaExhausted) return null;
+  if (isServerFirestoreQuotaActive()) return null;
   if (!serverFirestoreDb && firebaseConfig && firebaseConfig.projectId) {
     try {
       const fbApp = getFirebaseApps().length === 0 ? initFirebaseApp(firebaseConfig) : getFirebaseApp();
@@ -48,6 +126,38 @@ function getServerFirestore() {
     }
   }
   return serverFirestoreDb;
+}
+
+async function safeServerFirestoreSetDoc(collectionName: string, docId: string, payload: Record<string, any>, timeoutMs = 2500): Promise<boolean> {
+  if (isServerFirestoreQuotaActive()) return false;
+  const db = getServerFirestore();
+  if (!db) return false;
+  const docRef = firestoreDoc(db, collectionName, docId);
+  let timedOut = false;
+  const writePromise = firestoreSetDoc(docRef, JSON.parse(JSON.stringify(payload)), { merge: true }).catch((err: any) => {
+    if (isServerQuotaExhaustedError(err)) {
+      tripServerFirestoreCircuitBreaker(err?.message);
+    }
+    if (!timedOut) throw err;
+    return undefined;
+  });
+  try {
+    await Promise.race([
+      writePromise.then(() => true),
+      new Promise<boolean>((_, reject) =>
+        setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`Firestore write timeout (${timeoutMs}ms)`));
+        }, timeoutMs)
+      )
+    ]);
+    return true;
+  } catch (err) {
+    if (timedOut) {
+      firestoreDisableNetwork(db).catch(() => {});
+    }
+    throw err;
+  }
 }
 
 // Protect server process from unhandled WebSocket, network, or async promise crashes
@@ -105,19 +215,27 @@ async function resolveImageData(input: string, fallbackMime = 'image/png'): Prom
 }
 
 // Robust Cascade Fallback Generator for Text & Chat Tasks
-// Shields against temporary 503 high-demand spikes on gemini-3.8-flash
+// Maps legacy model names to active Gemini aliases and cascades cleanly on transient failures
+function normalizeGeminiModel(preferredModel?: string, defaultModel = 'gemini-4-hydrogen'): string {
+  const m = String(preferredModel || '').trim();
+  if (!m || m === 'gemini-3.5-flash' || m === 'gemini-3.8-flash') {
+    return defaultModel;
+  }
+  return m;
+}
+
 async function generateContentWithFallback(
   ai: GoogleGenAI,
   preferredModel: string,
   params: { contents: any; config?: any }
 ): Promise<{ text: string; usedModel: string; rawResponse?: any }> {
-  const normalizedPreferred = preferredModel === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : preferredModel;
+  const normalizedPreferred = normalizeGeminiModel(preferredModel, 'gemini-4-hydrogen');
   const candidateModels = Array.from(
     new Set([
       normalizedPreferred,
-      'gemini-3.1-pro-preview',
-      'gemini-3.8-flash',
+      'gemini-4-hydrogen',
       'gemini-3.1-flash-lite',
+      'gemini-3.1-pro-preview',
     ].filter(Boolean))
   );
 
@@ -150,7 +268,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Search Grounding using gemini-3.8-flash with googleSearch tool
+// 2. Search Grounding using gemini-4-hydrogen with googleSearch tool
 app.post('/api/gemini/search', async (req, res) => {
   try {
     const { query } = req.body;
@@ -159,7 +277,7 @@ app.post('/api/gemini/search', async (req, res) => {
     }
     const ai = getGenAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: `You are an elite music industry research consultant grounded in current Billboard Christian/Gospel chart trends, Nashville Christian audio production benchmarks, and theological scripture reference indexing.\n\nQuery: ${query}`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -192,10 +310,10 @@ app.post('/api/gemini/search', async (req, res) => {
   }
 });
 
-// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-3.8-flash)
+// 3. Lyrical & Theological Audit Engine (gemini-3.1-pro-preview / gemini-4-hydrogen)
 app.post('/api/gemini/audit-lyric', async (req, res) => {
   try {
-    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.8-flash' } = req.body;
+    const { lyrics, title, genre, ep, bpm, thesis, vocal, model = 'gemini-4-hydrogen' } = req.body;
     const ai = getGenAI();
 
     const systemPrompt = `You are the Lead Theological & Lyrical Supervisor for brickOS Sovereign Records.
@@ -221,7 +339,7 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
 - 60-Second Standalone Hook Assessment
 - Ready-to-use Rewrite Suggestions for weak sections.`;
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = normalizeGeminiModel(model, 'gemini-4-hydrogen');
     const result = await generateContentWithFallback(ai, targetModel, {
       contents: `${systemPrompt}\n\nLYRICS TO AUDIT:\n${lyrics}`
     });
@@ -236,7 +354,7 @@ Audit the provided lyrics thoroughly. Format your response with clear, actionabl
 // 3b. Automated Lyric Rewrite Engine incorporating approved audit feedback
 app.post('/api/gemini/rewrite-lyrics', async (req, res) => {
   try {
-    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-3.8-flash' } = req.body;
+    const { lyrics, auditFeedback, title, genre, ep, bpm, thesis, vocal, model = 'gemini-4-hydrogen' } = req.body;
     if (!lyrics) {
       return res.status(400).json({ error: 'Original lyrics are required' });
     }
@@ -272,7 +390,7 @@ ${lyrics}
 
 Output the full rewritten lyrics now:`;
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = normalizeGeminiModel(model, 'gemini-4-hydrogen');
     const result = await generateContentWithFallback(ai, targetModel, { contents: prompt });
 
     // Strip any markdown code blocks if the model wrapped output
@@ -288,7 +406,7 @@ Output the full rewritten lyrics now:`;
 // 3c. 3-Way Song Version Comparative Audit Engine
 app.post('/api/gemini/compare-versions', async (req, res) => {
   try {
-    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-3.8-flash' } = req.body;
+    const { title, ep, genre, vocal, thesis, bpm, versions, model = 'gemini-4-hydrogen' } = req.body;
     if (!versions || !Array.isArray(versions) || versions.length < 2) {
       return res.status(400).json({ error: 'At least 2 versions are required for comparative audit' });
     }
@@ -329,7 +447,7 @@ ${versionBlocks}
 
 Deliver your comprehensive comparative audit now:`;
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.8-flash');
+    const targetModel = normalizeGeminiModel(model, 'gemini-4-hydrogen');
     const result = await generateContentWithFallback(ai, targetModel, { contents: prompt });
 
     res.json({ audit: result.text, modelUsed: result.usedModel });
@@ -351,7 +469,7 @@ app.post('/api/gemini/chat', async (req, res) => {
       parts: [{ text: m.content }],
     }));
 
-    const targetModel = model === 'gemini-3.5-flash' ? 'gemini-3.8-flash' : (model || 'gemini-3.1-pro-preview');
+    const targetModel = normalizeGeminiModel(model, 'gemini-3.1-pro-preview');
     const result = await generateContentWithFallback(ai, targetModel, {
       contents,
       config: {
@@ -525,7 +643,7 @@ app.post('/api/gemini/modify-asset', async (req, res) => {
       let refinedPrompt = currentPrompt || editPrompt;
       try {
         const textResponse = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-4-hydrogen',
           contents: `A music producer asked Gemini to change an album visual: "${userInstruction}".
 Original title: "${currentName || 'Album Visual'}"
 Original prompt: "${currentPrompt || ''}"
@@ -570,7 +688,7 @@ Return actionable JSON:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-4-hydrogen',
         contents: `Process user modification request: ${userInstruction}`,
         config: {
           systemInstruction,
@@ -607,7 +725,7 @@ app.post('/api/gemini/analyze-image', async (req, res) => {
     const userPrompt = prompt || 'Analyze this image in detail for album art, video seed frame suitability, color harmony, visual mood, theological symbolism, and short-form hook retention.';
 
     let responseText = '';
-    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.8-flash'];
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
 
     for (const model of candidates) {
       try {
@@ -786,7 +904,7 @@ app.post('/api/gemini/analyze-video', async (req, res) => {
       ];
     }
 
-    const candidates = ['gemini-3.1-pro-preview', 'gemini-3.8-flash'];
+    const candidates = ['gemini-3.1-pro-preview', 'gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
     let responseText = '';
 
     for (const model of candidates) {
@@ -912,8 +1030,10 @@ app.get('/api/nextcloud/credentials-status', (req, res) => {
 
 app.post('/api/nextcloud/save-credentials', (req, res) => {
   const { serverUrl, username, password } = req.body;
-  if (serverUrl) cachedWebdavCredentials.serverUrl = serverUrl.replace(/\/$/, '');
-  if (username) cachedWebdavCredentials.username = username;
+  if (serverUrl && typeof serverUrl === 'string' && serverUrl.trim().length > 0) {
+    cachedWebdavCredentials.serverUrl = normalizeServerUrlInput(serverUrl);
+  }
+  if (username) cachedWebdavCredentials.username = username.trim();
   if (password && typeof password === 'string' && password.trim().length > 0) {
     cachedWebdavCredentials.password = password.trim();
   }
@@ -922,11 +1042,12 @@ app.post('/api/nextcloud/save-credentials', (req, res) => {
     stage: 'AUTH_PREP',
     action: 'CREDENTIALS_STORED',
     level: 'info',
-    message: `Stored WebDAV credentials for user "${cachedWebdavCredentials.username}" (password length: ${cachedWebdavCredentials.password?.length || 0})`,
-    details: { username: cachedWebdavCredentials.username, hasPassword: Boolean(cachedWebdavCredentials.password) }
+    message: `Stored WebDAV credentials for user "${cachedWebdavCredentials.username}" at ${cachedWebdavCredentials.serverUrl} (password length: ${cachedWebdavCredentials.password?.length || 0})`,
+    details: { serverUrl: cachedWebdavCredentials.serverUrl, username: cachedWebdavCredentials.username, hasPassword: Boolean(cachedWebdavCredentials.password) }
   });
   res.json({
     success: true,
+    serverUrl: cachedWebdavCredentials.serverUrl,
     hasPassword: Boolean(cachedWebdavCredentials.password && cachedWebdavCredentials.password.length > 0),
     username: cachedWebdavCredentials.username,
     message: 'Credentials updated in server WebDAV session.'
@@ -1153,6 +1274,42 @@ function isTailscaleAddress(hostOrUrl: string): boolean {
   }
 }
 
+function normalizeServerUrlInput(raw: string): string {
+  const trimmed = (raw || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  // Bare private LAN/Tailscale IPs default to https:// (with fallback probing in diagnose), hostnames to https://
+  return `https://${trimmed}`;
+}
+
+function isTailscaleBinaryInstalled(): boolean {
+  if (fs.existsSync('/usr/local/bin/tailscale')) return true;
+  try {
+    execSync('which tailscale', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function probeTcpPort(host: string, port: number, timeoutMs = 3000): Promise<{ ok: boolean; latencyMs: number; error?: string; errorCode?: string }> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+    const finish = (res: { ok: boolean; latencyMs: number; error?: string; errorCode?: string }) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch {}
+      resolve(res);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => finish({ ok: true, latencyMs: Date.now() - start }));
+    socket.on('timeout', () => finish({ ok: false, latencyMs: Date.now() - start, error: `TCP connect timeout after ${timeoutMs}ms`, errorCode: 'ETIMEDOUT' }));
+    socket.on('error', (err: any) => finish({ ok: false, latencyMs: Date.now() - start, error: err?.message || 'TCP error', errorCode: err?.code || 'TCP_ERROR' }));
+  });
+}
+
 function ensureTailscaledRunning(): boolean {
   try {
     try {
@@ -1195,20 +1352,51 @@ async function smartFetchWithFailover(
   options: any = {},
   preferredRoute?: 'primary' | 'fallback'
 ): Promise<{ response: any; usedRoute: 'primary' | 'fallback'; latencyMs: number }> {
-  ensureTailscaledRunning();
+  const tsRunning = ensureTailscaledRunning();
+
+  // Respect explicit custom IP/host URL passed in urlOrPath or saved in cachedWebdavCredentials.serverUrl
+  const candidateOrigins: Array<{ route: 'primary' | 'fallback'; baseUrl: string; isCustom?: boolean }> = [];
+  let explicitCustomOrigin = '';
+  if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+    try {
+      const u = new URL(urlOrPath);
+      const origin = `${u.protocol}//${u.host}`;
+      if (origin !== PRIMARY_NEXTCLOUD_URL && origin !== FALLBACK_NEXTCLOUD_URL) {
+        explicitCustomOrigin = origin;
+      }
+    } catch {}
+  } else if (
+    cachedWebdavCredentials.serverUrl &&
+    cachedWebdavCredentials.serverUrl !== PRIMARY_NEXTCLOUD_URL &&
+    cachedWebdavCredentials.serverUrl !== FALLBACK_NEXTCLOUD_URL
+  ) {
+    explicitCustomOrigin = normalizeServerUrlInput(cachedWebdavCredentials.serverUrl);
+  }
 
   const active = preferredRoute || nextcloudRouteState.forceRoute || nextcloudRouteState.activeRoute;
   const isPrimaryPreferred = active !== 'fallback';
 
-  const routePlan: Array<'primary' | 'fallback'> = isPrimaryPreferred
-    ? ['primary', 'fallback']
-    : ['fallback', 'primary'];
+  if (explicitCustomOrigin) {
+    candidateOrigins.push({ route: 'primary', baseUrl: explicitCustomOrigin, isCustom: true });
+  }
+  if (isPrimaryPreferred) {
+    candidateOrigins.push({ route: 'primary', baseUrl: PRIMARY_NEXTCLOUD_URL });
+    candidateOrigins.push({ route: 'fallback', baseUrl: FALLBACK_NEXTCLOUD_URL });
+  } else {
+    candidateOrigins.push({ route: 'fallback', baseUrl: FALLBACK_NEXTCLOUD_URL });
+    candidateOrigins.push({ route: 'primary', baseUrl: PRIMARY_NEXTCLOUD_URL });
+  }
 
   let lastError: any = null;
 
-  for (const route of routePlan) {
-    const baseUrl = route === 'primary' ? PRIMARY_NEXTCLOUD_URL : FALLBACK_NEXTCLOUD_URL;
-    const dispatcher = route === 'primary' ? primaryUndiciAgent : fallbackUndiciAgent;
+  for (const candidate of candidateOrigins) {
+    const { route, baseUrl, isCustom } = candidate;
+    const dispatcher =
+      isCustom && isTailscaleAddress(baseUrl) && tsRunning
+        ? tailscaleProxyAgent
+        : route === 'primary'
+        ? primaryUndiciAgent
+        : fallbackUndiciAgent;
 
     let targetUrl: string;
     if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
@@ -1228,26 +1416,30 @@ async function smartFetchWithFailover(
 
     const startT = Date.now();
     try {
+      const fetchSignal = options.signal || AbortSignal.timeout(isCustom ? 3500 : route === 'primary' ? 4000 : 8000);
       const response = await undiciFetch(targetUrl, {
         ...options,
+        signal: fetchSignal,
         dispatcher
       });
 
       const latencyMs = Date.now() - startT;
 
-      if (route === 'primary') {
-        nextcloudRouteState.primary.online = true;
-        nextcloudRouteState.primary.latencyMs = latencyMs;
-        nextcloudRouteState.primary.lastChecked = new Date().toISOString();
-        nextcloudRouteState.primary.consecutiveFailures = 0;
-      } else {
-        nextcloudRouteState.fallback.online = true;
-        nextcloudRouteState.fallback.latencyMs = latencyMs;
-        nextcloudRouteState.fallback.lastChecked = new Date().toISOString();
-        nextcloudRouteState.fallback.consecutiveFailures = 0;
+      if (!isCustom) {
+        if (route === 'primary') {
+          nextcloudRouteState.primary.online = true;
+          nextcloudRouteState.primary.latencyMs = latencyMs;
+          nextcloudRouteState.primary.lastChecked = new Date().toISOString();
+          nextcloudRouteState.primary.consecutiveFailures = 0;
+        } else {
+          nextcloudRouteState.fallback.online = true;
+          nextcloudRouteState.fallback.latencyMs = latencyMs;
+          nextcloudRouteState.fallback.lastChecked = new Date().toISOString();
+          nextcloudRouteState.fallback.consecutiveFailures = 0;
+        }
       }
 
-      if (route === 'primary' && nextcloudRouteState.activeRoute !== 'primary') {
+      if (!isCustom && route === 'primary' && nextcloudRouteState.activeRoute !== 'primary') {
         nextcloudRouteState.activeRoute = 'primary';
         addNextcloudLog({
           stage: 'ROUTING',
@@ -1260,8 +1452,18 @@ async function smartFetchWithFailover(
 
       return { response, usedRoute: route, latencyMs };
     } catch (err: any) {
-      const latencyMs = Date.now() - startT;
       lastError = err;
+
+      if (isCustom) {
+        addNextcloudLog({
+          stage: 'ROUTING',
+          action: 'CUSTOM_HOST_UNREACHABLE',
+          level: 'warn',
+          message: `Configured Nextcloud target ${targetUrl} failed (${err.message}); failing over to verified public routes`,
+          details: { error: err.message, targetUrl }
+        });
+        continue;
+      }
 
       if (route === 'primary') {
         nextcloudRouteState.primary.consecutiveFailures++;
@@ -1308,7 +1510,20 @@ async function smartFetch(urlStr: string, options: any = {}, forceTailscale = fa
 
 // Tailscale Status API
 app.get('/api/tailscale/status', async (req, res) => {
-  const isDaemonRunning = ensureTailscaledRunning();
+  const isInstalled = isTailscaleBinaryInstalled();
+  const isDaemonRunning = isInstalled ? ensureTailscaledRunning() : false;
+  if (!isInstalled) {
+    return res.json({
+      success: false,
+      isInstalled: false,
+      isDaemonRunning: false,
+      backendState: 'NotInstalledInContainer',
+      authUrl: null,
+      tailscaleIPs: [],
+      peers: [],
+      error: 'Tailscale CLI is not installed inside this cloud container. Use the Nextcloud direct public HTTPS endpoint or configure a custom reachable HTTPS URL.'
+    });
+  }
   try {
     const rawJson = execSync('tailscale status --peers=true --json', { timeout: 6000 }).toString();
     const data = JSON.parse(rawJson);
@@ -1432,7 +1647,7 @@ app.post('/api/tailscale/logout', async (req, res) => {
   }
 });
 
-// Tailscale Ping / WebDAV Host Probe
+// Tailscale Ping / Direct Host Probe (NEVER spoofs or redirects to another host!)
 app.post('/api/tailscale/ping', async (req, res) => {
   const { targetHost = '' } = req.body;
   if (!targetHost) {
@@ -1440,36 +1655,372 @@ app.post('/api/tailscale/ping', async (req, res) => {
   }
 
   const startTime = Date.now();
+  const tsInstalled = isTailscaleBinaryInstalled();
+  const tsDaemon = ensureTailscaledRunning();
+  const raw = String(targetHost).trim();
+  const testUrls = raw.startsWith('http://') || raw.startsWith('https://')
+    ? [raw]
+    : [`https://${raw}`, `http://${raw}`];
+
+  let lastErr: any = null;
+  for (const testUrl of testUrls) {
+    try {
+      const parsed = new URL(testUrl);
+      const port = parsed.port ? parseInt(parsed.port, 10) : parsed.protocol === 'https:' ? 443 : 80;
+      const tcpCheck = await probeTcpPort(parsed.hostname, port, 3000);
+      if (!tcpCheck.ok) {
+        lastErr = new Error(`${tcpCheck.error} (${tcpCheck.errorCode}) on ${parsed.hostname}:${port}`);
+        continue;
+      }
+
+      const dispatcher = isTailscaleAddress(testUrl) && tsDaemon ? tailscaleProxyAgent : primaryUndiciAgent;
+      const response = await undiciFetch(testUrl, {
+        method: 'HEAD',
+        headers: { 'User-Agent': 'brickOS-Studio-Host-Probe/1.0' },
+        signal: AbortSignal.timeout(5000),
+        dispatcher
+      });
+
+      const latencyMs = Date.now() - startTime;
+      return res.json({
+        success: response.status < 500,
+        status: response.status,
+        latencyMs,
+        targetHost: testUrl,
+        tailscaleInstalled: tsInstalled,
+        tailscaleDaemonRunning: tsDaemon,
+        message: `Reached exact target ${testUrl} in ${latencyMs}ms (HTTP ${response.status})`
+      });
+    } catch (err: any) {
+      lastErr = err;
+    }
+  }
+
+  const latencyMs = Date.now() - startTime;
+  const isPrivateTs = isTailscaleAddress(raw) && !raw.includes('.ts.net');
+  const hint = !tsDaemon && isPrivateTs
+    ? ' Local tailscaled VPN daemon is not installed/running in this container, so private 100.x.y.z IPs cannot be reached directly. Use the public Tailscale Funnel (*.ts.net) or Cloudflare domain instead.'
+    : '';
+  res.json({
+    success: false,
+    latencyMs,
+    targetHost: raw,
+    tailscaleInstalled: tsInstalled,
+    tailscaleDaemonRunning: tsDaemon,
+    error: (lastErr?.message || 'Cannot reach host') + hint,
+    message: `Cannot reach ${raw}: ${lastErr?.message || 'Connection failed'}.${hint}`
+  });
+});
+
+// Deep Visibility & Reachability Inspector: What the server CAN and CANNOT see
+async function probeSingleNextcloudTarget(
+  label: string,
+  rawBaseUrl: string,
+  username: string,
+  password: string,
+  webdavRelPath: string
+) {
+  const baseUrl = normalizeServerUrlInput(rawBaseUrl);
+  const startTotal = Date.now();
+  const result: any = {
+    label,
+    baseUrl,
+    hostname: '',
+    port: 443,
+    isIpAddress: false,
+    isPrivateTailscaleIp: false,
+    dns: { ok: false, resolvedIp: null as string | null, family: null as number | null, error: null as string | null },
+    tcp: { ok: false, latencyMs: 0, error: null as string | null, errorCode: null as string | null },
+    httpHead: { ok: false, status: 0, statusText: '', serverHeader: '', location: '', latencyMs: 0, error: null as string | null },
+    webdavPropfind: {
+      ok: false,
+      status: 0,
+      statusText: '',
+      latencyMs: 0,
+      sabreException: '',
+      sabreMessage: '',
+      itemCount: 0,
+      visibleFolders: [] as string[],
+      visibleFiles: [] as string[],
+      error: null as string | null
+    },
+    overallStatus: 'unreachable' as 'connected' | 'auth_required' | 'http_error' | 'unreachable',
+    verdict: '',
+    totalLatencyMs: 0
+  };
+
   try {
-    let testUrl = targetHost;
-    if (!testUrl.startsWith('http://') && !testUrl.startsWith('https://')) {
-      testUrl = `http://${targetHost}`;
+    const parsed = new URL(baseUrl);
+    result.hostname = parsed.hostname;
+    result.port = parsed.port ? parseInt(parsed.port, 10) : parsed.protocol === 'https:' ? 443 : 80;
+    result.isIpAddress = net.isIP(parsed.hostname) !== 0;
+    result.isPrivateTailscaleIp = /^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./.test(parsed.hostname);
+
+    // 1. DNS Check
+    if (result.isIpAddress) {
+      result.dns = { ok: true, resolvedIp: parsed.hostname, family: net.isIP(parsed.hostname), error: null };
+    } else {
+      try {
+        const lookup = await dns.lookup(parsed.hostname);
+        result.dns = { ok: true, resolvedIp: lookup.address, family: lookup.family, error: null };
+      } catch (dnsErr: any) {
+        result.dns = { ok: false, resolvedIp: null, family: null, error: dnsErr?.message || 'DNS lookup failed' };
+        result.verdict = `DNS failed for ${parsed.hostname}: ${result.dns.error}`;
+        result.totalLatencyMs = Date.now() - startTotal;
+        return result;
+      }
     }
 
-    const response = await smartFetch(testUrl, {
-      method: 'GET',
-      headers: { 'User-Agent': 'brickOS-Studio-Tailscale-Probe/1.0' },
-      signal: AbortSignal.timeout(8000)
-    }, true);
+    // 2. TCP Connect Check
+    const tcp = await probeTcpPort(parsed.hostname, result.port, 3500);
+    result.tcp = { ok: tcp.ok, latencyMs: tcp.latencyMs, error: tcp.error || null, errorCode: tcp.errorCode || null };
+    if (!tcp.ok) {
+      result.verdict = result.isPrivateTailscaleIp && !isTailscaleBinaryInstalled()
+        ? `Private Tailscale IP ${parsed.hostname}:${result.port} unreachable (${tcp.errorCode || 'TIMEOUT'}) — local tailscaled daemon is not installed in this cloud runtime.`
+        : `TCP connection to ${parsed.hostname}:${result.port} failed (${tcp.errorCode || tcp.error}).`;
+      result.totalLatencyMs = Date.now() - startTotal;
+      return result;
+    }
 
-    const latencyMs = Date.now() - startTime;
-    res.json({
-      success: response.status < 500,
-      status: response.status,
-      latencyMs,
-      targetHost,
-      message: `Pinged ${targetHost} over Tailscale proxy in ${latencyMs}ms (HTTP ${response.status})`
-    });
+    // 3. HTTP HEAD Probe
+    const headStart = Date.now();
+    try {
+      const headRes = await undiciFetch(baseUrl, {
+        method: 'HEAD',
+        headers: { 'User-Agent': 'brickOS-Studio-Visibility-Inspector/1.0' },
+        signal: AbortSignal.timeout(5000),
+        dispatcher: primaryUndiciAgent
+      });
+      result.httpHead = {
+        ok: headRes.status > 0 && headRes.status < 500,
+        status: headRes.status,
+        statusText: headRes.statusText || '',
+        serverHeader: headRes.headers.get('server') || '',
+        location: headRes.headers.get('location') || '',
+        latencyMs: Date.now() - headStart,
+        error: null
+      };
+    } catch (headErr: any) {
+      result.httpHead = {
+        ok: false,
+        status: 0,
+        statusText: '',
+        serverHeader: '',
+        location: '',
+        latencyMs: Date.now() - headStart,
+        error: headErr?.message || 'HTTP HEAD failed'
+      };
+    }
+
+    // 4. Live WebDAV PROPFIND (Depth: 1) to see exact folders & files
+    const cleanRel = webdavRelPath.startsWith('/') ? webdavRelPath : `/${webdavRelPath}`;
+    const davUrl = `${baseUrl}${cleanRel}`;
+    const davStart = Date.now();
+    const davHeaders: Record<string, string> = {
+      'User-Agent': 'brickOS-Studio-Visibility-Inspector/1.0',
+      'Depth': '1',
+      'Content-Type': 'application/xml; charset=utf-8'
+    };
+    if (password) {
+      davHeaders['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+    }
+
+    try {
+      const davRes = await undiciFetch(davUrl, {
+        method: 'PROPFIND',
+        headers: davHeaders,
+        body: LEAN_PROPFIND_XML,
+        signal: AbortSignal.timeout(7000),
+        dispatcher: primaryUndiciAgent
+      });
+      const rawXml = await davRes.text();
+      const excMatch = rawXml.match(/<s:exception>([^<]+)<\/s:exception>/i);
+      const msgMatch = rawXml.match(/<s:message>([^<]+)<\/s:message>/i);
+
+      const visibleFolders: string[] = [];
+      const visibleFiles: string[] = [];
+      if (davRes.status >= 200 && davRes.status < 300) {
+        const blocks = [...rawXml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+        for (let i = 0; i < blocks.length; i++) {
+          const bXml = blocks[i][1];
+          const hrefMatch = bXml.match(/<d:href>([^<]+)<\/d:href>/i);
+          if (!hrefMatch) continue;
+          const decodedHref = decodeURIComponent(hrefMatch[1]).replace(/\/+$/, '');
+          const name = decodedHref.split('/').pop() || '';
+          if (!name || decodedHref.toLowerCase().endsWith('/music-production')) continue;
+          const isCollection = /<d:collection\s*\/?>/i.test(bXml);
+          if (isCollection) visibleFolders.push(name);
+          else visibleFiles.push(name);
+        }
+      }
+
+      result.webdavPropfind = {
+        ok: davRes.status >= 200 && davRes.status < 300,
+        status: davRes.status,
+        statusText: davRes.statusText || '',
+        latencyMs: Date.now() - davStart,
+        sabreException: excMatch ? excMatch[1] : '',
+        sabreMessage: msgMatch ? msgMatch[1] : '',
+        itemCount: visibleFolders.length + visibleFiles.length,
+        visibleFolders: visibleFolders.slice(0, 40),
+        visibleFiles: visibleFiles.slice(0, 40),
+        error: davRes.status >= 200 && davRes.status < 300 ? null : `HTTP ${davRes.status} ${davRes.statusText}`
+      };
+
+      if (result.webdavPropfind.ok) {
+        result.overallStatus = 'connected';
+        result.verdict = `Connected! WebDAV HTTP ${davRes.status} in ${result.webdavPropfind.latencyMs}ms — sees ${visibleFolders.length} folders & ${visibleFiles.length} files in /Music-Production.`;
+      } else if (davRes.status === 401) {
+        result.overallStatus = 'auth_required';
+        result.verdict = password
+          ? `Server reachable, but App Password rejected (HTTP 401: ${result.webdavPropfind.sabreException || 'Invalid App Password'}).`
+          : 'Server reachable, but no App Password was provided (HTTP 401).';
+      } else {
+        result.overallStatus = 'http_error';
+        result.verdict = `HTTP reachable, but WebDAV PROPFIND returned HTTP ${davRes.status} ${davRes.statusText}.`;
+      }
+    } catch (davErr: any) {
+      result.webdavPropfind.latencyMs = Date.now() - davStart;
+      result.webdavPropfind.error = davErr?.message || 'WebDAV PROPFIND error';
+      result.overallStatus = 'http_error';
+      result.verdict = `TCP/HTTP reached, but WebDAV PROPFIND failed: ${result.webdavPropfind.error}`;
+    }
   } catch (err: any) {
-    const latencyMs = Date.now() - startTime;
-    res.json({
-      success: false,
-      latencyMs,
-      targetHost,
-      error: err.message || 'Cannot reach host over Tailscale'
-    });
+    result.verdict = err?.message || 'Invalid URL or probe error';
   }
-});
+
+  result.totalLatencyMs = Date.now() - startTotal;
+  return result;
+}
+
+async function handleNextcloudDiagnose(req: express.Request, res: express.Response) {
+  const startTime = Date.now();
+  const body = (req.body || {}) as Record<string, any>;
+  const requestedServerUrl = normalizeServerUrlInput(
+    String(body.serverUrl || req.query.serverUrl || cachedWebdavCredentials.serverUrl || '')
+  );
+  const username = String(body.username || req.query.username || cachedWebdavCredentials.username || 'ncted').trim();
+  const rawPassword = String(body.password || req.query.password || '');
+  const password = rawPassword.trim() || cachedWebdavCredentials.password || '';
+  const webdavRelPath = `/remote.php/dav/files/${encodeURIComponent(username)}/Music-Production`;
+
+  const tsInstalled = isTailscaleBinaryInstalled();
+  const tsDaemonRunning = ensureTailscaledRunning();
+  const proxyProbe = await probeTcpPort('127.0.0.1', TAILSCALE_PROXY_PORT, 800);
+
+  let tailscaleBackendState = tsInstalled ? 'Stopped' : 'NotInstalledInContainer';
+  let tailscaleNote = '';
+  if (!tsInstalled) {
+    tailscaleNote =
+      'This server container does not have the local Tailscale VPN binary (/usr/local/bin/tailscale) installed. Because of that, private Tailnet 100.x.y.z IPs and LAN IPs cannot be dialed over a WireGuard interface — use the public Tailscale Funnel (*.ts.net) or Cloudflare Tunnel (*.moyercloud.com) URL over HTTPS.';
+  } else if (tsDaemonRunning && proxyProbe.ok) {
+    tailscaleBackendState = 'DaemonRunning';
+    tailscaleNote = 'tailscaled userspace daemon and SOCKS5/HTTP proxy (127.0.0.1:1055) are active.';
+  } else {
+    tailscaleNote = 'tailscale binary is installed, but the daemon/proxy is not connected.';
+  }
+
+  const targetsToProbe: Array<{ label: string; url: string }> = [];
+  const seen = new Set<string>();
+  const addTarget = (label: string, u: string) => {
+    const norm = normalizeServerUrlInput(u);
+    if (!norm || seen.has(norm.toLowerCase())) return;
+    seen.add(norm.toLowerCase());
+    targetsToProbe.push({ label, url: norm });
+  };
+
+  if (requestedServerUrl) {
+    const isBuiltIn =
+      requestedServerUrl.toLowerCase() === PRIMARY_NEXTCLOUD_URL.toLowerCase() ||
+      requestedServerUrl.toLowerCase() === FALLBACK_NEXTCLOUD_URL.toLowerCase();
+    addTarget(isBuiltIn ? 'Configured Active Endpoint' : 'Custom / User-Entered IP or URL', requestedServerUrl);
+    // If user entered a bare IP, also probe http:// on port 80/custom port in case TLS isn't on the IP
+    try {
+      const parsedCustom = new URL(requestedServerUrl);
+      if (net.isIP(parsedCustom.hostname) !== 0 && parsedCustom.protocol === 'https:') {
+        addTarget('Custom IP (HTTP Fallback)', `http://${parsedCustom.host}`);
+      }
+    } catch {}
+  }
+  addTarget('Tailscale Funnel (Public HTTPS)', PRIMARY_NEXTCLOUD_URL);
+  addTarget('Cloudflare Tunnel (Public HTTPS)', FALLBACK_NEXTCLOUD_URL);
+
+  const endpoints = await Promise.all(
+    targetsToProbe.map((t) => probeSingleNextcloudTarget(t.label, t.url, username, password, webdavRelPath))
+  );
+
+  const workingEndpoint = endpoints.find((e) => e.overallStatus === 'connected') || null;
+  const reachableEndpoints = endpoints.filter((e) => e.tcp.ok).map((e) => ({
+    label: e.label,
+    baseUrl: e.baseUrl,
+    status: e.webdavPropfind.status || e.httpHead.status,
+    latencyMs: e.totalLatencyMs,
+    overallStatus: e.overallStatus
+  }));
+
+  const cannotSee = endpoints
+    .filter((e) => e.overallStatus !== 'connected')
+    .map((e) => {
+      const stageFailed = !e.dns.ok
+        ? 'DNS Lookup'
+        : !e.tcp.ok
+        ? 'TCP Network Connect'
+        : !e.webdavPropfind.ok
+        ? `WebDAV Auth / PROPFIND (HTTP ${e.webdavPropfind.status || 0})`
+        : 'HTTP Probe';
+      let fixHint = 'Verify server URL and App Password.';
+      if (!e.tcp.ok && e.isPrivateTailscaleIp && !tsInstalled) {
+        fixHint = `Switch server URL to ${PRIMARY_NEXTCLOUD_URL} (Tailscale Funnel) or ${FALLBACK_NEXTCLOUD_URL} (Cloudflare) because private 100.x.y.z IPs require a local Tailscale daemon.`;
+      } else if (!e.tcp.ok) {
+        fixHint = `Port ${e.port} on ${e.hostname} is not reachable from this cloud server (${e.tcp.errorCode || 'timeout'}).`;
+      } else if (e.webdavPropfind.status === 401) {
+        fixHint = 'Generate a fresh Nextcloud App Password under Settings -> Security -> Devices & client credentials.';
+      }
+      return {
+        label: e.label,
+        baseUrl: e.baseUrl,
+        stageFailed,
+        reason: e.verdict,
+        fixHint
+      };
+    });
+
+  res.json({
+    success: Boolean(workingEndpoint),
+    scannedAt: new Date().toISOString(),
+    latencyMs: Date.now() - startTime,
+    runtime: {
+      tailscaleBinaryInstalled: tsInstalled,
+      tailscaleDaemonRunning: tsDaemonRunning,
+      tailscaleProxyListening: proxyProbe.ok,
+      tailscaleBackendState,
+      tailscaleNote,
+      notifyPushConnected: nextcloudRouteState.pushWebSocket.connected,
+      activeRoute: nextcloudRouteState.activeRoute,
+      configuredServerUrl: requestedServerUrl || cachedWebdavCredentials.serverUrl,
+      configuredUsername: username,
+      hasStoredPassword: Boolean(password),
+      passwordLength: password.length
+    },
+    endpoints,
+    canSee: {
+      workingEndpoint: workingEndpoint ? workingEndpoint.baseUrl : null,
+      workingLabel: workingEndpoint ? workingEndpoint.label : null,
+      reachableCount: reachableEndpoints.length,
+      reachableEndpoints,
+      visiblePath: webdavRelPath,
+      visibleFoldersCount: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFolders.length : 0,
+      visibleFilesCount: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFiles.length : 0,
+      visibleFolders: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFolders : [],
+      visibleFiles: workingEndpoint ? workingEndpoint.webdavPropfind.visibleFiles : []
+    },
+    cannotSee,
+    logs: nextcloudLogs.slice(0, 35)
+  });
+}
+
+app.get('/api/nextcloud/diagnose', handleNextcloudDiagnose);
+app.post('/api/nextcloud/diagnose', handleNextcloudDiagnose);
 
 // ============================================================================
 // NEXTCLOUD DUAL-PATH MULTI-ROUTE & REAL-TIME PUSH SYNC ENDPOINTS
@@ -1579,7 +2130,7 @@ app.post('/api/nextcloud/test-connection', async (req, res) => {
     } = req.body;
 
     const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
-    const cleanServerUrl = serverUrl.replace(/\/$/, '');
+    const cleanServerUrl = normalizeServerUrlInput(serverUrl || PRIMARY_NEXTCLOUD_URL);
     const cleanWebdavPath = webdavPath.startsWith('/') ? webdavPath : '/' + webdavPath;
     const targetUrl = `${cleanServerUrl}${cleanWebdavPath}`;
     const hasPassword = Boolean(effectivePassword && effectivePassword.length > 0);
@@ -2214,9 +2765,10 @@ app.post('/api/nextcloud/upload-file', async (req, res) => {
 });
 
 // 13a. Nextcloud WebDAV Interactive File Explorer Browse Endpoint (PROPFIND Depth 1)
-app.post('/api/nextcloud/browse', async (req, res) => {
+const handleBrowseRequest = async (req: any, res: any) => {
   const startTime = Date.now();
   try {
+    const params = { ...(req.query || {}), ...(req.body || {}) };
     const {
       path = '/remote.php/dav/files/ncted/Music-Production',
       serverUrl = cachedWebdavCredentials.serverUrl || PRIMARY_NEXTCLOUD_URL,
@@ -2224,7 +2776,7 @@ app.post('/api/nextcloud/browse', async (req, res) => {
       password = '',
       search = '',
       filter = 'ALL'
-    } = req.body;
+    } = params;
 
     const cleanServerUrl = serverUrl.replace(/\/$/, '');
     const effectivePassword = (password && password.trim().length > 0) ? password.trim() : (cachedWebdavCredentials.password || '');
@@ -2531,7 +3083,10 @@ app.post('/api/nextcloud/browse', async (req, res) => {
       latencyMs
     });
   }
-});
+};
+
+app.post('/api/nextcloud/browse', handleBrowseRequest);
+app.get('/api/nextcloud/browse', handleBrowseRequest);
 
 // 13a-2. Targeted Lazy-Loading Track Assets Endpoint (RFC 4918 Depth: 1 Targeted Query)
 // Directly queries a single track's folder and stem directories without scanning entire catalog
@@ -3122,8 +3677,12 @@ app.post('/api/nextcloud/index-all-catalog', async (req, res) => {
 });
 
 // 14c. Automated Metadata Mapper & Musical Characteristics Tagger (ETag Delta-Sync + Atomic WriteBatch)
-export async function executeCatalogMetadataMapping(initialFiles?: any[], forceFullScan = false): Promise<any[]> {
-  const db = getServerFirestore();
+export async function executeCatalogMetadataMapping(
+  initialFiles?: any[],
+  forceFullScan = false,
+  syncToFirestore = false
+): Promise<any[]> {
+  const db = syncToFirestore && !isServerFirestoreQuotaActive() ? getServerFirestore() : getServerFirestore();
   const results: any[] = [];
   const startTime = Date.now();
   let skippedByEtagCount = 0;
@@ -3287,14 +3846,20 @@ export async function executeCatalogMetadataMapping(initialFiles?: any[], forceF
         };
         const isDirty = checkAndUpdateSongPayloadHash(mapped.trackId, deterministicPayload);
 
-        if (db && batch && isDirty) {
-          const trackDocRef = firestoreDoc(db, 'tracks', mapped.trackId);
-          const sanitizedPayload = JSON.parse(JSON.stringify({
-            ...deterministicPayload,
-            lastMetadataMappedAt: new Date().toISOString()
-          }));
-          batch.set(trackDocRef, sanitizedPayload, { merge: true });
-          dirtyFirestoreCount++;
+        if (db && batch && isDirty && (!syncToFirestore || !isServerFirestoreQuotaActive())) {
+          try {
+            const trackDocRef = firestoreDoc(db, 'tracks', mapped.trackId);
+            const sanitizedPayload = JSON.parse(JSON.stringify({
+              ...deterministicPayload,
+              lastMetadataMappedAt: new Date().toISOString()
+            }));
+            batch.set(trackDocRef, sanitizedPayload, { merge: true });
+            dirtyFirestoreCount++;
+          } catch (writeErr: any) {
+            if (isServerQuotaExhaustedError(writeErr)) {
+              tripServerFirestoreCircuitBreaker(writeErr?.message);
+            }
+          }
         }
       }
     }
@@ -3340,13 +3905,14 @@ export async function executeCatalogMetadataMapping(initialFiles?: any[], forceF
 app.post('/api/nextcloud/auto-map-metadata', async (req, res) => {
   const startTime = Date.now();
   try {
-    const results = await executeCatalogMetadataMapping();
+    const syncFirestore = Boolean(req.body?.syncFirestore);
+    const results = await executeCatalogMetadataMapping(undefined, syncFirestore);
     res.json({
       success: true,
       count: results.length,
       results,
       latencyMs: Date.now() - startTime,
-      message: `Automated metadata mapper processed and persisted ${results.length} tracks in Firestore.`
+      message: `Automated metadata mapper processed ${results.length} tracks.`
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Auto-map metadata failed' });
@@ -3480,24 +4046,22 @@ app.post('/api/audio/separate-stems', async (req, res) => {
       })();
     }
 
-    // Persist to Firestore
-    const db = getServerFirestore();
-    if (db) {
+    // Persist to Firestore only if quota is not exhausted
+    if (!isServerFirestoreQuotaActive()) {
       try {
-        const trackDocRef = firestoreDoc(db, 'tracks', trackId);
-        const updatePayload = {
+        await safeServerFirestoreSetDoc('tracks', trackId, {
           status: 'UVR5 Stem Prep',
           stems: separatedStems,
           lastStemSeparationAt: new Date().toISOString(),
           stemSeparationModel: `${model} + MelBand-Roformer-Kim-Inst-V2`,
           updatedAt: new Date().toISOString()
-        };
-        await Promise.race([
-          firestoreSetDoc(trackDocRef, JSON.parse(JSON.stringify(updatePayload)), { merge: true }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout (2500ms)')), 2500))
-        ]);
+        });
       } catch (fbErr: any) {
-        console.warn(`[UVR5 Separator] Firestore update note for ${trackId}:`, fbErr?.message || fbErr);
+        if (isServerQuotaExhaustedError(fbErr)) {
+          tripServerFirestoreCircuitBreaker(fbErr?.message);
+        } else {
+          console.warn(`[UVR5 Separator] Firestore update note for ${trackId}:`, fbErr?.message || fbErr);
+        }
       }
     }
 
@@ -3632,33 +4196,23 @@ app.post('/api/project/archive', async (req, res) => {
 
     // 3. Update Firestore track record ONLY as secondary milestone (if database configured and quota not exhausted)
     let firestoreWritten = false;
-    if (!serverFirestoreQuotaExhausted) {
-      const db = getServerFirestore();
-      if (db) {
-        try {
-          const trackDocRef = firestoreDoc(db, 'tracks', trackId);
-          const updatePayload = {
-            lastProjectArchiveAt: manifest.generatedAt,
-            archiveChecksum: manifest.checksum,
-            projectArchiveId: manifest.archiveId,
-            archiveManifestPath: manifestPath,
-            nextcloudVerified: writeVerification.verified,
-            nextcloudEtag: writeVerification.etag,
-            _schemaVersion: 2,
-            updatedAt: new Date().toISOString()
-          };
-          await Promise.race([
-            firestoreSetDoc(trackDocRef, JSON.parse(JSON.stringify(updatePayload)), { merge: true }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore timeout')), 2500))
-          ]);
-          firestoreWritten = true;
-        } catch (fbErr: any) {
-          if (fbErr?.message?.includes('RESOURCE_EXHAUSTED') || fbErr?.code === 'resource-exhausted' || fbErr?.code === 8) {
-            serverFirestoreQuotaExhausted = true;
-            console.warn(`[Server Firestore Circuit Breaker Active]: Quota limit reached; secondary Firestore writes bypassed.`);
-          } else {
-            console.warn(`[Project Archive] Firestore write notice:`, fbErr?.message || fbErr);
-          }
+    if (!isServerFirestoreQuotaActive()) {
+      try {
+        firestoreWritten = await safeServerFirestoreSetDoc('tracks', trackId, {
+          lastProjectArchiveAt: manifest.generatedAt,
+          archiveChecksum: manifest.checksum,
+          projectArchiveId: manifest.archiveId,
+          archiveManifestPath: manifestPath,
+          nextcloudVerified: writeVerification.verified,
+          nextcloudEtag: writeVerification.etag,
+          _schemaVersion: 2,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (fbErr: any) {
+        if (isServerQuotaExhaustedError(fbErr)) {
+          tripServerFirestoreCircuitBreaker(fbErr?.message);
+        } else {
+          console.warn(`[Project Archive] Firestore write notice:`, fbErr?.message || fbErr);
         }
       }
     }
@@ -3865,49 +4419,223 @@ const handleStreamOptions = (req: any, res: any) => {
 
 app.options('/api/nextcloud/stream', handleStreamOptions);
 app.options('/api/nextcloud/stream-media', handleStreamOptions);
+app.options('/api/audio/proxy', handleStreamOptions);
 
+// CORS-safe Audio Proxy for external Suno CloudFront streams (prevents WebAudio zero-output CORS taint)
+app.get('/api/audio/proxy', async (req: any, res: any) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified, X-brickOS-Audio-Source');
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  try {
+    const rawUrl = (req.query.url as string) || '';
+    if (!rawUrl || !rawUrl.startsWith('https://')) {
+      return res.status(400).json({ error: 'Valid https audio URL is required' });
+    }
+    const parsed = new URL(rawUrl);
+    const allowedHosts = ['suno.ai', 'suno.com', 'cloudfront.net', 'mermaid-symmetric.ts.net', 'moyercloud.com'];
+    const isAllowed = allowedHosts.some((suffix) => parsed.hostname === suffix || parsed.hostname.endsWith(`.${suffix}`));
+    if (!isAllowed) {
+      return res.status(403).json({ error: 'Host not permitted for audio proxy' });
+    }
+
+    const upstreamRes = await undiciFetch(rawUrl, {
+      headers: req.headers.range ? { Range: req.headers.range } : undefined,
+      signal: AbortSignal.timeout(12000)
+    });
+
+    res.status(upstreamRes.status);
+    res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'audio/mp4');
+    res.setHeader('X-brickOS-Audio-Source', 'suno-cloudfront');
+    if (upstreamRes.headers.get('content-range')) res.setHeader('Content-Range', upstreamRes.headers.get('content-range')!);
+    if (upstreamRes.headers.get('content-length')) res.setHeader('Content-Length', upstreamRes.headers.get('content-length')!);
+    if (upstreamRes.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', upstreamRes.headers.get('accept-ranges')!);
+
+    if (upstreamRes.body) {
+      const nodeStream = Readable.fromWeb(upstreamRes.body as any);
+      nodeStream.pipe(res);
+      return;
+    }
+    const ab = await upstreamRes.arrayBuffer();
+    return res.send(Buffer.from(ab));
+  } catch (err: any) {
+    console.warn('External audio proxy notice:', err.message);
+    return res.status(502).json({ error: 'Audio proxy upstream error', message: err.message });
+  }
+});
+
+// Reconciled Canonical Track Audio Paths aligned strictly with CATALOG_TRACK_DEFINITIONS & SQLite canonical_songs
 const CANONICAL_TRACK_REAL_AUDIO: Record<string, string> = {
   'TRK-01': '/remote.php/dav/files/ncted/Music-Production/Brick-by-Brick/Brick-by-Brick-Extended-Remastered-_02-44-v3.5.flac',
   'TRK-02': '/remote.php/dav/files/ncted/Music-Production/The-Masters-Hand/The-Masters-Hand-v3.0a-Remastered.mp3',
   'TRK-03': '/remote.php/dav/files/ncted/Music-Production/Every-Candles-Victory/Every-Candles-Victory-Gospel-v2.1.mp3',
-  'TRK-04': '/remote.php/dav/files/ncted/Music-Production/CheckYourHeartLight/CheckYourHeartLight.mp3',
-  'TRK-05': '/remote.php/dav/files/ncted/Music-Production/Hands-Under-the-Table/Hands-Under-the-Table.mp3',
-  'TRK-06': '/remote.php/dav/files/ncted/Music-Production/Nothing-But-the-Blood/Nothing-But-the-Blood.mp3',
-  'TRK-07': '/remote.php/dav/files/ncted/Music-Production/Calvary-Grit/Calvary-Grit.mp3',
-  'TRK-08': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
-  'TRK-09': '/remote.php/dav/files/ncted/Music-Production/The-Anchor/The-Anchor.mp3',
-  'TRK-10': '/remote.php/dav/files/ncted/Music-Production/The-Blueprint-and-The-Blood/The-Blueprint-and-The-Blood.mp3',
-  'TRK-11': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/The-Weight-and-The-Wisdom.mp3',
-  'TRK-12': '/remote.php/dav/files/ncted/Music-Production/Leaning-Not-Leaving/Leaning-Not-Leaving.mp3',
-  'TRK-13': '/remote.php/dav/files/ncted/Music-Production/Unity-In-The-Friction/Unity-In-The-Friction.mp3',
-  'TRK-14': '/remote.php/dav/files/ncted/Music-Production/Venom-into-Victory/Venom_Into_Victory.flac',
+  'TRK-04': '/remote.php/dav/files/ncted/Music-Production/Nothing-But-the-Blood/Modern-Worship/NBTB-v3.0b_Modern_Nothing_but_the_Blood__Worship_Leader_-d9fd77e9-91d0-4fbc-8620-eb53d66c284b.mp3',
+  'TRK-05': '/remote.php/dav/files/ncted/Music-Production/00-Active_Projects/v11.5-The-Blueprint-and-the-Blood-Persona-Upbeat-Remastered.flac',
+  'TRK-06': '/remote.php/dav/files/ncted/Music-Production/Blindfold-Blessing/Blindfold_Blessing_CEDM-PUNCH.mp3',
+  'TRK-07': '/remote.php/dav/files/ncted/Music-Production/Leaning-Not-Leaving/Leaning-Not-Leaving-v7.5-Worship-Group.flac',
+  'TRK-08': '/remote.php/dav/files/ncted/Music-Production/CheckYourHeartLight/6.5sbR_Check_Your_Heart_Light_Kane_v1.5_(Remastered).wav',
+  'TRK-09': '/remote.php/dav/files/ncted/Music-Production/Glitter/Glitter-1.56-Star-Electronic-Pop-Remastered.mp3',
+  'TRK-10': '/remote.php/dav/files/ncted/Music-Production/The-Blueprint-and-The-Blood/6.2sr_The_Blueprint_and_the_Blood_v5.2_-Remastered-_03-48.flac',
+  'TRK-11': '/remote.php/dav/files/ncted/Music-Production/Unity-In-The-Friction/Ted_Moyer_Unity_GOLD_MASTER.flac',
+  'TRK-12': '/remote.php/dav/files/ncted/Music-Production/The-Anchor/Rock-Ballad/The-Anchor-v17.0a-Rock-Ballad-Remastered.mp3',
+  'TRK-13': '/remote.php/dav/files/ncted/Music-Production/Calvary-Grit/Calvary-Grit-V4.55b-Team-Edit-Remastered.flac',
+  'TRK-14': '/remote.php/dav/files/ncted/Music-Production/Venom-into-Victory/Identity-Anthem/Venom_Into_Victory.flac',
   'TRK-15': '/remote.php/dav/files/ncted/Music-Production/The-Final-Say/The_Final_Say_v3b_BMV3_MASTER.flac',
-  'TRK-16': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3',
+  'TRK-16': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.wav',
   'TRK-17': '/remote.php/dav/files/ncted/Music-Production/In-Our-Veins/6.5s-In-Our-Veins-v3.5-Brandon-Josiah-Remastered-_03-28-v3.5.flac',
   'TRK-18': '/remote.php/dav/files/ncted/Music-Production/We-Bow-We-Shout/1-v9.93-We-Bow-We-Shout-Remastered-FLAC00086400-2025-12-06-23_12_05-14.flac',
   'TRK-19': '/remote.php/dav/files/ncted/Music-Production/Through-the-Valley-Or-the-Flame/Remastered-412568Db-E312-402A-92Ff-9D416B1Df3A7-Christian-Country-7s-Through-the-Valley-Or-The-Flame.mp3',
   'TRK-20': '/remote.php/dav/files/ncted/Music-Production/Ghost-In-The-Machine/Ghost-In-The-Machine-CHH-v2.5bv2-Remastered.wav',
   'TRK-21': '/remote.php/dav/files/ncted/Music-Production/Milestone/The Milestone-Uni50-Mastered.wav',
-  'TRK-22': '/remote.php/dav/files/ncted/Music-Production/Breath-and-Bone/v3.6r-Breath-&-Bone-Male-Remastered.flac',
-  'TRK-23': '/remote.php/dav/files/ncted/Music-Production/Blindfold-Blessing/Blindfold_Blessing_CEDM-PUNCH.mp3',
+  'TRK-22': '/remote.php/dav/files/ncted/Music-Production/Breath-and-Bone/Worship-Ballad/v3.6r-Breath-%26-Bone-Male-Remastered.flac',
+  'TRK-23': '/remote.php/dav/files/ncted/Music-Production/Blindfold-Blessing/Blindfold-Blessing-v3.5-Ultimate-Remastered.mp3',
   'TRK-24': '/remote.php/dav/files/ncted/Music-Production/Trading-In-The-Mask/Trading-In-The-Mask-v5.5b2-Remastered.wav',
   'TRK-25': '/remote.php/dav/files/ncted/Music-Production/Neverending-Whats-Next/NWN-v1.0ab-Spoken-Intro-Edit-Remastered.flac',
-  'TRK-26': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.mp3',
-  'TRK-27': '/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain\'t Done-TedMoyer- FINAL .mp3',
-  'TRK-28': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/The-Weight-and-The-Wisdom.mp3',
-  'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).mp3',
+  'TRK-26': '/remote.php/dav/files/ncted/Music-Production/Meet_Me_Here/Meet-Me-Here-CHH-v2.0bZ-Remastered.wav',
+  'TRK-27': "/remote.php/dav/files/ncted/Music-Production/TheWorkAintDone/The Work Ain't Done-TedMoyer- FINAL .mp3",
+  'TRK-28': '/remote.php/dav/files/ncted/Music-Production/The-Weight-and-The-Wisdom/7.5sbR_The_Weight_and_The_Wisdom_Brandon_v4.5_(Remastered).wav',
+  'TRK-29': '/remote.php/dav/files/ncted/Music-Production/Manic_In_The_Mundane/7.5sbRManicInTheMundane_Brandon_v5.1_BMV1 (Remastered).wav',
 };
+
+// Exact-Track Sovereign Audio Fallback: Maps missing/unlinked WebDAV tracks strictly to that song's Suno CloudFront studio takes
+function findSunoFallbackStream(
+  cleanPath: string,
+  trackIdParam?: string,
+  trackTitleParam?: string
+): { streamUrl: string; title: string; trackId?: string } | null {
+  // 1. Exact SQLite suno_revisions match by trackIdParam or trackTitleParam (highest accuracy)
+  if (trackIdParam || trackTitleParam) {
+    const exactRevs = querySunoRevisionsForTrack(trackIdParam, trackTitleParam);
+    if (exactRevs.length > 0) {
+      return {
+        streamUrl: exactRevs[0].streamUrl,
+        title: exactRevs[0].title,
+        trackId: exactRevs[0].songId
+      };
+    }
+  }
+
+  // 2. Match TRK-XX token embedded in path
+  const trkMatch = cleanPath.match(/TRK[-_]?(\d+)/i);
+  if (trkMatch) {
+    const trkId = `TRK-${trkMatch[1].padStart(2, '0')}`;
+    const sqlRevs = querySunoRevisionsForTrack(trkId);
+    if (sqlRevs.length > 0) {
+      return { streamUrl: sqlRevs[0].streamUrl, title: sqlRevs[0].title, trackId: sqlRevs[0].songId };
+    }
+    const song = RELATIONAL_SUNO_CATALOG.find((s) => s.id.toUpperCase() === trkId.toUpperCase());
+    const rev = song?.revisions?.find((r) => r.streamUrl) || song?.revisions?.[0];
+    if (rev?.streamUrl && song) {
+      return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
+    }
+  }
+
+  // 3. Match folder/title tokens against RELATIONAL_SUNO_CATALOG or SUNO_MASTER_TRACKS
+  const lower = cleanPath.toLowerCase();
+  const cleanTitleSlug = (trackTitleParam || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pathSlug = lower.replace(/[^a-z0-9]/g, '');
+
+  for (const song of RELATIONAL_SUNO_CATALOG) {
+    const slug = song.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const folderSlug = ((song as any).nextcloudDirectory || song.nextcloud_directory || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (
+      (cleanTitleSlug.length > 3 && (slug.includes(cleanTitleSlug) || cleanTitleSlug.includes(slug))) ||
+      (slug.length > 4 && pathSlug.includes(slug)) ||
+      (folderSlug.length > 4 && pathSlug.includes(folderSlug))
+    ) {
+      const rev = song.revisions?.find((r) => r.streamUrl) || song.revisions?.[0];
+      if (rev?.streamUrl) {
+        return { streamUrl: rev.streamUrl, title: song.title, trackId: song.id };
+      }
+    }
+  }
+
+  const filenameSlug = (cleanPath.split('/').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const master of SUNO_MASTER_TRACKS) {
+    const mTitle = master.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (mTitle.length > 4 && (filenameSlug.includes(mTitle) || (cleanTitleSlug.length > 3 && mTitle.includes(cleanTitleSlug)))) {
+      if (master.streamUrl) {
+        return { streamUrl: master.streamUrl, title: master.title, trackId: master.id };
+      }
+    }
+  }
+
+  return null;
+}
+
+// Helper: Execute live WebDAV PROPFIND Depth 1 scan for audio files in a directory
+async function scanNextcloudAudioDirectory(
+  targetFolderPath: string,
+  username: string,
+  password: string
+): Promise<Array<{ name: string; webdavPath: string; size: number; mimeType: string }>> {
+  if (!targetFolderPath) return [];
+  let normalized = targetFolderPath.trim().replace(/\/+$/, '');
+  if (!normalized.startsWith('/remote.php/dav/files/')) {
+    normalized = `/remote.php/dav/files/${username}/${normalized.replace(/^\/+/, '')}`;
+  }
+
+  const headers: Record<string, string> = {
+    'User-Agent': 'brickOS-Studio-Nextcloud-Bridge/5.5',
+    'Depth': '1',
+    'Content-Type': 'application/xml; charset=utf-8'
+  };
+  if (password) {
+    headers['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+  }
+
+  const { response: davRes } = await smartFetchWithFailover(normalized, {
+    method: 'PROPFIND',
+    headers,
+    body: LEAN_PROPFIND_XML,
+    signal: AbortSignal.timeout(8000)
+  });
+
+  if (!davRes.ok && davRes.status !== 207) return [];
+  const xml = await davRes.text();
+  const responseBlocks = [...xml.matchAll(/<d:response>([\s\S]*?)<\/d:response>/gi)];
+  const results: Array<{ name: string; webdavPath: string; size: number; mimeType: string }> = [];
+  const normalizedLower = decodeURIComponent(normalized).toLowerCase();
+
+  for (const block of responseBlocks) {
+    const blockXml = block[1];
+    const hrefMatch = blockXml.match(/<d:href>([^<]+)<\/d:href>/i);
+    if (!hrefMatch) continue;
+    const rawHref = decodeURIComponent(hrefMatch[1]);
+    const cleanHref = rawHref.replace(/\/+$/, '');
+    if (cleanHref.toLowerCase() === normalizedLower) continue;
+    const isCollection = /<d:collection\s*\/?>/i.test(blockXml);
+    if (isCollection) continue;
+
+    const name = cleanHref.split('/').filter(Boolean).pop() || '';
+    const ext = name.toLowerCase().split('.').pop() || '';
+    if (!['wav', 'mp3', 'flac', 'm4a', 'ogg', 'aac'].includes(ext)) continue;
+
+    const sizeMatch = blockXml.match(/<d:getcontentlength>([^<]+)<\/d:getcontentlength>/i);
+    const size = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+    const mimeType = ext === 'wav' ? 'audio/wav' : ext === 'mp3' ? 'audio/mpeg' : ext === 'flac' ? 'audio/flac' : ext === 'm4a' ? 'audio/mp4' : 'audio/ogg';
+    results.push({ name, webdavPath: cleanHref, size, mimeType });
+  }
+
+  return results;
+}
 
 const handleNextcloudStream = async (req: any, res: any) => {
   // Set CORS headers immediately so even error responses or preflights are compliant
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified, X-brickOS-Audio-Source, X-brickOS-Track-Id');
   res.setHeader('Accept-Ranges', 'bytes');
 
   try {
     const rawPath = req.query.path as string;
+    const trackIdParam = (req.query.trackId as string) || '';
+    const trackTitleParam = (req.query.title as string) || '';
+    const stemTypeParam = (req.query.stemType as string) || '';
+
     if (!rawPath) {
       return res.status(400).send('Missing file path');
     }
@@ -3918,6 +4646,7 @@ const handleNextcloudStream = async (req: any, res: any) => {
     if (password && password.trim().length > 0 && !cachedWebdavCredentials.password) {
       cachedWebdavCredentials.password = password.trim();
       cachedWebdavCredentials.username = username;
+      cachedWebdavCredentials.serverUrl = serverUrl;
       saveNextcloudSessionToDisk();
     }
 
@@ -3972,60 +4701,82 @@ const handleNextcloudStream = async (req: any, res: any) => {
     let contentType = getMimeType(cleanPath);
 
     try {
-      let { response: upstream, usedRoute } = await smartFetchWithFailover(cleanPath, { headers });
+      let { response: upstream, usedRoute } = await smartFetchWithFailover(cleanPath, {
+        headers,
+        signal: AbortSignal.timeout(8000)
+      });
 
-      // Intelligent Auto-Resolution: If requested file is not found (404), resolve actual authentic audio track
+      // Tier 2 Auto-Resolution on 404: Check SQLite relinked assets first, then reconciled canonical track paths
       if (upstream.status === 404) {
-        let fallbackCandidate: string | null = null;
+        const candidatePaths: string[] = [];
 
-        // Check track ID pattern (e.g. TRK-16, TRK-29)
+        // Check trackId from query param or embedded TRK-XX in path
         const trkMatch = cleanPath.match(/TRK[-_](\d{2})/i);
-        if (trkMatch && trkMatch[1]) {
-          const trkKey = `TRK-${trkMatch[1]}`;
-          if (CANONICAL_TRACK_REAL_AUDIO[trkKey]) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO[trkKey];
+        const resolvedTrkKey = (trackIdParam || (trkMatch ? `TRK-${trkMatch[1]}` : '')).toUpperCase();
+
+        if (resolvedTrkKey) {
+          try {
+            const db = getStudioDb();
+            if (db) {
+              const sqlRows = db.prepare('SELECT webdav_path, category FROM nextcloud_assets WHERE UPPER(track_id) = ?').all(resolvedTrkKey) as any[];
+              for (const row of sqlRows) {
+                if (row?.webdav_path && row.webdav_path !== cleanPath && /\.(wav|mp3|flac|m4a|ogg)$/i.test(row.webdav_path)) {
+                  candidatePaths.push(row.webdav_path);
+                }
+              }
+            }
+          } catch {}
+
+          if (CANONICAL_TRACK_REAL_AUDIO[resolvedTrkKey] && CANONICAL_TRACK_REAL_AUDIO[resolvedTrkKey] !== cleanPath) {
+            candidatePaths.push(CANONICAL_TRACK_REAL_AUDIO[resolvedTrkKey]);
           }
         }
 
-        // Check keywords if no TRK match or candidate
-        if (!fallbackCandidate) {
-          const lowerPath = cleanPath.toLowerCase();
-          if (lowerPath.includes('meet_me_here') || lowerPath.includes('meet-me-here')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-16'];
-          } else if (lowerPath.includes('brick-by-brick') || lowerPath.includes('brick_by_brick')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-01'];
-          } else if (lowerPath.includes('masters-hand') || lowerPath.includes('the_masters_hand')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-02'];
-          } else if (lowerPath.includes('every-candles-victory') || lowerPath.includes('candle-gospel')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-03'];
-          } else if (lowerPath.includes('in-our-veins') || lowerPath.includes('in_our_veins')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-17'];
-          } else if (lowerPath.includes('trading-in-the-mask')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-24'];
-          } else if (lowerPath.includes('ghost-in-the-machine')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-20'];
-          } else if (lowerPath.includes('theworkaintdone') || lowerPath.includes('the-work-aint-done')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-27'];
-          } else if (lowerPath.includes('manic') || lowerPath.includes('mundane') || lowerPath.includes('mitm')) {
-            fallbackCandidate = CANONICAL_TRACK_REAL_AUDIO['TRK-29'];
+        // Check folder/title keywords if no candidate found yet
+        if (candidatePaths.length === 0) {
+          const lowerCombined = `${cleanPath} ${trackTitleParam}`.toLowerCase();
+          const defMatch = CATALOG_TRACK_DEFINITIONS.find(
+            (d) =>
+              d.trackId === resolvedTrkKey ||
+              lowerCombined.includes(d.folderName.toLowerCase()) ||
+              lowerCombined.includes(d.title.toLowerCase())
+          );
+          if (defMatch && CANONICAL_TRACK_REAL_AUDIO[defMatch.trackId]) {
+            candidatePaths.push(CANONICAL_TRACK_REAL_AUDIO[defMatch.trackId]);
           }
         }
 
-        if (fallbackCandidate && fallbackCandidate !== cleanPath) {
-          addNextcloudLog({
-            stage: 'STREAM_MEDIA',
-            action: 'AUTO_RESOLVE',
-            level: 'info',
-            message: `Auto-resolving ${cleanPath.split('/').pop()} to real authentic music: ${fallbackCandidate.split('/').pop()}`,
-            details: { requestedPath: cleanPath, resolvedPath: fallbackCandidate }
-          });
-          const retryResult = await smartFetchWithFailover(fallbackCandidate, { headers });
-          if (retryResult.response.status === 200 || retryResult.response.status === 206) {
-            upstream = retryResult.response;
-            usedRoute = retryResult.usedRoute;
-            cleanPath = fallbackCandidate;
-            contentType = getMimeType(fallbackCandidate);
-          }
+        // Prefer candidates matching stemType if multiple exist
+        const orderedCandidates = stemTypeParam
+          ? [...candidatePaths].sort((a, b) => {
+              const aMatch = a.toLowerCase().includes(stemTypeParam.toLowerCase()) ? 0 : 1;
+              const bMatch = b.toLowerCase().includes(stemTypeParam.toLowerCase()) ? 0 : 1;
+              return aMatch - bMatch;
+            })
+          : candidatePaths;
+
+        for (const fallbackCandidate of orderedCandidates.slice(0, 3)) {
+          if (!fallbackCandidate || fallbackCandidate === cleanPath) continue;
+          try {
+            const retryResult = await smartFetchWithFailover(fallbackCandidate, {
+              headers,
+              signal: AbortSignal.timeout(8000)
+            });
+            if (retryResult.response.status === 200 || retryResult.response.status === 206) {
+              upstream = retryResult.response;
+              usedRoute = retryResult.usedRoute;
+              cleanPath = fallbackCandidate;
+              contentType = getMimeType(fallbackCandidate);
+              addNextcloudLog({
+                stage: 'STREAM_MEDIA',
+                action: 'AUTO_RESOLVE',
+                level: 'info',
+                message: `Auto-resolved ${rawPath.split('/').pop()} -> ${fallbackCandidate.split('/').pop()}`,
+                details: { requestedPath: rawPath, resolvedPath: fallbackCandidate, trackId: resolvedTrkKey }
+              });
+              break;
+            }
+          } catch {}
         }
       }
 
@@ -4039,7 +4790,8 @@ const handleNextcloudStream = async (req: any, res: any) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type, If-Range, If-None-Match');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Type, ETag, Last-Modified, X-brickOS-Audio-Source');
+        res.setHeader('X-brickOS-Audio-Source', 'nextcloud-webdav');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
 
@@ -4088,20 +4840,59 @@ const handleNextcloudStream = async (req: any, res: any) => {
       });
     }
 
-    // Only if upstream is completely unavailable after all failover & auto-resolve attempts, serve fallback wav
-    const lower = cleanPath.toLowerCase();
-    if (contentType.startsWith('audio/') || lower.endsWith('.wav') || lower.endsWith('.mp3') || lower.endsWith('.flac')) {
-      const fallbackWav = generateMusicalWavBuffer(cleanPath);
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', 'audio/wav');
-      res.setHeader('Content-Length', fallbackWav.length.toString());
-      res.setHeader('Accept-Ranges', 'bytes');
-      return res.status(200).send(fallbackWav);
+    // Tier 3 Exact-Track Suno CloudFront Fallback (Never falls back to arbitrary wrong song or synthetic sine wave)
+    const fallbackSuno = findSunoFallbackStream(cleanPath, trackIdParam, trackTitleParam);
+    if (fallbackSuno && fallbackSuno.streamUrl) {
+      addNextcloudLog({
+        stage: 'STREAM_MEDIA',
+        action: 'CLOUDFRONT_FALLBACK',
+        level: 'warn',
+        message: `WebDAV unavailable for ${cleanPath.split('/').pop()} - Streaming authentic Suno CloudFront take for ${fallbackSuno.title}`,
+        details: { path: cleanPath, cloudfrontUrl: fallbackSuno.streamUrl, trackId: fallbackSuno.trackId }
+      });
+
+      try {
+        const cfRes = await undiciFetch(fallbackSuno.streamUrl, {
+          headers: req.headers.range ? { Range: req.headers.range } : undefined,
+          signal: AbortSignal.timeout(10000)
+        });
+
+        if (cfRes.status === 200 || cfRes.status === 206) {
+          res.status(cfRes.status);
+          res.setHeader('Content-Type', cfRes.headers.get('content-type') || 'audio/mp4');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Expose-Headers', 'X-brickOS-Audio-Source, X-brickOS-Original-Status, X-brickOS-Original-Path, X-brickOS-Track-Id, Content-Range, Content-Length, Accept-Ranges');
+          res.setHeader('X-brickOS-Audio-Source', 'suno-cloudfront');
+          res.setHeader('X-brickOS-Original-Status', '404');
+          res.setHeader('X-brickOS-Original-Path', cleanPath);
+          res.setHeader('X-brickOS-Track-Id', fallbackSuno.trackId || trackIdParam || '');
+          if (cfRes.headers.get('content-range')) res.setHeader('Content-Range', cfRes.headers.get('content-range')!);
+          if (cfRes.headers.get('content-length')) res.setHeader('Content-Length', cfRes.headers.get('content-length')!);
+          if (cfRes.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', cfRes.headers.get('accept-ranges')!);
+
+          if (cfRes.body) {
+            const nodeStream = Readable.fromWeb(cfRes.body as any);
+            nodeStream.pipe(res);
+            return;
+          }
+          const ab = await cfRes.arrayBuffer();
+          return res.send(Buffer.from(ab));
+        }
+      } catch (cfErr: any) {
+        console.warn('CloudFront stream fallback error:', cfErr.message);
+      }
     }
 
+    // Never send synthetic sine waves on track playback failure. Return clear 404 JSON.
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', contentType);
-    return res.status(200).send(Buffer.from(''));
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(404).json({
+      error: 'ASSET_NOT_FOUND',
+      message: `Audio asset could not be streamed from WebDAV or Suno CloudFront for ${cleanPath.split('/').pop()}`,
+      path: cleanPath,
+      trackId: trackIdParam || undefined,
+      suggestedAction: 'AUTO_RELINK'
+    });
   } catch (err: any) {
     console.error('Stream proxy error:', err);
     res.status(500).send('Stream error');
@@ -4447,6 +5238,250 @@ app.get('/api/audio/peaks/:id', (req, res) => {
   }
 });
 
+
+// Automated Background & Interactive Live WebDAV PROPFIND Asset Relinker (persists to SQLite)
+app.post('/api/nextcloud/auto-relink', async (req, res) => {
+  const {
+    trackId,
+    filename,
+    trackTitle,
+    stemName,
+    stemType,
+    originalPath,
+    serverUrl,
+    username: bodyUser,
+    password: bodyPass
+  } = req.body || {};
+  const start = Date.now();
+
+  try {
+    const username = bodyUser || cachedWebdavCredentials.username || 'ncted';
+    const password = (bodyPass && String(bodyPass).trim()) || cachedWebdavCredentials.password || process.env.NEXTCLOUD_APP_PASSWORD || process.env.NEXTCLOUD_PASSWORD || '';
+    if (password && !cachedWebdavCredentials.password) {
+      cachedWebdavCredentials.password = password;
+      cachedWebdavCredentials.username = username;
+      if (serverUrl) cachedWebdavCredentials.serverUrl = String(serverUrl).replace(/\/$/, '');
+      saveNextcloudSessionToDisk();
+    }
+
+    const db = getStudioDb();
+    const revisions = querySunoRevisionsForTrack(trackId, trackTitle);
+
+    // Resolve canonical track ID if user/caller passed title only
+    let resolvedTrackId = (trackId || '').toUpperCase();
+    if (!/^TRK-\d+$/i.test(resolvedTrackId) && trackTitle) {
+      const defByTitle = CATALOG_TRACK_DEFINITIONS.find(
+        (d) =>
+          d.title.toLowerCase() === String(trackTitle).toLowerCase() ||
+          d.aliases.some((a) => String(trackTitle).toLowerCase().includes(a.toLowerCase()))
+      );
+      if (defByTitle) resolvedTrackId = defByTitle.trackId;
+    }
+
+    // 1. Live Nextcloud WebDAV PROPFIND Directory Scan (discovers newly moved/renamed stems & persists to SQLite)
+    const candidateFolders = new Set<string>();
+    if (originalPath && originalPath.includes('/')) {
+      candidateFolders.add(originalPath.substring(0, originalPath.lastIndexOf('/')));
+    }
+    const trackDef = CATALOG_TRACK_DEFINITIONS.find((d) => d.trackId === resolvedTrackId);
+    if (trackDef?.folderName) {
+      candidateFolders.add(`/remote.php/dav/files/${username}/Music-Production/${trackDef.folderName}`);
+      candidateFolders.add(`/remote.php/dav/files/${username}/Music-Production/00-Active_Projects/${trackDef.folderName}`);
+    }
+    if (db && resolvedTrackId) {
+      const songRow = db.prepare('SELECT nextcloud_directory FROM canonical_songs WHERE UPPER(id) = ?').get(resolvedTrackId) as any;
+      if (songRow?.nextcloud_directory) {
+        candidateFolders.add(
+          songRow.nextcloud_directory.startsWith('/')
+            ? songRow.nextcloud_directory
+            : `/remote.php/dav/files/${username}/${songRow.nextcloud_directory.replace(/^\/+/, '')}`
+        );
+      }
+    }
+
+    const discoveredFiles: Array<{ name: string; webdavPath: string; size: number; mimeType: string; score: number }> = [];
+    const targetTokens = `${trackTitle || ''} ${stemName || ''} ${stemType || ''} ${filename || ''}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((tok) => tok.length >= 3);
+
+    for (const folder of candidateFolders) {
+      try {
+        const files = await scanNextcloudAudioDirectory(folder, username, password);
+        for (const f of files) {
+          if (originalPath && f.webdavPath === originalPath) continue; // skip the broken path
+          const lowerName = f.name.toLowerCase();
+          let score = 10;
+          if (stemType && lowerName.includes(String(stemType).toLowerCase())) score += 40;
+          if (lowerName.includes('master') || lowerName.includes('remaster') || lowerName.includes('final')) score += 20;
+          if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav') || lowerName.endsWith('.flac')) score += 10;
+          for (const tok of targetTokens) {
+            if (lowerName.includes(tok)) score += 12;
+          }
+          discoveredFiles.push({ ...f, score });
+        }
+        if (discoveredFiles.length > 0) break;
+      } catch {
+        // try next folder
+      }
+    }
+
+    if (discoveredFiles.length > 0) {
+      discoveredFiles.sort((a, b) => b.score - a.score);
+      const best = discoveredFiles[0];
+      const folderDir = best.webdavPath.substring(0, best.webdavPath.lastIndexOf('/'));
+
+      if (resolvedTrackId) {
+        CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] = best.webdavPath;
+        for (const df of discoveredFiles.slice(0, 6)) {
+          upsertRelinkedAssetInSqlite({
+            trackId: resolvedTrackId,
+            webdavPath: df.webdavPath,
+            filename: df.name,
+            mimeType: df.mimeType,
+            fileSizeBytes: df.size,
+            directoryPath: folderDir
+          });
+        }
+      }
+
+      return res.json({
+        success: true,
+        matchedPath: best.webdavPath,
+        filename: best.name,
+        trackId: resolvedTrackId || trackId,
+        source: 'live_propfind',
+        discoveredCount: discoveredFiles.length,
+        discoveredFiles: discoveredFiles.slice(0, 8),
+        revisions,
+        latencyMs: Date.now() - start
+      });
+    }
+
+    // 2. Check existing SQLite nextcloud_assets (excluding the broken originalPath)
+    if (db && resolvedTrackId) {
+      const sqlRows = db.prepare('SELECT webdav_path, filename FROM nextcloud_assets WHERE UPPER(track_id) = ?').all(resolvedTrackId) as any[];
+      const viable = sqlRows.find(
+        (r) =>
+          r?.webdav_path &&
+          r.webdav_path !== originalPath &&
+          /\.(wav|mp3|flac|m4a|ogg)$/i.test(r.webdav_path)
+      );
+      if (viable) {
+        CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] = viable.webdav_path;
+        return res.json({
+          success: true,
+          matchedPath: viable.webdav_path,
+          filename: viable.filename,
+          trackId: resolvedTrackId,
+          source: 'sqlite_index',
+          revisions,
+          latencyMs: Date.now() - start
+        });
+      }
+    }
+
+    // 3. Reconciled CANONICAL_TRACK_REAL_AUDIO fallback (excluding broken originalPath)
+    if (resolvedTrackId && CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] && CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId] !== originalPath) {
+      const mapped = CANONICAL_TRACK_REAL_AUDIO[resolvedTrackId];
+      upsertRelinkedAssetInSqlite({
+        trackId: resolvedTrackId,
+        webdavPath: mapped,
+        filename: mapped.split('/').pop() || 'master.mp3'
+      });
+      return res.json({
+        success: true,
+        matchedPath: mapped,
+        filename: mapped.split('/').pop(),
+        trackId: resolvedTrackId,
+        source: 'canonical_mapping',
+        revisions,
+        latencyMs: Date.now() - start
+      });
+    }
+
+    // 4. If WebDAV is unreachable/missing but Suno revisions exist for this exact track, return them cleanly
+    if (revisions.length > 0) {
+      return res.json({
+        success: true,
+        matchedPath: revisions[0].streamUrl,
+        streamUrl: revisions[0].streamUrl,
+        filename: `${revisions[0].title} (Suno CloudFront).m4a`,
+        trackId: resolvedTrackId || revisions[0].songId,
+        source: 'suno_cloudfront',
+        revisions,
+        latencyMs: Date.now() - start
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      trackId: resolvedTrackId || trackId,
+      message: `No live WebDAV file or Suno revision matched '${trackTitle || trackId || filename}'.`,
+      revisions: [],
+      latencyMs: Date.now() - start
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// SQLite Catalog & Suno 372-Revision API
+app.get('/api/catalog/songs', (_req, res) => {
+  try {
+    const songs = queryFullRelationalCatalog();
+    res.json({ success: true, count: songs.length, songs, etag: getCatalogEtag() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/catalog/revisions/:songId', (req, res) => {
+  try {
+    const { songId } = req.params;
+    const queryTitle = (req.query.title as string) || '';
+    const db = getStudioDb();
+    let rows = db.prepare('SELECT * FROM suno_revisions WHERE UPPER(song_id) = UPPER(?) ORDER BY created_at DESC').all(songId) as any[];
+
+    if (rows.length === 0) {
+      const canonicalSong = CANONICAL_TRACKS.find((t) => t.id.toUpperCase() === songId.toUpperCase());
+      const defSong = CATALOG_TRACK_DEFINITIONS.find((d) => d.trackId.toUpperCase() === songId.toUpperCase());
+      const lookupTitle = queryTitle || canonicalSong?.title || defSong?.title || '';
+      if (lookupTitle) {
+        const matched = querySunoRevisionsForTrack(undefined, lookupTitle);
+        if (matched.length > 0) {
+          rows = db.prepare('SELECT * FROM suno_revisions WHERE UPPER(song_id) = UPPER(?) ORDER BY created_at DESC').all(matched[0].songId) as any[];
+        }
+      }
+    }
+
+    res.json({ success: true, songId, revisions: rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/database/stats', (_req, res) => {
+  try {
+    const studioStats = getStudioDbStats();
+    let sovereignStats = null;
+    try {
+      sovereignStats = getDatabaseStats();
+    } catch {}
+    res.json({
+      success: true,
+      studioDb: studioStats,
+      sovereignDb: sovereignStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Multi-Server MCP Ingestion Hub & Status Bento Aggregator
+app.use(createMcpHubRouter());
+
 // Vite middleware integration
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -4465,6 +5500,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[brickOS Studio] Server running on http://0.0.0.0:${PORT}`);
+    mcpPollingEngine.start();
   });
 }
 

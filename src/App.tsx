@@ -6,11 +6,13 @@
 import React from 'react';
 import BrickOSMusicStudioWorkspace from './brickos_music_studio_ai_production_workspace';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AudioDiagnosticToast } from './components/AudioDiagnosticToast';
 
 export default function App() {
   return (
     <ErrorBoundary fallbackTitle="brickOS Studio Workspace Error">
       <BrickOSMusicStudioWorkspace />
+      <AudioDiagnosticToast />
     </ErrorBoundary>
   );
 }

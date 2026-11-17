@@ -196,7 +196,7 @@ export const StudioCopilotDrawer: React.FC<StudioCopilotDrawerProps> = ({
                 className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-purple-300 font-mono focus:outline-none"
               >
                 <option value="gemini-3.1-pro-preview">gemini-3.1-pro</option>
-                <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+                <option value="gemini-4-hydrogen">gemini-4-hydrogen</option>
                 <option value="gemini-3.1-flash-lite">flash-lite</option>
               </select>
 

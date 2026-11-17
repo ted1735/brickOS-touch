@@ -56,9 +56,10 @@ import {
 } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
 import { getTrackStems } from '../data/nextcloudAssetIndex';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Activity } from 'lucide-react';
 import { SectionQuickHelpBanner } from './SectionQuickHelpBanner';
 import { NextcloudWebDavFileExplorer } from './NextcloudWebDavFileExplorer';
+import { NextcloudConnectionDebugModal } from './NextcloudConnectionDebugModal';
 
 interface NextcloudBentoSyncTabProps {
   tracks: Track[];
@@ -88,6 +89,7 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
   // Sync & Connection Test State
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isSyncingFolder, setIsSyncingFolder] = useState(false);
+  const [isDebugModalOpen, setIsDebugModalOpen] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{
     success: boolean;
     status?: number;
@@ -359,64 +361,74 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
       const returnedFiles = data.files || data.liveFiles || [];
 
       if (data.success && returnedFiles.length > 0) {
-        // Merge live WebDAV files with current asset catalog
-        const syncedAssets: NextcloudFolderAsset[] = returnedFiles.map((file: any, idx: number) => {
-          const existing = assets.find(a => a.filename.toLowerCase() === file.name.toLowerCase());
-          const webdavPath = file.href || `/remote.php/dav/files/ncted/Music-Production/${file.name}`;
-          const audioUrl = buildNextcloudStreamUrl(webdavPath);
-
-          if (existing) {
+        // Merge: Update existing assets with live metadata, preserve catalog stems, and add newly discovered files
+        const existingFilenames = new Set(assets.map(a => a.filename.toLowerCase()));
+        const updatedExisting = assets.map(asset => {
+          const liveMatch = returnedFiles.find((f: any) => f.name.toLowerCase() === asset.filename.toLowerCase() || f.href?.toLowerCase().endsWith(asset.filename.toLowerCase()));
+          if (liveMatch) {
+            const webdavPath = liveMatch.href || asset.webdavPath;
             return {
-              ...existing,
-              fileSizeBytes: file.size || existing.fileSizeBytes,
+              ...asset,
+              fileSizeBytes: liveMatch.size || asset.fileSizeBytes,
               webdavPath,
-              audioUrl: existing.audioUrl || audioUrl,
+              audioUrl: buildNextcloudStreamUrl(webdavPath),
               lastSyncedAt: new Date().toISOString()
             };
           }
-
-          // Auto-categorize fresh file
-          const guessedCat: NextcloudAssetCategory =
-            file.name.endsWith('.wav') || file.name.endsWith('.mp3')
-              ? file.name.includes('Vocal')
-                ? 'UVR5_VOCAL_STEM'
-                : file.name.includes('Inst')
-                ? 'INSTRUMENTAL_STEM'
-                : 'MASTER_AUDIO'
-              : file.name.endsWith('.png') || file.name.endsWith('.jpg')
-              ? 'VISUAL_ARTWORK'
-              : file.name.endsWith('.mp4')
-              ? 'VIDEO_REEL'
-              : 'LYRIC_SOP_DOC';
-
-          const match = autoMatchAssetToCatalog(file.name, tracks);
-          const matchedTrack = match.matchedTrackId ? tracks.find(t => t.id === match.matchedTrackId) : null;
-          const isAudio = guessedCat.includes('AUDIO') || guessedCat.includes('STEM');
-
-          return {
-            id: `NC-LIVE-${Date.now()}-${idx}`,
-            filename: file.name,
-            folderId: '207332',
-            category: guessedCat,
-            fileSizeBytes: file.size || 0,
-            fileSizeFormatted: `${Math.round((file.size || 0) / 1024 / 1024)} MB`,
-            mimeType: file.mimeType || 'application/octet-stream',
-            webdavPath,
-            audioUrl: isAudio ? audioUrl : undefined,
-            shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
-            matchedTrackId: match.matchedTrackId || undefined,
-            matchedTrackTitle: matchedTrack?.title,
-            matchConfidence: match.confidence,
-            suggestedTrackId: match.matchedTrackId || undefined,
-            suggestedCategory: match.detectedCategory || guessedCat,
-            isMatched: !!match.matchedTrackId && match.confidence >= 50,
-            notes: `Synced from Nextcloud folder /Music-Production on ${new Date().toLocaleDateString()}`,
-            lastSyncedAt: new Date().toISOString()
-          };
+          return asset;
         });
 
-        setAssets(syncedAssets);
-        setCopiedPill(`Live synced ${syncedAssets.length} files from /Music-Production!`);
+        // Add newly discovered files
+        const newDiscovered: NextcloudFolderAsset[] = [];
+        returnedFiles.forEach((file: any, idx: number) => {
+          if (!existingFilenames.has(file.name.toLowerCase())) {
+            const webdavPath = file.href || `/remote.php/dav/files/ncted/Music-Production/${file.name}`;
+            const audioUrl = buildNextcloudStreamUrl(webdavPath);
+            const lower = file.name.toLowerCase();
+
+            const guessedCat: NextcloudAssetCategory =
+              lower.endsWith('.wav') || lower.endsWith('.mp3') || lower.endsWith('.flac')
+                ? lower.includes('vocal')
+                  ? 'UVR5_VOCAL_STEM'
+                  : lower.includes('inst')
+                  ? 'INSTRUMENTAL_STEM'
+                  : 'MASTER_AUDIO'
+                : lower.endsWith('.png') || lower.endsWith('.jpg')
+                ? 'VISUAL_ARTWORK'
+                : lower.endsWith('.mp4')
+                ? 'VIDEO_REEL'
+                : 'LYRIC_SOP_DOC';
+
+            const match = autoMatchAssetToCatalog(file.name, tracks);
+            const matchedTrack = match.matchedTrackId ? tracks.find(t => t.id === match.matchedTrackId) : null;
+            const isAudio = guessedCat.includes('AUDIO') || guessedCat.includes('STEM');
+
+            newDiscovered.push({
+              id: `NC-LIVE-${Date.now()}-${idx}`,
+              filename: file.name,
+              folderId: '207332',
+              category: guessedCat,
+              fileSizeBytes: file.size || 0,
+              fileSizeFormatted: `${Math.round((file.size || 0) / 1024 / 1024)} MB`,
+              mimeType: file.mimeType || 'application/octet-stream',
+              webdavPath,
+              audioUrl: isAudio ? audioUrl : undefined,
+              shareUrl: 'https://nextcloud.moyercloud.com/index.php/apps/files/files/207332?dir=/Music-Production',
+              matchedTrackId: match.matchedTrackId || undefined,
+              matchedTrackTitle: matchedTrack?.title,
+              matchConfidence: match.confidence,
+              suggestedTrackId: match.matchedTrackId || undefined,
+              suggestedCategory: match.detectedCategory || guessedCat,
+              isMatched: !!match.matchedTrackId && match.confidence >= 50,
+              notes: `Synced from Nextcloud WebDAV on ${new Date().toLocaleDateString()}`,
+              lastSyncedAt: new Date().toISOString()
+            });
+          }
+        });
+
+        const merged = [...updatedExisting, ...newDiscovered];
+        setAssets(merged);
+        setCopiedPill(`✓ Synced ${returnedFiles.length} files from Nextcloud (/Music-Production) · ${merged.length} assets ready!`);
       } else {
         handleAutoMatchAll();
         setCopiedPill('Refreshed /Music-Production files & catalog match scores');
@@ -890,7 +902,27 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
         {isSettingsOpen && (
           <div className={`mt-3 pt-3 border-t space-y-3 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex-1">
+              <div className="flex-1 space-y-2">
+                <div>
+                  <div className="text-[11px] font-mono uppercase font-bold text-slate-400 mb-1">
+                    Nextcloud Server URL or IP Address
+                  </div>
+                  <input
+                    type="text"
+                    value={config.serverUrl || ''}
+                    onChange={e => {
+                      const nextCfg = { ...config, serverUrl: e.target.value };
+                      setConfig(nextCfg);
+                      saveNextcloudConfig(nextCfg);
+                    }}
+                    placeholder="https://nextcloud.mermaid-symmetric.ts.net or 100.x.y.z"
+                    className={`w-full p-2 rounded-xl border font-mono text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 ${
+                      isDarkMode
+                        ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                    }`}
+                  />
+                </div>
                 <div className="flex items-center justify-between text-[11px] font-mono uppercase font-bold text-slate-400 mb-1">
                   <span className="flex items-center gap-1">
                     <Key className="w-3 h-3 text-amber-500" />
@@ -904,13 +936,13 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={appPasswordInput}
                     onChange={e => setAppPasswordInput(e.target.value)}
                     placeholder="Enter Nextcloud App Password (e.g. xxxx-xxxx-xxxx)..."
-                    className={`flex-1 p-2 rounded-xl border font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                    className={`flex-1 min-w-[180px] p-2 rounded-xl border font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
                       isDarkMode
                         ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
                         : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
@@ -927,6 +959,14 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
                   >
                     {isTestingConnection ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />}
                     <span>Test Ping</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDebugModalOpen(true)}
+                    className="px-3 py-2 rounded-xl text-xs font-bold border bg-amber-950/60 hover:bg-amber-900/70 text-amber-300 border-amber-700/60 transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Debug Visibility</span>
                   </button>
                 </div>
               </div>
@@ -1196,7 +1236,17 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
               return (
                 <div
                   key={asset.id}
-                  onClick={() => setSelectedAssetId(asset.id)}
+                  onClick={() => {
+                    setSelectedAssetId(asset.id);
+                    if (asset.matchedTrackId) {
+                      const trk = tracks.find(t => t.id === asset.matchedTrackId);
+                      if (trk && onSelectTrack) {
+                        onSelectTrack(trk);
+                        setCopiedPill(`✓ Selected Track "${trk.title}" (${trk.id})`);
+                        setTimeout(() => setCopiedPill(''), 2500);
+                      }
+                    }
+                  }}
                   className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                     isSelected
                       ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md bg-indigo-950/30'
@@ -1864,6 +1914,16 @@ export const NextcloudBentoSyncTab: React.FC<NextcloudBentoSyncTabProps> = ({
           </div>
         </div>
       )}
+      <NextcloudConnectionDebugModal
+        isOpen={isDebugModalOpen}
+        onClose={() => setIsDebugModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={(newUrl) => {
+          const nextCfg = { ...config, serverUrl: newUrl };
+          setConfig(nextCfg);
+          saveNextcloudConfig(nextCfg);
+        }}
+      />
     </div>
   );
 };

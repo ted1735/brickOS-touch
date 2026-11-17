@@ -108,7 +108,7 @@ export const LyricBrainstormingChatbot: React.FC<LyricBrainstormingChatbotProps>
   const [isLoading, setIsLoading] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [insertedMsgId, setInsertedMsgId] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<'gemini-3.8-flash' | 'gemini-3.1-pro-preview'>('gemini-3.1-pro-preview');
+  const [selectedModel, setSelectedModel] = useState<'gemini-4-hydrogen' | 'gemini-3.1-pro-preview'>('gemini-3.1-pro-preview');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -274,7 +274,7 @@ Guidelines:
               className="bg-transparent text-xs font-mono font-bold text-slate-300 focus:outline-hidden cursor-pointer"
             >
               <option value="gemini-3.1-pro-preview">gemini-3.1-pro (Deep Reasoning & Production Craft)</option>
-              <option value="gemini-3.8-flash">gemini-3.8-flash (Fast & Lightweight)</option>
+              <option value="gemini-4-hydrogen">gemini-4-hydrogen (Fast & Lightweight)</option>
             </select>
           </div>
 

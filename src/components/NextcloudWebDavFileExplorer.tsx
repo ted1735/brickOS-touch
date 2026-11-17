@@ -50,7 +50,10 @@ import { Track, WebDavFolderItem, WebDavFileItem, WebDavBreadcrumb, WebDavBrowse
 import { CANONICAL_TRACKS } from '../data/canonicalCatalog';
 import { getSavedNextcloudConfig } from '../data/nextcloudFolderAssets';
 import { audioMiniDaw } from '../utils/audioEngine';
+import { buildNextcloudStreamUrl } from '../utils/nextcloudStream';
 import { TailscaleVpnModal } from './TailscaleVpnModal';
+import { NextcloudConnectionDebugModal } from './NextcloudConnectionDebugModal';
+import { emitAudioDiagnostic } from './AudioDiagnosticToast';
 
 interface NextcloudWebDavFileExplorerProps {
   tracks?: Track[];
@@ -123,6 +126,7 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
   const [previewContent, setPreviewContent] = useState<string>('');
   const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
   const [isTailscaleModalOpen, setIsTailscaleModalOpen] = useState<boolean>(false);
+  const [isDebugModalOpen, setIsDebugModalOpen] = useState<boolean>(false);
 
   // Multi-Route Redundancy & Ultra-Highspeed State
   const [activeRoute, setActiveRoute] = useState<'primary' | 'fallback'>('primary');
@@ -192,6 +196,13 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     } finally {
       if (!silent) setIsLoading(false);
     }
+  };
+
+  // Live PROPFIND folder refresh: explicitly forces a cache bypass and re-indexes current directory
+  const handleRefreshFolder = async () => {
+    showToast('🔄 Bypassing RAM cache: Querying Nextcloud WebDAV via live PROPFIND...');
+    await fetchDirectory(currentPath, false, true);
+    showToast(`⚡ PROPFIND Complete: Live folder re-indexed (${folders.length + files.length} items synced)`);
   };
 
   // Manually purge RAM PROPFIND Cache
@@ -287,9 +298,23 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
     setAudioLoading(true);
     setCurrentTime(0);
 
+    const streamUrl = file.streamUrl && file.streamUrl.includes('password=')
+      ? file.streamUrl
+      : buildNextcloudStreamUrl(file.path);
+
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = file.streamUrl;
+      audioRef.current.src = streamUrl;
+      audioRef.current.onerror = () => {
+        setAudioLoading(false);
+        emitAudioDiagnostic({
+          type: 'error',
+          trackTitle: file.name,
+          originalPath: file.path,
+          message: `WebDAV audio unavailable for '${file.name}'.`,
+          canRelink: true
+        });
+      };
       audioRef.current.load();
       audioRef.current.play()
         .then(() => {
@@ -299,7 +324,13 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         .catch(err => {
           console.warn('Playback trigger error:', err);
           setAudioLoading(false);
-          showToast(`Audition started for ${file.name}`);
+          emitAudioDiagnostic({
+            type: 'error',
+            trackTitle: file.name,
+            originalPath: file.path,
+            message: `Playback interrupted for '${file.name}': ${err.message}`,
+            canRelink: true
+          });
         });
     }
   };
@@ -336,6 +367,18 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
   // Directory Navigation Handlers
   const handleNavigateToFolder = (folderPath: string) => {
     fetchDirectory(folderPath);
+
+    // Sync Studio-wide track selection when navigating into any song folder
+    const folderName = folderPath.split('/').filter(Boolean).pop() || '';
+    const cleanFolder = folderName.toLowerCase().replace(/[-_]/g, '');
+    const matched = tracks.find(t => {
+      const cleanTitle = t.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return cleanFolder.includes(cleanTitle) || cleanTitle.includes(cleanFolder) || t.id.toLowerCase() === folderName.toLowerCase();
+    });
+    if (matched && onSelectTrack) {
+      onSelectTrack(matched);
+      showToast(`✓ Selected "${matched.title}" (${matched.id})`);
+    }
   };
 
   const handleNavigateUp = () => {
@@ -614,26 +657,35 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
 
   // Detected Song Projects from root folders
   const songProjectShortcuts = useMemo(() => {
-    const knownNames = [
-      { name: 'Meet_Me_Here', trackId: 'TRK-01', title: 'Meet Me Here' },
-      { name: 'Brick-by-Brick', trackId: 'TRK-02', title: 'Brick by Brick' },
-      { name: 'Every-Candles-Victory', trackId: 'TRK-03', title: 'Every Candle\'s Victory' },
-      { name: 'Breath-and-Bone', trackId: 'TRK-04', title: 'Breath and Bone' },
-      { name: 'Calvary-Grit', trackId: 'TRK-05', title: 'Calvary Grit' },
-      { name: 'Blindfold-Blessing', trackId: 'TRK-06', title: 'Blindfold Blessing' },
-      { name: 'In-Our-Veins', trackId: 'TRK-07', title: 'In Our Veins' },
-      { name: 'We-Bow-We-Shout', trackId: 'TRK-08', title: 'We Bow We Shout' },
+    return [
+      { name: 'Brick-by-Brick', trackId: 'TRK-01', title: 'Brick by Brick' },
+      { name: 'The-Masters-Hand', trackId: 'TRK-02', title: "The Master's Hand" },
+      { name: 'Every-Candles-Victory', trackId: 'TRK-03', title: "Every Candle's Victory" },
+      { name: 'CheckYourHeartLight', trackId: 'TRK-04', title: 'Check Your Heart Light' },
+      { name: 'Hands-Under-the-Table', trackId: 'TRK-05', title: 'Hands Under the Table' },
+      { name: 'Nothing-But-the-Blood', trackId: 'TRK-06', title: 'Nothing But The Blood' },
+      { name: 'Calvary-Grit', trackId: 'TRK-07', title: 'Calvary Grit' },
+      { name: 'TheWorkAintDone', trackId: 'TRK-08', title: "The Work Ain't Done" },
       { name: 'The-Anchor', trackId: 'TRK-09', title: 'The Anchor' },
-      { name: 'The-Masters-Hand', trackId: 'TRK-10', title: 'The Master\'s Hand' },
-      { name: 'Through-the-Valley-Or-the-Flame', trackId: 'TRK-11', title: 'Through the Valley' },
-      { name: 'The-Final-Say', trackId: 'TRK-12', title: 'The Final Say' },
-      { name: 'Trading-In-The-Mask', trackId: 'TRK-13', title: 'Trading In The Mask' },
+      { name: 'The-Blueprint-and-The-Blood', trackId: 'TRK-10', title: 'The Blueprint & The Blood' },
+      { name: 'The-Weight-and-The-Wisdom', trackId: 'TRK-11', title: 'The Weight & The Wisdom' },
+      { name: 'Leaning-Not-Leaving', trackId: 'TRK-12', title: 'Leaning Not Leaving' },
+      { name: 'Unity-In-The-Friction', trackId: 'TRK-13', title: 'Unity In The Friction' },
       { name: 'Venom-into-Victory', trackId: 'TRK-14', title: 'Venom into Victory' },
-      { name: 'Unity-In-The-Friction', trackId: 'TRK-15', title: 'Unity In The Friction' },
-      { name: 'Triumph-in-Your-Name', trackId: 'TRK-16', title: 'Triumph in Your Name' },
+      { name: 'The-Final-Say', trackId: 'TRK-15', title: 'The Final Say' },
+      { name: 'Meet_Me_Here', trackId: 'TRK-16', title: 'Meet Me Here' },
+      { name: 'In-Our-Veins', trackId: 'TRK-17', title: 'In Our Veins' },
+      { name: 'We-Bow-We-Shout', trackId: 'TRK-18', title: 'We Bow We Shout' },
+      { name: 'Through-the-Valley-Or-the-Flame', trackId: 'TRK-19', title: 'Through the Valley' },
+      { name: 'Ghost-In-The-Machine', trackId: 'TRK-20', title: 'Ghost In The Machine' },
+      { name: 'Milestone', trackId: 'TRK-21', title: 'The Milestone' },
+      { name: 'Breath-and-Bone', trackId: 'TRK-22', title: 'Breath and Bone' },
+      { name: 'Blindfold-Blessing', trackId: 'TRK-23', title: 'Blindfold Blessing' },
+      { name: 'Trading-In-The-Mask', trackId: 'TRK-24', title: 'Trading In The Mask' },
+      { name: 'Neverending-Whats-Next', trackId: 'TRK-25', title: "Neverending What's Next" },
+      { name: 'Manic_In_The_Mundane', trackId: 'TRK-29', title: 'Manic In The Mundane' },
       { name: '00-Active_Projects', trackId: 'ACTIVE', title: 'Active Stems & Mixes' }
     ];
-    return knownNames;
   }, []);
 
   return (
@@ -690,17 +742,17 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => fetchDirectory(currentPath)}
+            onClick={() => handleRefreshFolder()}
             disabled={isLoading}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer ${
               isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-slate-700 hover:border-cyan-500/50'
+                : 'bg-slate-100 hover:bg-slate-200 text-cyan-700 border-slate-300'
             }`}
-            title="Refresh Directory (PROPFIND)"
+            title="Bypasses RAM cache and queries live Nextcloud WebDAV via PROPFIND to detect newly added or edited files"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-cyan-400' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">Refresh Folder</span>
           </button>
 
           <button
@@ -737,6 +789,20 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
           >
             <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
             <span className="hidden sm:inline">Tailscale VPN</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsDebugModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer ${
+              isDarkMode
+                ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50 shadow-xs'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+            }`}
+            title="Inspect live DNS, TCP, Tailscale, and WebDAV /Music-Production visibility"
+          >
+            <Activity className="w-3.5 h-3.5 text-amber-400" />
+            <span>Debug Connection</span>
           </button>
 
           {onClose && (
@@ -983,7 +1049,18 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
               return (
                 <button
                   key={proj.name}
-                  onClick={() => handleNavigateToFolder(projectPath)}
+                  onClick={() => {
+                    handleNavigateToFolder(projectPath);
+                    const matched = tracks.find(t => 
+                      t.id.toLowerCase() === proj.trackId.toLowerCase() ||
+                      t.title.toLowerCase().replace(/[^a-z0-9]/g, '').includes(proj.title.toLowerCase().replace(/[^a-z0-9]/g, '')) ||
+                      proj.title.toLowerCase().replace(/[^a-z0-9]/g, '').includes(t.title.toLowerCase().replace(/[^a-z0-9]/g, ''))
+                    );
+                    if (matched && onSelectTrack) {
+                      onSelectTrack(matched);
+                    }
+                    showToast(`✓ Selected "${proj.title}" · Browsing folder`);
+                  }}
                   className={`w-full text-left p-2 rounded-xl border flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
                     isSelected
                       ? 'bg-indigo-600/15 border-indigo-500/50 text-indigo-300 font-bold'
@@ -1027,17 +1104,26 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 space-y-6">
           {/* Error / Auth Required Banner */}
           {errorMessage && (
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
-              <button
-                onClick={() => fetchDirectory(currentPath)}
-                className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold"
-              >
-                Retry
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDebugModalOpen(true)}
+                  className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold cursor-pointer"
+                >
+                  Inspect What Server Sees
+                </button>
+                <button
+                  onClick={() => fetchDirectory(currentPath)}
+                  className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
             </div>
           )}
 
@@ -1155,7 +1241,14 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                     return (
                       <div
                         key={file.path}
-                        className={`group relative p-3.5 rounded-xl border flex flex-col justify-between gap-3 transition ${
+                        onClick={() => {
+                          if (file.isAudio) {
+                            handleTogglePlay(file);
+                          } else if (file.isImage || file.isDocument || file.isVideo) {
+                            handleOpenPreview(file);
+                          }
+                        }}
+                        className={`group relative p-3.5 rounded-xl border flex flex-col justify-between gap-3 transition cursor-pointer ${
                           isCurrentPlaying
                             ? 'bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-950/40'
                             : isDarkMode
@@ -1269,25 +1362,29 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                         <div className={`pt-2 border-t flex items-center justify-between gap-1 text-[11px] ${
                           isDarkMode ? 'border-slate-800/80' : 'border-slate-100'
                         }`}>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             {file.isAudio && onSendToMixer && (
-                              <button
-                                onClick={() => onSendToMixer(file, 0)}
-                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 transition cursor-pointer flex items-center gap-1"
-                                title="Send audio to Mini-DAW multi-track mixer channel"
-                              >
-                                <Sliders className="w-3 h-3" />
-                                <span>DAW</span>
-                              </button>
+                              <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800">
+                                {[0, 1, 2, 3].map((chIdx) => (
+                                  <button
+                                    key={chIdx}
+                                    onClick={() => onSendToMixer(file, chIdx)}
+                                    className="min-h-[34px] sm:min-h-[26px] px-2 rounded-md text-[10px] font-mono font-bold bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 active:scale-95 transition cursor-pointer"
+                                    title={`Tap to assign audio to Mini-DAW Channel ${chIdx + 1}`}
+                                  >
+                                    Ch{chIdx + 1}
+                                  </button>
+                                ))}
+                              </div>
                             )}
 
                             <a
                               href={file.streamUrl}
                               download={file.name}
-                              className="p-1 rounded text-slate-400 hover:text-white transition"
+                              className="min-w-[34px] min-h-[34px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white transition"
                               title="Download file"
                             >
-                              <Download className="w-3 h-3" />
+                              <Download className="w-3.5 h-3.5" />
                             </a>
                           </div>
 
@@ -1351,7 +1448,14 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                         return (
                           <tr
                             key={file.path}
-                            className={`group transition ${
+                            onClick={() => {
+                              if (file.isAudio) {
+                                handleTogglePlay(file);
+                              } else if (file.isImage || file.isDocument || file.isVideo) {
+                                handleOpenPreview(file);
+                              }
+                            }}
+                            className={`group transition cursor-pointer ${
                               isCurrentPlaying
                                 ? 'bg-indigo-950/30'
                                 : isDarkMode
@@ -1405,13 +1509,18 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
                             <td className="py-2 px-4 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {file.isAudio && onSendToMixer && (
-                                  <button
-                                    onClick={() => onSendToMixer(file, 0)}
-                                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20"
-                                    title="Send to Mini-DAW"
-                                  >
-                                    DAW
-                                  </button>
+                                  <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 mr-1">
+                                    {[0, 1, 2, 3].map((chIdx) => (
+                                      <button
+                                        key={chIdx}
+                                        onClick={() => onSendToMixer(file, chIdx)}
+                                        className="min-h-[36px] sm:min-h-[28px] px-2 rounded text-[10px] font-mono font-bold bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 active:scale-95 cursor-pointer"
+                                        title={`Route to Mini-DAW Channel ${chIdx + 1}`}
+                                      >
+                                        Ch{chIdx + 1}
+                                      </button>
+                                    ))}
+                                  </div>
                                 )}
                                 <a
                                   href={file.streamUrl}
@@ -1533,14 +1642,19 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
             </div>
 
             {onSendToMixer && (
-              <button
-                onClick={() => onSendToMixer(activeAudio, 0)}
-                className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-cyan-950/40"
-                title="Send current stem to Mini-DAW"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Load in DAW</span>
-              </button>
+              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <span className="text-[10px] font-mono text-slate-400 px-1.5 hidden sm:inline">Assign:</span>
+                {[0, 1, 2, 3].map((chIdx) => (
+                  <button
+                    key={chIdx}
+                    onClick={() => onSendToMixer(activeAudio, chIdx)}
+                    className="min-h-[40px] px-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-bold active:scale-95 transition cursor-pointer"
+                    title={`Route current stem to Mini-DAW Channel ${chIdx + 1}`}
+                  >
+                    Ch{chIdx + 1}
+                  </button>
+                ))}
+              </div>
             )}
 
             <button
@@ -1933,6 +2047,20 @@ export const NextcloudWebDavFileExplorer: React.FC<NextcloudWebDavFileExplorerPr
         isOpen={isTailscaleModalOpen}
         onClose={() => setIsTailscaleModalOpen(false)}
         isDarkMode={isDarkMode}
+        onOpenVisibilityDebugger={() => {
+          setIsTailscaleModalOpen(false);
+          setIsDebugModalOpen(true);
+        }}
+      />
+
+      <NextcloudConnectionDebugModal
+        isOpen={isDebugModalOpen}
+        onClose={() => setIsDebugModalOpen(false)}
+        isDarkMode={isDarkMode}
+        onAppliedServerUrl={() => {
+          fetchRouteStatus();
+          fetchDirectory(currentPath, false, true);
+        }}
       />
     </div>
   );
