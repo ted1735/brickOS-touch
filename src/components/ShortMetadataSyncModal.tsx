@@ -16,12 +16,14 @@ import {
   ReadyShortItem,
   YouTubeVideoStat,
   SocialOutletStatus,
+  PlatformOutletLinkEntry,
   McpServerPublic,
   CANONICAL_PLAYLISTS,
   SOCIAL_OUTLET_DEFINITIONS,
   OUTLET_STATUS_OPTIONS,
   toTrackSlug,
-  checkDaypartViolation
+  checkDaypartViolation,
+  isSafeExternalUrl
 } from '../types/mcpStatus';
 
 export interface EditableShortPayload {
@@ -82,8 +84,8 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
   const [canonicalMasterFile, setCanonicalMasterFile] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Per-outlet status draft
-  const [outletMap, setOutletMap] = useState<Record<string, string>>({});
+  // Per-outlet alignment state (status, direct post/scheduled URL, item ID)
+  const [outletDrafts, setOutletDrafts] = useState<Record<string, PlatformOutletLinkEntry>>({});
 
   // Sync target toggles
   const [syncServerId, setSyncServerId] = useState<string>('brickos-primary-mcp');
@@ -104,6 +106,12 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
           t.title.toLowerCase() === (short.campaign || '').toLowerCase())
     );
 
+    const resolvedYtId = short.youtube_id || liveVideo?.video_id || '';
+    const resolvedYtUrl = short.youtube_url || liveVideo?.url || '';
+    const resolvedSpotifyUrl = short.spotify_url || releaseLinks?.spotify_track || '';
+    const resolvedAppleUrl = short.apple_music_url || releaseLinks?.apple_music || '';
+    const resolvedYtMusicUrl = short.youtube_music_url || releaseLinks?.youtube_music || '';
+
     setTitle(short.title || liveVideo?.title || '');
     setTrackTitle(short.track || initialTrack?.title || short.campaign || '');
     setCampaign(short.campaign || initialTrack?.title || '');
@@ -111,35 +119,61 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
     setHookText(short.hook_text || '');
     setCaption(short.caption || '');
     setScheduledSlot(short.scheduled_slot || '');
-    setYoutubeId(short.youtube_id || liveVideo?.video_id || '');
-    setYoutubeUrl(short.youtube_url || liveVideo?.url || '');
-    setSpotifyUrl(short.spotify_url || releaseLinks?.spotify_track || '');
-    setAppleMusicUrl(short.apple_music_url || releaseLinks?.apple_music || '');
-    setYoutubeMusicUrl(short.youtube_music_url || releaseLinks?.youtube_music || '');
+    setYoutubeId(resolvedYtId);
+    setYoutubeUrl(resolvedYtUrl);
+    setSpotifyUrl(resolvedSpotifyUrl);
+    setAppleMusicUrl(resolvedAppleUrl);
+    setYoutubeMusicUrl(resolvedYtMusicUrl);
     setCanonicalMasterFile('');
     setNotes('');
     setSyncResults([]);
     setSyncServerId(servers[0]?.id || 'brickos-primary-mcp');
 
-    const initialOutlets: Record<string, string> = {};
+    const initialOutlets: Record<string, PlatformOutletLinkEntry> = {};
     for (const def of SOCIAL_OUTLET_DEFINITIONS) {
+      const fromShort = short.platform_links?.[def.key];
       const existing = initialTrack
         ? outletStatuses.find((o) => o?.trackId === initialTrack.id && o?.outletKey === def.key)
         : undefined;
-      if (existing) {
-        initialOutlets[def.key] = existing.status;
-        if (def.key === 'youtube_shorts' && existing.playlistId) {
-          setPlaylistId(existing.playlistId);
-        }
-      } else if (def.key === 'youtube_shorts') {
-        initialOutlets[def.key] = liveVideo ? 'Published' : 'Scheduled';
-      } else if (def.key === 'distro_streaming') {
-        initialOutlets[def.key] = short.spotify_url ? 'Published' : 'Not Started';
-      } else {
-        initialOutlets[def.key] = 'Scheduled';
+
+      const defaultStatus =
+        fromShort?.status ||
+        existing?.status ||
+        (def.key === 'youtube_shorts'
+          ? liveVideo
+            ? 'Published'
+            : 'Scheduled'
+          : def.key === 'distro_streaming'
+          ? resolvedSpotifyUrl || resolvedAppleUrl
+            ? 'Published'
+            : 'Not Started'
+          : 'Scheduled');
+
+      const defaultUrl =
+        fromShort?.postUrl ||
+        existing?.postUrl ||
+        (def.key === 'youtube_shorts'
+          ? resolvedYtUrl
+          : def.key === 'distro_streaming'
+          ? resolvedSpotifyUrl || resolvedAppleUrl || resolvedYtMusicUrl
+          : '');
+
+      const defaultPostId =
+        fromShort?.postId ||
+        existing?.postId ||
+        (def.key === 'youtube_shorts' ? resolvedYtId : '');
+
+      initialOutlets[def.key] = {
+        status: defaultStatus,
+        postUrl: defaultUrl,
+        postId: defaultPostId
+      };
+
+      if (def.key === 'youtube_shorts' && existing?.playlistId) {
+        setPlaylistId(existing.playlistId);
       }
     }
-    setOutletMap(initialOutlets);
+    setOutletDrafts(initialOutlets);
   }, [isOpen, target?.short?.id, target?.liveVideo?.video_id]);
 
   if (!isOpen || !target) return null;
@@ -156,6 +190,20 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
   const resolvedSlug = toTrackSlug(trackTitle || campaign || title);
   const daypartWarning = checkDaypartViolation('Cohort C', scheduledSlot);
 
+  const updateOutletDraft = (outletKey: string, patch: Partial<PlatformOutletLinkEntry>) => {
+    setOutletDrafts((prev) => {
+      const current = prev[outletKey] || { status: 'Not Started', postUrl: '', postId: '' };
+      return {
+        ...prev,
+        [outletKey]: { ...current, ...patch }
+      };
+    });
+    if (outletKey === 'youtube_shorts') {
+      if (patch.postUrl !== undefined) setYoutubeUrl(patch.postUrl);
+      if (patch.postId !== undefined) setYoutubeId(patch.postId);
+    }
+  };
+
   const handleSaveAndSync = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -166,10 +214,15 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
     setIsSubmitting(true);
     setSyncResults([]);
     try {
-      const outletUpdates = SOCIAL_OUTLET_DEFINITIONS.map((def) => ({
-        outletKey: def.key,
-        status: outletMap[def.key] || 'Not Started'
-      }));
+      const outletUpdates = SOCIAL_OUTLET_DEFINITIONS.map((def) => {
+        const draft = outletDrafts[def.key] || { status: 'Not Started', postUrl: '', postId: '' };
+        return {
+          outletKey: def.key,
+          status: draft.status || 'Not Started',
+          postUrl: (draft.postUrl || '').trim(),
+          postId: (draft.postId || '').trim()
+        };
+      });
 
       const res = await fetch('/api/mcp/shorts/update-sync', {
         method: 'POST',
@@ -217,7 +270,7 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
       const failedCount = (data.syncResults || []).filter((r: any) => !r.ok).length;
       onNotify(
         failedCount === 0
-          ? 'Short metadata saved & synced to selected platforms.'
+          ? 'Short metadata & platform links saved & synced.'
           : `Saved locally; ${failedCount} remote MCP sync target reported a notice.`,
         failedCount === 0 ? 'success' : 'info'
       );
@@ -453,9 +506,13 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
                 <input
                   type="text"
                   value={youtubeId}
-                  onChange={(e) => setYoutubeId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setYoutubeId(val);
+                    updateOutletDraft('youtube_shorts', { postId: val });
+                  }}
                   placeholder="OVjC20xByzE"
-                  className={`w-full min-h-[38px] px-3 py-1 rounded-lg border text-xs font-mono ${inputBg}`}
+                  className={`w-full min-h-[38px] px-3 py-1 rounded-lg border text-xs font-mono tabular-nums ${inputBg}`}
                 />
               </div>
               <div>
@@ -463,7 +520,11 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
                 <input
                   type="url"
                   value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setYoutubeUrl(val);
+                    updateOutletDraft('youtube_shorts', { postUrl: val });
+                  }}
                   placeholder="https://youtube.com/shorts/..."
                   className={`w-full min-h-[38px] px-3 py-1 rounded-lg border text-xs font-mono ${inputBg}`}
                 />
@@ -476,7 +537,11 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
                 <input
                   type="url"
                   value={spotifyUrl}
-                  onChange={(e) => setSpotifyUrl(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSpotifyUrl(val);
+                    if (val) updateOutletDraft('distro_streaming', { postUrl: val });
+                  }}
                   placeholder="https://open.spotify.com/track/..."
                   className={`w-full min-h-[38px] px-3 py-1 rounded-lg border text-xs font-mono ${inputBg}`}
                 />
@@ -493,30 +558,100 @@ export const ShortMetadataSyncModal: React.FC<ShortMetadataSyncModalProps> = ({
               </div>
             </div>
 
-            {/* Outlet Status Check-In */}
-            <div className="space-y-2 pt-1">
-              <div className={`text-xs font-semibold ${mutedText}`}>
-                Platform Alignment Statuses {resolvedTrack ? `(${resolvedTrack.id})` : ''}
+            {/* Platform Alignment Statuses & Direct Post / Scheduled Links */}
+            <div className="space-y-2.5 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className={`text-xs font-semibold ${mutedText}`}>
+                  Platform Alignment &amp; Direct Links {resolvedTrack ? `(${resolvedTrack.id})` : ''}
+                </div>
+                <div className={`text-[11px] ${mutedText}`}>
+                  Direct links open scheduled items, Reels, TikToks &amp; posts
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                {SOCIAL_OUTLET_DEFINITIONS.map((def) => (
-                  <div key={def.key}>
-                    <div className={`text-[11px] font-medium truncate mb-1 ${mutedText}`}>{def.label}</div>
-                    <select
-                      value={outletMap[def.key] || 'Not Started'}
-                      onChange={(e) =>
-                        setOutletMap((prev) => ({ ...prev, [def.key]: e.target.value }))
-                      }
-                      className={`w-full min-h-[36px] px-2 py-1 rounded-lg border text-[11px] cursor-pointer ${inputBg}`}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {SOCIAL_OUTLET_DEFINITIONS.map((def) => {
+                  const draft = outletDrafts[def.key] || { status: 'Not Started', postUrl: '', postId: '' };
+                  const hasValidUrl = isSafeExternalUrl(draft.postUrl);
+                  const placeholderByOutlet: Record<string, { url: string; id: string }> = {
+                    youtube_shorts: { url: 'https://youtube.com/shorts/...', id: 'YouTube Video ID' },
+                    tiktok: { url: 'https://www.tiktok.com/@brickredeemed/video/...', id: 'TikTok Video ID' },
+                    instagram_reels: { url: 'https://www.instagram.com/reel/...', id: 'IG Media / Sched ID' },
+                    facebook_x: { url: 'https://www.facebook.com/... or https://x.com/...', id: 'FB / X Post ID' },
+                    distro_streaming: { url: 'https://open.spotify.com/track/...', id: 'UPC / ISRC / Release ID' }
+                  };
+                  const ph = placeholderByOutlet[def.key] || { url: 'https://...', id: 'Item ID' };
+
+                  return (
+                    <div
+                      key={def.key}
+                      className={`rounded-xl border p-3 space-y-2 ${
+                        isDarkMode ? 'border-slate-800 bg-slate-950/70' : 'border-slate-200 bg-slate-50/80'
+                      }`}
                     >
-                      {OUTLET_STATUS_OPTIONS.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold truncate">{def.label}</div>
+                          <div className={`text-[10px] truncate ${mutedText}`}>{def.handle}</div>
+                        </div>
+                        <select
+                          value={draft.status || 'Not Started'}
+                          onChange={(e) => updateOutletDraft(def.key, { status: e.target.value })}
+                          aria-label={`${def.label} release status`}
+                          className={`min-h-[34px] px-2 py-1 rounded-lg border text-[11px] font-medium cursor-pointer shrink-0 ${inputBg}`}
+                        >
+                          {OUTLET_STATUS_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="url"
+                          value={draft.postUrl}
+                          onChange={(e) => updateOutletDraft(def.key, { postUrl: e.target.value })}
+                          placeholder={ph.url}
+                          aria-label={`${def.label} direct post or scheduled URL`}
+                          className={`flex-1 min-w-0 min-h-[34px] px-2.5 py-1 rounded-lg border text-[11px] font-mono ${inputBg}`}
+                        />
+                        {hasValidUrl ? (
+                          <a
+                            href={draft.postUrl.trim()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Open ${def.label} post or scheduled item`}
+                            aria-label={`Open ${def.label} link in new tab`}
+                            className="min-h-[34px] px-2.5 py-1 rounded-lg border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-[11px] font-semibold inline-flex items-center gap-1 shrink-0"
+                          >
+                            <span>Open</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span
+                            className={`min-h-[34px] px-2.5 py-1 rounded-lg border text-[11px] inline-flex items-center shrink-0 opacity-45 ${
+                              isDarkMode ? 'border-slate-800 text-slate-500' : 'border-slate-300 text-slate-400'
+                            }`}
+                          >
+                            No Link
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <input
+                          type="text"
+                          value={draft.postId}
+                          onChange={(e) => updateOutletDraft(def.key, { postId: e.target.value })}
+                          placeholder={ph.id}
+                          aria-label={`${def.label} item or scheduled post ID`}
+                          className={`w-full min-h-[32px] px-2.5 py-1 rounded-lg border text-[11px] font-mono tabular-nums ${inputBg}`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

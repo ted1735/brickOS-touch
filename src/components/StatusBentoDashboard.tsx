@@ -25,7 +25,9 @@ import {
   Archive,
   Pin,
   Check,
-  Flag
+  Flag,
+  Link2,
+  X
 } from 'lucide-react';
 import { Track, CompositionSession } from '../types';
 import {
@@ -38,7 +40,9 @@ import {
   OUTLET_STATUS_OPTIONS,
   CANONICAL_PLAYLISTS,
   getTelemetryWindowTag,
-  toTrackSlug
+  toTrackSlug,
+  isSafeExternalUrl,
+  extractUrlFromText
 } from '../types/mcpStatus';
 import { CurrentProjectCoordinationPanel } from './CurrentProjectCoordinationPanel';
 import { McpHubIngestionPanel } from './McpHubIngestionPanel';
@@ -120,6 +124,18 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
   const [editingShortTarget, setEditingShortTarget] = useState<EditableShortPayload | null>(null);
   const [isListManagerOpen, setIsListManagerOpen] = useState<boolean>(false);
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
+  const [editingOutletLink, setEditingOutletLink] = useState<{
+    trackId: string;
+    trackTitle: string;
+    outletKey: string;
+    outletLabel: string;
+    status: string;
+    postUrl: string;
+    postId: string;
+    scheduledSlot: string;
+    cohort: string;
+    playlistId: string;
+  } | null>(null);
 
   // Gemini brief state (user-initiated)
   const [dailyBrief, setDailyBrief] = useState<string>('');
@@ -510,21 +526,62 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         const saved = outletStatuses.find(
           (o) => o?.trackId === t.id && o?.outletKey === outletKey
         );
-        if (saved) return saved;
+        const fromShortLink = shortMatch?.platform_links?.[outletKey];
+        const museUrl = extractUrlFromText(museMatch?.message);
+        const museUrlLc = lc(museUrl);
 
-        let derivedStatus = 'Not Started';
+        let fallbackPostUrl = fromShortLink?.postUrl || '';
+        let fallbackPostId = fromShortLink?.postId || '';
+
+        if (!fallbackPostUrl) {
+          if (outletKey === 'youtube_shorts') {
+            fallbackPostUrl = ytMatch?.url || shortMatch?.youtube_url || '';
+          } else if (outletKey === 'distro_streaming') {
+            fallbackPostUrl =
+              shortMatch?.spotify_url ||
+              shortMatch?.apple_music_url ||
+              shortMatch?.youtube_music_url ||
+              '';
+          } else if (outletKey === 'instagram_reels' && museUrlLc.includes('instagram.com')) {
+            fallbackPostUrl = museUrl;
+          } else if (
+            outletKey === 'facebook_x' &&
+            (museUrlLc.includes('facebook.com') || museUrlLc.includes('fb.com') || museUrlLc.includes('x.com'))
+          ) {
+            fallbackPostUrl = museUrl;
+          } else if (outletKey === 'tiktok' && museUrlLc.includes('tiktok.com')) {
+            fallbackPostUrl = museUrl;
+          }
+        }
+
+        if (!fallbackPostId && outletKey === 'youtube_shorts') {
+          fallbackPostId = ytMatch?.video_id || shortMatch?.youtube_id || '';
+        }
+
+        if (saved) {
+          return {
+            ...saved,
+            postUrl: saved.postUrl || fallbackPostUrl,
+            postId: saved.postId || fallbackPostId,
+            scheduledSlot: saved.scheduledSlot || shortMatch?.scheduled_slot || ''
+          };
+        }
+
+        let derivedStatus = fromShortLink?.status || 'Not Started';
         const museMsgLc = lc(museMatch?.message);
-        if (outletKey === 'youtube_shorts') {
-          if (ytMatch) derivedStatus = 'Published';
-          else if (shortMatch) derivedStatus = 'Scheduled';
-          else if (mcpMatch?.status === 'Published') derivedStatus = 'Published';
-        } else if (outletKey === 'instagram_reels' || outletKey === 'facebook_x') {
-          if (museMsgLc.includes('cancel')) derivedStatus = 'Needs Correction';
-          else if (museMsgLc.includes('published')) derivedStatus = 'Published';
-          else if (museMsgLc.includes('scheduled') || shortMatch) derivedStatus = 'Scheduled';
-        } else if (outletKey === 'distro_streaming') {
-          if (shortMatch?.spotify_url || mcpMatch?.status === 'Published' || t.status === 'Released') {
-            derivedStatus = 'Published';
+        if (derivedStatus === 'Not Started') {
+          if (outletKey === 'youtube_shorts') {
+            if (ytMatch) derivedStatus = 'Published';
+            else if (shortMatch) derivedStatus = 'Scheduled';
+            else if (mcpMatch?.status === 'Published') derivedStatus = 'Published';
+          } else if (outletKey === 'instagram_reels' || outletKey === 'facebook_x') {
+            if (museMsgLc.includes('cancel')) derivedStatus = 'Needs Correction';
+            else if (museMsgLc.includes('published')) derivedStatus = 'Published';
+            else if (museMsgLc.includes('scheduled') || shortMatch) derivedStatus = 'Scheduled';
+          } else if (outletKey === 'distro_streaming') {
+            if (shortMatch?.spotify_url || mcpMatch?.status === 'Published' || t.status === 'Released') {
+              derivedStatus = 'Published';
+            }
           }
         }
         return {
@@ -532,8 +589,8 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
           outletKey,
           status: derivedStatus,
           scheduledSlot: shortMatch?.scheduled_slot || '',
-          postUrl: outletKey === 'youtube_shorts' ? ytMatch?.url || shortMatch?.youtube_url || '' : '',
-          postId: outletKey === 'youtube_shorts' ? ytMatch?.video_id || shortMatch?.youtube_id || '' : '',
+          postUrl: fallbackPostUrl,
+          postId: fallbackPostId,
           cohort: 'Cohort C',
           playlistId: CANONICAL_PLAYLISTS[0].id,
           notes: '',
@@ -1562,37 +1619,90 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
                         )}
                       </td>
 
-                      {row.outlets.map(({ def, rec }) => (
-                        <td key={def.key} className="py-2 px-2">
-                          <select
-                            value={rec.status}
-                            onChange={(e) =>
-                              handleSaveOutletStatus({
-                                trackId: row.track.id,
-                                outletKey: def.key,
-                                status: e.target.value,
-                                scheduledSlot: rec.scheduledSlot,
-                                postUrl: rec.postUrl,
-                                postId: rec.postId,
-                                cohort: rec.cohort,
-                                playlistId: rec.playlistId
-                              })
-                            }
-                            aria-label={`${row.track.title} ${def.label} status`}
-                            className={`w-full min-h-[38px] px-2 py-1 rounded-lg border text-[11px] font-medium cursor-pointer ${statusToneClass(rec.status)}`}
-                          >
-                            {OUTLET_STATUS_OPTIONS.map((opt) => (
-                              <option
-                                key={opt}
-                                value={opt}
-                                className={isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}
+                      {row.outlets.map(({ def, rec }) => {
+                        const hasDirectLink = isSafeExternalUrl(rec.postUrl);
+                        return (
+                          <td key={def.key} className="py-2 px-1.5 align-middle">
+                            <div className="flex items-center gap-1">
+                              <select
+                                value={rec.status}
+                                onChange={(e) =>
+                                  handleSaveOutletStatus({
+                                    trackId: row.track.id,
+                                    outletKey: def.key,
+                                    status: e.target.value,
+                                    scheduledSlot: rec.scheduledSlot,
+                                    postUrl: rec.postUrl,
+                                    postId: rec.postId,
+                                    cohort: rec.cohort,
+                                    playlistId: rec.playlistId
+                                  })
+                                }
+                                aria-label={`${row.track.title} ${def.label} status`}
+                                className={`flex-1 min-w-[105px] min-h-[38px] px-2 py-1 rounded-lg border text-[11px] font-medium cursor-pointer ${statusToneClass(rec.status)}`}
                               >
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      ))}
+                                {OUTLET_STATUS_OPTIONS.map((opt) => (
+                                  <option
+                                    key={opt}
+                                    value={opt}
+                                    className={isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}
+                                  >
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+
+                              {hasDirectLink && (
+                                <a
+                                  href={rec.postUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Open ${def.label}: ${rec.postUrl}${rec.postId ? ` (ID: ${rec.postId})` : ''}`}
+                                  aria-label={`Open ${row.track.title} ${def.label} post or scheduled link`}
+                                  className="min-h-[38px] min-w-[32px] px-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 inline-flex items-center justify-center shrink-0 transition"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditingOutletLink({
+                                    trackId: row.track.id,
+                                    trackTitle: row.track.title,
+                                    outletKey: def.key,
+                                    outletLabel: def.label,
+                                    status: rec.status,
+                                    postUrl: rec.postUrl || '',
+                                    postId: rec.postId || '',
+                                    scheduledSlot: rec.scheduledSlot || '',
+                                    cohort: rec.cohort || 'Cohort C',
+                                    playlistId: rec.playlistId || CANONICAL_PLAYLISTS[0].id
+                                  })
+                                }
+                                title={
+                                  hasDirectLink
+                                    ? `Edit ${def.label} link or item ID`
+                                    : `Add direct link or scheduled ID for ${def.label}`
+                                }
+                                aria-label={`Edit ${row.track.title} ${def.label} direct link`}
+                                className={`min-h-[38px] min-w-[30px] px-1.5 rounded-lg border inline-flex items-center justify-center shrink-0 cursor-pointer transition ${
+                                  hasDirectLink
+                                    ? isDarkMode
+                                      ? 'border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                                      : 'border-slate-300 text-slate-600 hover:text-slate-900'
+                                    : isDarkMode
+                                    ? 'border-slate-800/80 text-slate-500 hover:text-cyan-300 hover:border-cyan-500/40'
+                                    : 'border-slate-200 text-slate-400 hover:text-cyan-700'
+                                }`}
+                              >
+                                <Link2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        );
+                      })}
 
                       {/* Quick Row List Toggles + Open Project Button */}
                       <td className="py-2 pl-2 text-right">
@@ -1819,8 +1929,16 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         releaseLinks={ingest?.releaseLinks}
         isDarkMode={isDarkMode}
         onClose={() => setEditingShortTarget(null)}
-        onSynced={({ outletStatuses }) => {
-          setIngest((prev) => (prev ? { ...prev, outletStatuses } : prev));
+        onSynced={({ shortOverrides, outletStatuses }) => {
+          setIngest((prev) =>
+            prev ? { ...prev, outletStatuses, shortOverrides } : prev
+          );
+          fetch('/api/mcp/dashboard-ingest?cacheOnly=1')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((cached) => {
+              if (cached?.success) setIngest(cached);
+            })
+            .catch(() => {});
           fetchDashboardIngest(true);
         }}
         onOpenProject={(titleOrSlug) => handleOpenProjectCoordination(titleOrSlug)}
@@ -1838,6 +1956,137 @@ export const StatusBentoDashboard: React.FC<StatusBentoDashboardProps> = ({
         }}
         onNotify={onNotify}
       />
+
+      {/* QUICK OUTLET DIRECT LINK / SCHEDULED ITEM EDITOR */}
+      {editingOutletLink && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="outlet-link-editor-title"
+        >
+          <div className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl space-y-4 ${cardSurface}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className={`text-xs font-mono truncate ${mutedText}`}>
+                  {editingOutletLink.trackId} · {editingOutletLink.trackTitle}
+                </div>
+                <h3 id="outlet-link-editor-title" className="text-base font-bold mt-0.5">
+                  {editingOutletLink.outletLabel} Direct Link
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOutletLink(null)}
+                aria-label="Close direct link editor"
+                className={`min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center cursor-pointer ${
+                  isDarkMode ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-600'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await handleSaveOutletStatus({
+                  trackId: editingOutletLink.trackId,
+                  outletKey: editingOutletLink.outletKey,
+                  status: editingOutletLink.status,
+                  scheduledSlot: editingOutletLink.scheduledSlot,
+                  postUrl: editingOutletLink.postUrl.trim(),
+                  postId: editingOutletLink.postId.trim(),
+                  cohort: editingOutletLink.cohort,
+                  playlistId: editingOutletLink.playlistId
+                });
+                setEditingOutletLink(null);
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className={`block text-xs font-semibold mb-1 ${mutedText}`}>
+                  Direct Post, Video, or Scheduled Item URL
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={editingOutletLink.postUrl}
+                    onChange={(e) =>
+                      setEditingOutletLink((prev) => (prev ? { ...prev, postUrl: e.target.value } : prev))
+                    }
+                    placeholder="https://..."
+                    className={`flex-1 min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-mono ${subSurface}`}
+                  />
+                  {isSafeExternalUrl(editingOutletLink.postUrl) && (
+                    <a
+                      href={editingOutletLink.postUrl.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-h-[40px] px-3 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 text-xs font-semibold inline-flex items-center gap-1 shrink-0"
+                    >
+                      <span>Open</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-xs font-semibold mb-1 ${mutedText}`}>
+                    Post / Scheduled Item ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editingOutletLink.postId}
+                    onChange={(e) =>
+                      setEditingOutletLink((prev) => (prev ? { ...prev, postId: e.target.value } : prev))
+                    }
+                    placeholder="e.g. IG/FB/TikTok/YT ID"
+                    className={`w-full min-h-[38px] px-3 py-1 rounded-xl border text-xs font-mono tabular-nums ${subSurface}`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs font-semibold mb-1 ${mutedText}`}>
+                    Status
+                  </label>
+                  <select
+                    value={editingOutletLink.status}
+                    onChange={(e) =>
+                      setEditingOutletLink((prev) => (prev ? { ...prev, status: e.target.value } : prev))
+                    }
+                    className={`w-full min-h-[38px] px-2.5 py-1 rounded-xl border text-xs cursor-pointer ${subSurface}`}
+                  >
+                    {OUTLET_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingOutletLink(null)}
+                  className={`min-h-[38px] px-4 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer ${subSurface}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="min-h-[38px] px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Save Outlet Link
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

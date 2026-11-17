@@ -214,6 +214,7 @@ export function getStudioDb(): any {
         canonical_master_file TEXT DEFAULT '',
         video_asset_url TEXT DEFAULT '',
         thumbnail_asset_url TEXT DEFAULT '',
+        platform_links_json TEXT DEFAULT '{}',
         notes TEXT DEFAULT '',
         last_synced_at TEXT,
         updated_at TEXT NOT NULL
@@ -229,7 +230,7 @@ export function getStudioDb(): any {
       );
     `);
 
-    // Migrate existing mcp_servers databases cleanly if columns were added in this upgrade
+    // Migrate existing mcp_servers & short_metadata_overrides databases cleanly if columns were added
     const serverCols = (db.prepare('PRAGMA table_info(mcp_servers)').all() as any[]).map((c) => c.name);
     if (!serverCols.includes('auth_profile_id')) {
       db.exec(`ALTER TABLE mcp_servers ADD COLUMN auth_profile_id TEXT DEFAULT ''`);
@@ -239,6 +240,11 @@ export function getStudioDb(): any {
     }
     if (!serverCols.includes('consecutive_failures')) {
       db.exec(`ALTER TABLE mcp_servers ADD COLUMN consecutive_failures INTEGER DEFAULT 0`);
+    }
+
+    const shortOverrideCols = (db.prepare('PRAGMA table_info(short_metadata_overrides)').all() as any[]).map((c) => c.name);
+    if (!shortOverrideCols.includes('platform_links_json')) {
+      db.exec(`ALTER TABLE short_metadata_overrides ADD COLUMN platform_links_json TEXT DEFAULT '{}'`);
     }
 
     sqliteDb = db;
@@ -1509,9 +1515,20 @@ export interface ShortMetadataOverrideRecord {
   canonicalMasterFile: string;
   videoAssetUrl: string;
   thumbnailAssetUrl: string;
+  platformLinks: Record<string, { status: string; postUrl: string; postId: string }>;
   notes: string;
   lastSyncedAt: string | null;
   updatedAt: string;
+}
+
+function parsePlatformLinksJson(raw?: unknown): Record<string, { status: string; postUrl: string; postId: string }> {
+  if (!raw || typeof raw !== 'string') return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export function listShortMetadataOverrides(): ShortMetadataOverrideRecord[] {
@@ -1538,6 +1555,7 @@ export function listShortMetadataOverrides(): ShortMetadataOverrideRecord[] {
       canonicalMasterFile: r.canonical_master_file || '',
       videoAssetUrl: r.video_asset_url || '',
       thumbnailAssetUrl: r.thumbnail_asset_url || '',
+      platformLinks: parsePlatformLinksJson(r.platform_links_json),
       notes: r.notes || '',
       lastSyncedAt: r.last_synced_at || null,
       updatedAt: r.updated_at
@@ -1566,6 +1584,7 @@ export function upsertShortMetadataOverride(input: {
   canonicalMasterFile?: string;
   videoAssetUrl?: string;
   thumbnailAssetUrl?: string;
+  platformLinks?: Record<string, { status: string; postUrl: string; postId: string }>;
   notes?: string;
   markSynced?: boolean;
 }): ShortMetadataOverrideRecord | null {
@@ -1575,13 +1594,17 @@ export function upsertShortMetadataOverride(input: {
     const now = new Date().toISOString();
     const existing = db.prepare('SELECT * FROM short_metadata_overrides WHERE short_id = ?').get(input.shortId) as any;
     const lastSyncedAt = input.markSynced ? now : (existing?.last_synced_at || null);
+    const mergedPlatformLinks = input.platformLinks
+      ? JSON.stringify(input.platformLinks)
+      : existing?.platform_links_json || '{}';
+
     db.prepare(`
       INSERT INTO short_metadata_overrides (
         short_id, track_slug, track_title, campaign, status, title, hook_text, caption,
         scheduled_slot, playlist_id, youtube_id, youtube_url, spotify_url, apple_music_url,
         youtube_music_url, canonical_master_file, video_asset_url, thumbnail_asset_url,
-        notes, last_synced_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        platform_links_json, notes, last_synced_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(short_id) DO UPDATE SET
         track_slug = excluded.track_slug,
         track_title = excluded.track_title,
@@ -1600,6 +1623,7 @@ export function upsertShortMetadataOverride(input: {
         canonical_master_file = excluded.canonical_master_file,
         video_asset_url = excluded.video_asset_url,
         thumbnail_asset_url = excluded.thumbnail_asset_url,
+        platform_links_json = excluded.platform_links_json,
         notes = excluded.notes,
         last_synced_at = excluded.last_synced_at,
         updated_at = excluded.updated_at
@@ -1622,6 +1646,7 @@ export function upsertShortMetadataOverride(input: {
       input.canonicalMasterFile ?? existing?.canonical_master_file ?? '',
       input.videoAssetUrl ?? existing?.video_asset_url ?? '',
       input.thumbnailAssetUrl ?? existing?.thumbnail_asset_url ?? '',
+      mergedPlatformLinks,
       input.notes ?? existing?.notes ?? '',
       lastSyncedAt,
       now

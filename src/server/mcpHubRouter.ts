@@ -376,6 +376,7 @@ export function createMcpHubRouter(): express.Router {
         canonicalMasterFile,
         videoAssetUrl,
         thumbnailAssetUrl,
+        platformLinks,
         notes,
         outletUpdates = [],
         syncTargets = {}
@@ -383,6 +384,38 @@ export function createMcpHubRouter(): express.Router {
 
       if (!shortId || !title) {
         return res.status(400).json({ success: false, error: 'shortId and title are required.' });
+      }
+
+      const normalizedPlatformLinks: Record<string, { status: string; postUrl: string; postId: string }> = {};
+      if (platformLinks && typeof platformLinks === 'object' && !Array.isArray(platformLinks)) {
+        for (const [k, v] of Object.entries(platformLinks as Record<string, any>)) {
+          if (v && typeof v === 'object') {
+            normalizedPlatformLinks[k] = {
+              status: String(v.status || 'Not Started'),
+              postUrl: String(v.postUrl || '').trim(),
+              postId: String(v.postId || '').trim()
+            };
+          }
+        }
+      }
+
+      if (Array.isArray(outletUpdates)) {
+        for (const item of outletUpdates) {
+          if (!item?.outletKey) continue;
+          const key = String(item.outletKey);
+          const fallbackUrl =
+            key === 'youtube_shorts'
+              ? String(youtubeUrl || '')
+              : key === 'distro_streaming'
+              ? String(spotifyUrl || appleMusicUrl || youtubeMusicUrl || '')
+              : '';
+          const fallbackId = key === 'youtube_shorts' ? String(youtubeId || '') : '';
+          normalizedPlatformLinks[key] = {
+            status: String(item.status || normalizedPlatformLinks[key]?.status || 'Not Started'),
+            postUrl: String(item.postUrl ?? normalizedPlatformLinks[key]?.postUrl ?? fallbackUrl).trim(),
+            postId: String(item.postId ?? normalizedPlatformLinks[key]?.postId ?? fallbackId).trim()
+          };
+        }
       }
 
       const willSyncRemote = Boolean(syncTargets.trackDb || syncTargets.approveRelease || syncTargets.museBridge);
@@ -405,33 +438,43 @@ export function createMcpHubRouter(): express.Router {
         canonicalMasterFile: canonicalMasterFile ? String(canonicalMasterFile) : '',
         videoAssetUrl: videoAssetUrl ? String(videoAssetUrl) : '',
         thumbnailAssetUrl: thumbnailAssetUrl ? String(thumbnailAssetUrl) : '',
+        platformLinks: normalizedPlatformLinks,
         notes: notes !== undefined ? String(notes) : '',
         markSynced: willSyncRemote
       });
 
-      if (trackId && Array.isArray(outletUpdates)) {
-        for (const item of outletUpdates) {
-          if (item?.outletKey && item?.status) {
-            upsertSocialOutletStatus({
-              trackId: String(trackId),
-              outletKey: String(item.outletKey),
-              status: String(item.status),
-              scheduledSlot: scheduledSlot ? String(scheduledSlot) : '',
-              postUrl: item.outletKey === 'youtube_shorts' ? String(youtubeUrl || '') : '',
-              postId: item.outletKey === 'youtube_shorts' ? String(youtubeId || '') : '',
-              playlistId: playlistId ? String(playlistId) : '',
-              notes: notes ? String(notes) : ''
-            });
-          }
+      if (trackId && Object.keys(normalizedPlatformLinks).length > 0) {
+        for (const [outletKey, entry] of Object.entries(normalizedPlatformLinks)) {
+          upsertSocialOutletStatus({
+            trackId: String(trackId),
+            outletKey,
+            status: entry.status || 'Not Started',
+            scheduledSlot: scheduledSlot ? String(scheduledSlot) : '',
+            postUrl: entry.postUrl || '',
+            postId: entry.postId || '',
+            playlistId: playlistId ? String(playlistId) : '',
+            notes: notes ? String(notes) : ''
+          });
         }
       }
+
+      const mcpPlatformLinks = Object.fromEntries(
+        Object.entries(normalizedPlatformLinks).map(([key, entry]) => [
+          key,
+          {
+            status: entry.status,
+            post_url: entry.postUrl,
+            post_id: entry.postId
+          }
+        ])
+      );
 
       const serverId = String(syncTargets.serverId || 'brickos-primary-mcp');
       const syncResults: Array<{ target: string; ok: boolean; detail: string }> = [
         {
           target: 'Local SQLite Override',
           ok: Boolean(savedOverride),
-          detail: savedOverride ? 'Saved metadata & outlet statuses locally.' : 'Failed writing SQLite override.'
+          detail: savedOverride ? 'Saved metadata & all platform links locally.' : 'Failed writing SQLite override.'
         }
       ];
 
@@ -455,7 +498,8 @@ export function createMcpHubRouter(): express.Router {
               youtube_url: String(youtubeUrl || ''),
               spotify_url: String(spotifyUrl || ''),
               apple_music_url: String(appleMusicUrl || ''),
-              youtube_music_url: String(youtubeMusicUrl || '')
+              youtube_music_url: String(youtubeMusicUrl || ''),
+              platform_links: mcpPlatformLinks
             }
           }
         });
@@ -463,7 +507,7 @@ export function createMcpHubRouter(): express.Router {
           target: 'brickOS MCP Track DB',
           ok: trackSyncRes.success,
           detail: trackSyncRes.success
-            ? `Synced metadata package via brickos_track_sync (${trackSyncRes.latencyMs}ms).`
+            ? `Synced metadata & platform URLs via brickos_track_sync (${trackSyncRes.latencyMs}ms).`
             : trackSyncRes.error || 'brickos_track_sync failed.'
         });
       }
@@ -478,6 +522,7 @@ export function createMcpHubRouter(): express.Router {
             canonical_master_file: String(canonicalMasterFile),
             post_id: youtubeId ? String(youtubeId) : undefined,
             scheduled_slot: scheduledSlot ? String(scheduledSlot) : undefined,
+            platform_links: mcpPlatformLinks,
             platforms: ['YouTube @brickRedeemed', 'TikTok @brickredeemed', 'IG @brickredeemed', 'IG @theknotcreations', 'Facebook Page']
           }
         });
@@ -497,14 +542,18 @@ export function createMcpHubRouter(): express.Router {
       }
 
       if (syncTargets.museBridge) {
+        const outletLinkSummary = Object.entries(normalizedPlatformLinks)
+          .filter(([, entry]) => entry.postUrl || entry.postId)
+          .map(([key, entry]) => `${key}: ${entry.postUrl || entry.postId}`)
+          .join(' | ');
+
         const museMsg = [
           `Updated metadata for "${title}"`,
           hookText ? `Hook: "${hookText}"` : '',
           scheduledSlot ? `Slot: ${scheduledSlot}` : '',
           playlistId ? `Playlist: &list=${playlistId}` : '',
-          youtubeUrl ? `YT: ${youtubeUrl}` : '',
-          spotifyUrl ? `Spotify: ${spotifyUrl}` : '',
-          caption ? `Caption: ${String(caption).slice(0, 280)}` : ''
+          outletLinkSummary,
+          caption ? `Caption: ${String(caption).slice(0, 240)}` : ''
         ]
           .filter(Boolean)
           .join(' | ');
@@ -524,7 +573,14 @@ export function createMcpHubRouter(): express.Router {
                 scheduled_slot: String(scheduledSlot || ''),
                 youtube_url: String(youtubeUrl || ''),
                 spotify_url: String(spotifyUrl || ''),
-                apple_music_url: String(appleMusicUrl || '')
+                apple_music_url: String(appleMusicUrl || ''),
+                tiktok_url: normalizedPlatformLinks.tiktok?.postUrl || '',
+                tiktok_post_id: normalizedPlatformLinks.tiktok?.postId || '',
+                instagram_url: normalizedPlatformLinks.instagram_reels?.postUrl || '',
+                instagram_post_id: normalizedPlatformLinks.instagram_reels?.postId || '',
+                facebook_x_url: normalizedPlatformLinks.facebook_x?.postUrl || '',
+                facebook_x_post_id: normalizedPlatformLinks.facebook_x?.postId || '',
+                platform_links: mcpPlatformLinks
               }
             ]
           }
@@ -533,7 +589,7 @@ export function createMcpHubRouter(): express.Router {
           target: 'Meta Muse (Edison) Bridge',
           ok: museRes.success,
           detail: museRes.success
-            ? `Dispatched updated schedule & caption directive (${museRes.latencyMs}ms).`
+            ? `Dispatched updated schedule & platform links (${museRes.latencyMs}ms).`
             : museRes.error || 'brickos_muse_bridge failed.'
         });
       }

@@ -126,6 +126,12 @@ export interface YouTubeVideoStat {
   url: string;
 }
 
+export interface PlatformOutletLinkEntry {
+  status: string;
+  postUrl: string;
+  postId: string;
+}
+
 export interface ReadyShortItem {
   id: string;
   campaign: string;
@@ -142,6 +148,7 @@ export interface ReadyShortItem {
   youtube_music_url?: string;
   video_asset_url?: string;
   thumbnail_asset_url?: string;
+  platform_links?: Record<string, PlatformOutletLinkEntry>;
   format?: string;
   duration?: string;
   hook?: string;
@@ -183,6 +190,7 @@ export interface ShortMetadataOverride {
   canonicalMasterFile: string;
   videoAssetUrl: string;
   thumbnailAssetUrl: string;
+  platformLinks?: Record<string, PlatformOutletLinkEntry>;
   notes: string;
   lastSyncedAt: string | null;
   updatedAt: string;
@@ -404,3 +412,16 @@ export function checkDaypartViolation(cohort: string, scheduledSlot?: string): s
   }
   return null;
 }
+
+export function isSafeExternalUrl(url?: unknown): boolean {
+  const raw = String(url ?? '').trim();
+  if (!raw) return false;
+  return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(raw);
+}
+
+export function extractUrlFromText(text?: unknown): string {
+  const raw = String(text ?? '');
+  const match = raw.match(/https?:\/\/[^\s)<>"']+/i);
+  return match ? match[0].replace(/[.,;!?]+$/, '') : '';
+}
+

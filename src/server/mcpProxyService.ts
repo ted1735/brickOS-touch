@@ -57,7 +57,11 @@ export function mergeShortOverridesIntoShorts(
       apple_music_url: ov.appleMusicUrl || item.apple_music_url,
       youtube_music_url: ov.youtubeMusicUrl || item.youtube_music_url,
       video_asset_url: ov.videoAssetUrl || item.video_asset_url,
-      thumbnail_asset_url: ov.thumbnailAssetUrl || item.thumbnail_asset_url
+      thumbnail_asset_url: ov.thumbnailAssetUrl || item.thumbnail_asset_url,
+      platform_links:
+        ov.platformLinks && Object.keys(ov.platformLinks).length > 0
+          ? { ...(item.platform_links || {}), ...ov.platformLinks }
+          : item.platform_links
     };
   });
 
@@ -80,6 +84,7 @@ export function mergeShortOverridesIntoShorts(
       youtube_music_url: ov.youtubeMusicUrl,
       video_asset_url: ov.videoAssetUrl,
       thumbnail_asset_url: ov.thumbnailAssetUrl,
+      platform_links: ov.platformLinks || {},
       format: '9:16 vertical 1080x1920'
     });
   }
